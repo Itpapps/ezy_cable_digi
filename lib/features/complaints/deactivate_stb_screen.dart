@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/data/customer.dart';
+import '../../core/data/customer.dart';
 
 class DeactivateStbScreen extends StatefulWidget {
   final Customer customer;

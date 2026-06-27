@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,12 +20,24 @@ class ReceiptPreviewScreen extends StatefulWidget {
   final Customer customer;
   final Payment payment;
   final bool fromOfflineCollection;
+  final double broadbandPaidAmount; // broadband leg paid (0 for STB-only)
+  final double stbPaidAmount;       // STB leg paid (used in the combined breakdown)
+  final double discountAmount;      // discount applied (0 if none)
+  final String dealerBusinessName;  // from the server response (receipt header)
+  final double dueAmount;           // TOT.DUE.AMT — GPA pending of the primary leg
+  final double outAmount;           // OUT.AMT — outstanding after this payment
 
   const ReceiptPreviewScreen({
     super.key,
     required this.customer,
     required this.payment,
     this.fromOfflineCollection = false,
+    this.broadbandPaidAmount = 0,
+    this.stbPaidAmount = 0,
+    this.discountAmount = 0,
+    this.dealerBusinessName = '',
+    this.dueAmount = 0,
+    this.outAmount = 0,
   });
 
   @override
@@ -57,54 +70,154 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
 
   // ── PDF ───────────────────────────────────────────────────────────────────
 
+  /// Builds the receipt as ordered 32-col text lines — the existing app's MOBILE
+  /// thermal layout, populated with available (Group A) data. Optional (Group B:
+  /// dealer header/footer, taxes, due/out amounts, last-paid date, CRF) is omitted
+  /// until sourced from the backend. No ₹ (matches the existing thermal print,
+  /// which prints plain numbers). Both the printer and the PDF render these lines,
+  /// so they stay identical. (This is the mobile copy only — NOT the CAF/offline copy.)
+  List<String> _buildReceiptLines() {
+    final c = widget.customer;
+    final p = widget.payment;
+    const sep = '................................'; // 32 dots
+
+    String fld(String label, String value) {
+      final l = label.length >= 17 ? label.substring(0, 17) : label.padRight(17);
+      return '$l:$value';
+    }
+    String ctr(String s) =>
+        s.length >= 32 ? s.substring(0, 32) : ' ' * ((32 - s.length) ~/ 2) + s;
+    String money(double v) => v.toStringAsFixed(2);
+
+    final isBroadband = c.broadbandUserId.trim().isNotEmpty;
+    final isCombined = isBroadband && c.customerType.trim() == '2';
+    final isBroadbandOnly = isBroadband && !isCombined;
+    final stbPaid = widget.stbPaidAmount;
+    final bbPaid = widget.broadbandPaidAmount;
+    final billAmt = c.totalDue.replaceAll('₹', '').trim();
+
+    final d = p.paymentDate;
+    final date = '${d.day.toString().padLeft(2, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-${d.year} '
+        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+    final lines = <String>[];
+    // Android prints printer-settings header1/header2 (blank by default) then
+    // "PAYMENT RECEIPT" — it does NOT print the dealer business name here
+    // (BluetoothChatService.write :1057-1059). header1/header2 are Group B
+    // (printer settings, not yet sourced) so we emit only the title.
+    lines.add(ctr('PAYMENT RECEIPT'));
+    lines.add(sep);
+    lines.add(date);
+    lines.add(sep);
+    lines.add(fld('CUSTOMER NAME', c.name));
+    lines.add(fld('ACCOUNT NUMBER', c.altCustomerId));
+    lines.add(fld('LCO CUST ID', c.lcoCustomerId));
+    if (c.address.trim().isNotEmpty) lines.add(fld('CUSTOMER ADDRESS', c.address));
+    lines.add(fld('RECEIPT NUMBER', p.transactionId));
+    if (c.billMonth.trim().isNotEmpty) lines.add(fld('BILL FOR', c.billMonth));
+    lines.add(fld(isBroadbandOnly ? 'Broadband Amt' : 'PAID.AMT',
+        money(isBroadbandOnly ? bbPaid : stbPaid)));
+    lines.add(sep);
+    if (billAmt.isNotEmpty) lines.add(fld('BILL.AMT', billAmt));
+    if (isBroadband) {
+      lines.add(fld('BROADBAND ID', c.broadbandUserId));
+      if (isCombined) {
+        lines.add(fld('BROADBAND Amt', money(bbPaid)));
+        lines.add(fld('TOTAL PAID AMT', money(stbPaid + bbPaid)));
+      }
+    }
+    // Android always prints TOT.DUE.AMT then OUT.AMT (BluetoothChatService :1171-1173).
+    // dueAmt = GPA pending; outAmt = pending − paid − discount (post-payment outstanding).
+    lines.add(fld('TOT.DUE.AMT', money(widget.dueAmount)));
+    lines.add(fld('OUT.AMT', money(widget.outAmount)));
+    if (widget.discountAmount > 0) {
+      lines.add(fld('DISCOUNT.AMT', money(widget.discountAmount)));
+    }
+    lines.add(sep);
+    // Group B (omitted until sourced from the backend): dealer header1/header2 +
+    // footer1/footer2 (printer settings), CRF, LAST PAID DATE, taxes. See RECEIPT_LAYOUT.md.
+    return lines;
+  }
+
+  /// Builds the SHARE PDF text — mirrors the existing app's share layout
+  /// (`savePdf`), which is DIFFERENT from the thermal print: dashed separators,
+  /// Title-case 15-char labels, "Mobile No." instead of "Account Number", the
+  /// broadband block directly under the customer name, no "Total Paid" line, and
+  /// "Due Amount"/"Out Amount" always present. Group B (printer header1/header2 +
+  /// footer1/footer2, CRF/CAF, taxes) is omitted until sourced from the backend.
+  /// See server docs/RECEIPT_SHARE_FLOW.md.
+  List<String> _buildSharePdfLines() {
+    final c = widget.customer;
+    final p = widget.payment;
+    const line = '--------------------------------'; // 32 dashes (Android savePdf)
+
+    String fld(String label, String value) => '${label.padRight(15)}:$value';
+    String money(double v) => v.toStringAsFixed(2);
+
+    final isBroadband = c.broadbandUserId.trim().isNotEmpty;
+    final isCombined = isBroadband && c.customerType.trim() == '2';
+    final isBroadbandOnly = isBroadband && !isCombined;
+    final stbPaid = widget.stbPaidAmount;
+    final bbPaid = widget.broadbandPaidAmount;
+    final billAmt = c.totalDue.replaceAll('₹', '').trim();
+    final addr = c.address.replaceAll('\n', ' ');
+
+    // Date mirrors Android's Date.toString() reorder: "EEE MMM dd yyyy HH:mm:ss".
+    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final d = p.paymentDate;
+    String p2(int n) => n.toString().padLeft(2, '0');
+    final dateStr = '${wd[d.weekday - 1]} ${mon[d.month - 1]} ${p2(d.day)} '
+        '${d.year} ${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}';
+
+    final lines = <String>[];
+    lines.add(line);
+    lines.add(' PAYMENT RECEIPT ');
+    lines.add(line);
+    lines.add(dateStr);
+    lines.add(line);
+    lines.add(fld('Customer Name', c.name));
+    if (isBroadband) {
+      lines.add(fld('BroadBand ID', c.broadbandUserId));
+      if (!isBroadbandOnly) {
+        lines.add(fld('BroadBand Amt', money(bbPaid)));
+      }
+    }
+    lines.add(fld('Lco Customer Id', c.lcoCustomerId));
+    if (addr.isNotEmpty) lines.add(fld('Address', addr));
+    lines.add(fld('Mobile No.', c.primaryMobileNumber));
+    lines.add(fld('Receipt No.', p.transactionId));
+    if (c.lastPaidDate.trim().isNotEmpty) {
+      lines.add(fld('Last Paid Date', c.lastPaidDate));
+    }
+    if (c.billMonth.trim().isNotEmpty) lines.add(fld('Bill For', c.billMonth));
+    lines.add(fld(isBroadbandOnly ? 'Broadband Amt' : 'Paid Amount',
+        money(isBroadbandOnly ? bbPaid : stbPaid)));
+    lines.add(line);
+    if (billAmt.isNotEmpty) lines.add(fld('Bill Amount', billAmt));
+    lines.add(fld('Due Amount', money(widget.dueAmount)));
+    lines.add(fld('Out Amount', money(widget.outAmount)));
+    if (widget.discountAmount > 0) {
+      lines.add(fld('Discount Amount', money(widget.discountAmount)));
+    }
+    lines.add(line);
+    return lines;
+  }
+
   Future<Uint8List> _buildPdfBytes() async {
     final pdf = pw.Document();
-    final p   = widget.payment;
-    final c   = widget.customer;
+    final mono = pw.Font.courier();
+    final lines = _buildSharePdfLines();
     pdf.addPage(
       pw.Page(
+        pageFormat: PdfPageFormat.a5, // Android share PDF uses A5
         build: (_) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Center(
-              child: pw.Text('EZY CABLE DIGI',
-                  style: pw.TextStyle(
-                      fontSize: 18, fontWeight: pw.FontWeight.bold)),
-            ),
-            pw.Center(child: pw.Text('PAYMENT RECEIPT')),
-            pw.SizedBox(height: 8),
-            pw.Divider(),
-            pw.SizedBox(height: 6),
-            pw.Text('Receipt No : ${p.transactionId}'),
-            pw.Text(
-                'Payment Date : ${p.paymentDate.day.toString().padLeft(2, '0')}-'
-                    '${p.paymentDate.month.toString().padLeft(2, '0')}-'
-                    '${p.paymentDate.year}'),
-            pw.SizedBox(height: 6),
-            pw.Divider(),
-            pw.SizedBox(height: 6),
-            pw.Text('Customer Name : ${c.name}'),
-            pw.Text('Account No    : ${c.altCustomerId}'),
-            pw.Text('Mobile        : ${c.primaryMobileNumber}'),
-            pw.Text('Customer Type : ${c.customerType}'),
-            pw.Text('Address       : ${c.address}'),
-            pw.SizedBox(height: 6),
-            pw.Divider(),
-            pw.SizedBox(height: 6),
-            pw.Text('Paid Amount   : ₹${p.amount.toStringAsFixed(2)}'),
-            pw.Text('Payment Mode  : ${p.paymentMethod.toUpperCase()}'),
-            if (p.bankName.isNotEmpty)
-              pw.Text('Bank Name     : ${p.bankName}'),
-            if (p.chequeNo.isNotEmpty)
-              pw.Text('Cheque/DD No  : ${p.chequeNo}'),
-            if (p.branch.isNotEmpty)
-              pw.Text('Branch        : ${p.branch}'),
-            if (p.instrumentDate.isNotEmpty)
-              pw.Text('Instr. Date   : ${p.instrumentDate}'),
-            pw.SizedBox(height: 6),
-            pw.Divider(),
-            pw.SizedBox(height: 10),
-            pw.Center(child: pw.Text('Thank You! Visit Again.')),
+            for (final l in lines)
+              pw.Text(l, style: pw.TextStyle(font: mono, fontSize: 10)),
           ],
         ),
       ),
@@ -114,11 +227,26 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
 
   // ── Share ──────────────────────────────────────────────────────────────────
 
+  /// Filesystem-safe base name for the shared PDF (mirrors Android's
+  /// `customerName.pdf`). Falls back to "receipt" when empty.
+  String _safeFileName(String name) {
+    final cleaned = name
+        .trim()
+        .replaceAll(RegExp(r'[^A-Za-z0-9 ._-]'), '')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    return cleaned.isEmpty ? 'receipt' : cleaned;
+  }
+
   Future<void> _showShareSheet() async {
     try {
       final bytes = await _buildPdfBytes();
       final dir   = await getTemporaryDirectory();
-      final path  = '${dir.path}/receipt_${widget.payment.transactionId}.pdf';
+      // Android names the shared file "<customerName>.pdf". Strip filesystem-
+      // unsafe characters — the server receipt number contains "/" (e.g.
+      // CR1103/.../38751) which would otherwise create bogus subdirectories and
+      // crash the file write.
+      final path  = '${dir.path}/${_safeFileName(widget.customer.name)}.pdf';
       await File(path).writeAsBytes(bytes);
       if (!mounted) return;
       await showModalBottomSheet<void>(
@@ -134,26 +262,6 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Share failed: $e')),
       );
-    }
-  }
-
-  Future<void> _downloadPdf() async {
-    try {
-      final bytes = await _buildPdfBytes();
-      final dir   = await getApplicationDocumentsDirectory();
-      final path  = '${dir.path}/receipt_${widget.payment.transactionId}.pdf';
-      await File(path).writeAsBytes(bytes);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PDF saved: $path'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 
@@ -183,13 +291,8 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
   Future<void> _doPrint(String mac) async {
     try {
       await _printerService.printReceipt(
-        mac:          mac,
-        customerName: widget.customer.name,
-        mobile:       widget.customer.primaryMobileNumber,
-        amount:       widget.payment.amount.toStringAsFixed(2),
-        date: '${widget.payment.paymentDate.day.toString().padLeft(2, '0')}-'
-            '${widget.payment.paymentDate.month.toString().padLeft(2, '0')}-'
-            '${widget.payment.paymentDate.year}',
+        mac: mac,
+        lines: _buildReceiptLines(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -253,7 +356,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                 title: 'CUSTOMER INFO',
                 rows: [
                   ('Account No',      c.altCustomerId),
-                  ('Customer Type',   c.customerType),
+                  ('Customer Type',   c.customerTypeLabel),
                   ('Customer Name',   c.name),
                   ('NickName',        c.nickName.isEmpty ? 'NA' : c.nickName),
                   ('Mobile No',       c.primaryMobileNumber),
@@ -271,7 +374,20 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                   ('Bill Amount',                          c.totalDue),
                   ('Total Due(billamt+prev pending)',       c.pendingAmount),
                   ('Out Amount',                           c.amountPayable),
-                  ('Discount Amount',                      '₹0.00'),
+                  ('Discount Amount',                      '₹${widget.discountAmount.toStringAsFixed(2)}'),
+                  // Broadband leg (broadband customers) — mirrors the existing
+                  // app's payment-details layout: BB user id + BB paid, and for a
+                  // combined (STB & Broadband) customer also STB paid + Total paid.
+                  if (c.broadbandUserId.trim().isNotEmpty) ...[
+                    ('Broadband User Id', c.broadbandUserId),
+                    ('Broadband Paid',
+                        '₹${widget.broadbandPaidAmount.toStringAsFixed(2)}'),
+                    if (c.customerType.trim() == '2') ...[
+                      ('STB Paid', '₹${widget.stbPaidAmount.toStringAsFixed(2)}'),
+                      ('Total Paid',
+                          '₹${(widget.stbPaidAmount + widget.broadbandPaidAmount).toStringAsFixed(2)}'),
+                    ],
+                  ],
                   if (p.paymentMethod == 'bank') ...{
                     ('Bank Name',   p.bankName),
                     ('Cheque/DD',   p.chequeNo),
@@ -282,8 +398,6 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                 t: t,
                 accentRight: true,
               ),
-              const SizedBox(height: AppSizes.paddingM),
-              _downloadButton(t),
             ],
           ),
         ),
@@ -508,72 +622,6 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _syncBadge(bool synced, AppThemeConst t) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Container(
-        padding:
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: synced
-              ? Colors.green.withValues(alpha: 0.12)
-              : Colors.red.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: synced
-                ? Colors.green.withValues(alpha: 0.4)
-                : Colors.red.withValues(alpha: 0.4),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              synced ? Icons.cloud_done : Icons.cloud_off,
-              size: 14,
-              color: synced ? Colors.green : Colors.red,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              synced ? 'Synced' : 'Not Synced',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: synced ? Colors.green : Colors.red,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _downloadButton(AppThemeConst t) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton.icon(
-        onPressed: _downloadPdf,
-        icon: const Icon(Iconsax.document_download, color: Colors.white),
-        label: const Text(
-          'DOWNLOAD PDF',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1,
-          ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: t.accent,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusM),
-          ),
-        ),
       ),
     );
   }

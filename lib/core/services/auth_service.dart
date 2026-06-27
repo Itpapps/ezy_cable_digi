@@ -57,12 +57,25 @@ class AuthService {
         return LoginResult(false, message.isEmpty ? 'Login failed' : message);
       }
 
+      // Discount config (Android: enable_payment_discount default 0,
+      // max_discount_percent_allowed default 100).
+      final enableDiscount =
+          int.tryParse(SoapClient.readField(xml, 'enable_payment_discount') ?? '') ?? 0;
+      final maxDiscountPct =
+          int.tryParse(SoapClient.readField(xml, 'max_discount_percent_allowed') ?? '') ?? 100;
+
       SessionService.instance.setFromLogin(
         authToken: SoapClient.readField(xml, 'authToken') ?? '',
         dealerId: SoapClient.readField(xml, 'dealerId') ?? '',
         userType: SoapClient.readField(xml, 'userType') ?? '',
         employeeId: SoapClient.readField(xml, 'employeeId') ?? '',
+        enablePaymentDiscount: enableDiscount,
+        maxDiscountPercentAllowed: maxDiscountPct,
       );
+      // TEMP verification log (strip before release).
+      // ignore: avoid_print
+      print('[LOGIN] enable_payment_discount=$enableDiscount '
+          'max_discount_percent_allowed=$maxDiscountPct');
 
       return LoginResult(true, message);
     } on SoapException catch (error, stackTrace) {

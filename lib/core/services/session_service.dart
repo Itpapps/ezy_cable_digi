@@ -14,6 +14,12 @@ class SessionService {
   String userType = '';
   String employeeId = '';
 
+  // Discount config from the login response (Android LoginActivity statics).
+  // enable_payment_discount: 1 = discount feature on for this tenant (default 0).
+  // max_discount_percent_allowed: the % cap (default 100).
+  int enablePaymentDiscount = 0;
+  int maxDiscountPercentAllowed = 100;
+
   bool get isLoggedIn => authToken.isNotEmpty;
 
   void setFromLogin({
@@ -21,11 +27,15 @@ class SessionService {
     required String dealerId,
     required String userType,
     required String employeeId,
+    int enablePaymentDiscount = 0,
+    int maxDiscountPercentAllowed = 100,
   }) {
     this.authToken = authToken;
     this.dealerId = dealerId;
     this.userType = userType;
     this.employeeId = employeeId;
+    this.enablePaymentDiscount = enablePaymentDiscount;
+    this.maxDiscountPercentAllowed = maxDiscountPercentAllowed;
   }
 
   void clear() {
@@ -33,5 +43,7 @@ class SessionService {
     dealerId = '';
     userType = '';
     employeeId = '';
+    enablePaymentDiscount = 0;
+    maxDiscountPercentAllowed = 100;
   }
 }

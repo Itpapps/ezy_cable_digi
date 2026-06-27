@@ -116,55 +116,31 @@ class RealBluetoothService {
   }
 
   // 🔹 Print receipt
+  /// Prints the already-formatted receipt [lines] (32-col text, no ₹ — built to
+  /// mirror the existing app's thermal layout). The caller owns the layout so
+  /// the thermal print and the PDF stay identical.
   Future<void> printReceipt({
     required String mac,
-    required String customerName,
-    required String mobile,
-    required String amount,
-    required String date,
+    required List<String> lines,
   }) async {
     try {
-      bool connected = await ensureConnected(mac);
-
+      final connected = await ensureConnected(mac);
       if (!connected) {
         throw Exception("Printer not connected");
       }
 
-      List<int> bytes = [];
-      const line = "--------------------------------";
-
+      final bytes = <int>[];
       bytes.addAll(utf8.encode("\n"));
-      bytes.addAll(utf8.encode("      EZY CABLE DIGI\n"));
-      bytes.addAll(utf8.encode("     PAYMENT RECEIPT\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("Date : $date\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("Customer : $customerName\n"));
-      bytes.addAll(utf8.encode("Mobile   : $mobile\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("Description        Amount\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("${_formatRow("Cable Bill", "₹$amount")}\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("${_formatRow("TOTAL", "₹$amount")}\n"));
-      bytes.addAll(utf8.encode("$line\n"));
-      bytes.addAll(utf8.encode("\n   Thank You Visit Again!\n\n\n"));
+      for (final l in lines) {
+        bytes.addAll(utf8.encode("$l\n"));
+      }
+      bytes.addAll(utf8.encode("\n\n\n"));
 
       await Future.delayed(const Duration(milliseconds: 600));
       await PrintBluetoothThermal.writeBytes(bytes);
       await Future.delayed(const Duration(milliseconds: 500));
-
-      print("Printed successfully");
     } catch (e) {
-      print("Print error: $e");
       rethrow;
     }
-  }
-
-  String _formatRow(String left, String right) {
-    const width = 32;
-    int space = width - (left.length + right.length);
-    if (space < 1) space = 1;
-    return left + " " * space + right;
   }
 }

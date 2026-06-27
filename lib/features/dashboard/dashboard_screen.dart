@@ -10,6 +10,10 @@ import 'package:ezi_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
+import '../../core/data/customer.dart';
+import '../customers/customer_list_provider.dart';
+import '../customer/customer_details_screen.dart';
 import '../complaints/complaints_screen.dart';
 import '../complaints/complaint_details_screen.dart';
 import '../analytics/analytics_screen.dart';
@@ -21,6 +25,7 @@ import '../../widgets/app_drawer.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../customers/customer_list_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
+import 'dashboard_controller.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
 
@@ -32,6 +37,9 @@ class _TicketItem {
   final String description;
   final String customerId;
   final _TicketStatus status;
+  final String? statusLabel; // real status text (complaints); null → use enum
+  final String altCustomerId;   // alt_cust_id from OpenComplaint (complaints feed)
+  final String realComplaintId; // complaint_id from OpenComplaint (complaints feed)
 
   const _TicketItem({
     required this.ticketId,
@@ -39,6 +47,9 @@ class _TicketItem {
     required this.description,
     required this.customerId,
     required this.status,
+    this.statusLabel,
+    this.altCustomerId = '',
+    this.realComplaintId = '',
   });
 }
 
@@ -59,41 +70,14 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
   int _selectedTab = 0;
   _FeedType _feed = _FeedType.complaints;
 
-  // ── Dummy data — replace with real API / DB calls ─────────────────────────
-  final List<_TicketItem> _complaints = const [
-    _TicketItem(
-      ticketId: 'CTS/116696/485/251030122316',
-      name: 'Shaker',
-      description: 'Description : payment issue',
-      customerId: 'SH_08',
-      status: _TicketStatus.assigned,
-    ),
-    _TicketItem(
-      ticketId: 'CTS/116699/485/251017161847',
-      name: 'Amol',
-      description: 'Description : Box Missing',
-      customerId: 'Am_11',
-      status: _TicketStatus.inprocess,
-    ),
-  ];
+  // KPI cards (Section 1: dashBoardDetails). Defensive — never crashes the screen.
+  final DashboardController _dash = DashboardController();
+  void _onDash() {
+    if (mounted) setState(() {});
+  }
 
-  final List<_TicketItem> _unpaid = const [
-    _TicketItem(
-      ticketId: 'UPD/0007',
-      name: 'Customer One Twentyseven',
-      description: 'Pending amount ₹ 1,411.00',
-      customerId: 'LCO-0007',
-      status: _TicketStatus.assigned,
-    ),
-    _TicketItem(
-      ticketId: 'UPD/0002',
-      name: 'Customer Two',
-      description: 'Pending amount ₹ 589.00',
-      customerId: 'LCO-0002',
-      status: _TicketStatus.inprocess,
-    ),
-  ];
-
+  // ── Dummy data — Nearest / Pay Later still placeholders (their own sections).
+  // Complaints + Unpaid now use real APIs (_buildComplaintsFeed / _buildUnpaidFeed).
   final List<_TicketItem> _nearest = const [
     _TicketItem(
       ticketId: 'NEAR/0011',
@@ -129,8 +113,8 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
   ];
 
   List<_TicketItem> get _currentFeed => switch (_feed) {
-    _FeedType.complaints => _complaints,
-    _FeedType.unpaid => _unpaid,
+    _FeedType.complaints => const [], // real path: _buildComplaintsFeed
+    _FeedType.unpaid => const [],     // real path: _buildUnpaidFeed
     _FeedType.nearest => _nearest,
     _FeedType.payLater => _payLater,
   };
@@ -140,6 +124,9 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
   void initState() {
     super.initState();
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
+    _dash.addListener(_onDash);
+    _dash.loadKpis();
+    _dash.loadComplaints(); // Complaints is the default feed tab.
   }
 
   @override
@@ -152,6 +139,8 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
   void dispose() {
     routeObserver.unsubscribe(this);
     LocationSyncService.instance.stopDashboardTracking();
+    _dash.removeListener(_onDash);
+    _dash.dispose();
     super.dispose();
   }
 
@@ -206,8 +195,8 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           Expanded(
                             child: _GradientSummaryCard(
                               title: AppStrings.of(context, 'due_amount'),
-                              amount: '₹0.00',
-                              subtitle: '120 customers',
+                              amount: _dash.dueAmountText,
+                              subtitle: '',
                               gradient: const LinearGradient(
                                 colors: [
                                   Color(0xFFB91C1C),
@@ -225,7 +214,7 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           Expanded(
                             child: _GradientSummaryCard(
                               title: AppStrings.of(context, 'month_billing'),
-                              amount: '₹0.00',
+                              amount: _dash.monthBillingText,
                               subtitle: AppStrings.of(context, 'this_month'),
                               gradient: const LinearGradient(
                                 colors: [
@@ -244,7 +233,7 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           Expanded(
                             child: _GradientSummaryCard(
                               title: AppStrings.of(context, 'onetime_charges'),
-                              amount: '₹250.00',
+                              amount: _dash.onetimeChargesText,
                               subtitle: AppStrings.of(context, 'installations'),
                               gradient: const LinearGradient(
                                 colors: [
@@ -289,7 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           Expanded(
                             child: _LottieHighlightCard(
                               title: AppStrings.of(context, 'collections'),
-                              amount: '₹750.00',
+                              amount: _dash.collectionsText,
                               subtitle: AppStrings.of(context, 'today'),
                               gradient: const LinearGradient(
                                 colors: [
@@ -435,17 +424,23 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _FeedChip(
                                     label: AppStrings.of(context, 'complaints'),
                                     selected: _feed == _FeedType.complaints,
-                                    onTap: () => setState(
-                                      () => _feed = _FeedType.complaints,
-                                    ),
+                                    onTap: () {
+                                      setState(
+                                          () => _feed = _FeedType.complaints);
+                                      _dash.loadComplaints(force: true);
+                                    },
                                   ),
                                   const SizedBox(width: 8),
                                   _FeedChip(
                                     label: AppStrings.of(context, 'unpaid'),
                                     selected: _feed == _FeedType.unpaid,
-                                    onTap: () => setState(
-                                      () => _feed = _FeedType.unpaid,
-                                    ),
+                                    onTap: () {
+                                      setState(() => _feed = _FeedType.unpaid);
+                                      // Lazy fetch (mirrors Android's tab-tap load).
+                                      context
+                                          .read<CustomerListProvider>()
+                                          .initialLoad();
+                                    },
                                   ),
                                   const SizedBox(width: 8),
                                   _FeedChip(
@@ -475,15 +470,21 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-                            child: ListView.builder(
-                              itemCount: _currentFeed.length,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemBuilder: (_, i) => _TicketCard(
-                                item: _currentFeed[i],
-                                isLast: i == _currentFeed.length - 1,
-                              ),
-                            ),
+                            child: _feed == _FeedType.unpaid
+                                ? _buildUnpaidFeed()
+                                : _feed == _FeedType.complaints
+                                    ? _buildComplaintsFeed()
+                                    : ListView.builder(
+                                        itemCount: _currentFeed.length,
+                                        shrinkWrap: true,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        itemBuilder: (_, i) => _TicketCard(
+                                          item: _currentFeed[i],
+                                          isLast:
+                                              i == _currentFeed.length - 1,
+                                        ),
+                                      ),
                           ),
                         ],
                       ),
@@ -493,6 +494,124 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
               ),
             )
           : _getScreen(),
+    );
+  }
+
+  // ── Unpaid feed (real `unpaidCustomers` via CustomerListProvider) ───────────
+  // Defensive: loading / error / empty states; never crashes. One feed failing
+  // does not affect the KPI cards or the other tabs.
+  Widget _buildUnpaidFeed() {
+    return Consumer<CustomerListProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading && !provider.loaded) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (provider.hasError) {
+          return _feedMessage(
+            Iconsax.warning_2,
+            provider.statusMessage.isEmpty
+                ? 'Could not load unpaid customers'
+                : provider.statusMessage,
+          );
+        }
+        final list = provider.customers;
+        if (list.isEmpty) {
+          return _feedMessage(Iconsax.tick_circle, 'No unpaid customers');
+        }
+        return ListView.builder(
+          itemCount: list.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemBuilder: (_, i) => _UnpaidCard(
+            customer: list[i],
+            isLast: i == list.length - 1,
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Complaints feed (real `getopencomplaintslist` via DashboardController) ──
+  // Reuses _TicketCard (status badge + Update Status → ComplaintDetailsScreen),
+  // which fits a complaint. Defensive: loading / error / empty; never crashes.
+  Widget _buildComplaintsFeed() {
+    if (_dash.complaintsLoading && !_dash.complaintsLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_dash.complaintsError) {
+      return _feedMessage(
+        Iconsax.warning_2,
+        _dash.complaintsMessage.isEmpty
+            ? 'Could not load complaints'
+            : _dash.complaintsMessage,
+      );
+    }
+    final list = _dash.complaints;
+    if (list.isEmpty) {
+      return _feedMessage(Iconsax.tick_circle, 'No complaints');
+    }
+    return ListView.builder(
+      itemCount: list.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (_, i) {
+        final c = list[i];
+        final desc = c.description.isEmpty ? c.des : c.description;
+        final item = _TicketItem(
+          ticketId: c.tktNumber.isEmpty ? c.complaintId : c.tktNumber,
+          name: c.name.isEmpty ? 'NA' : c.name,
+          description: 'Description : $desc',
+          customerId: c.customerId.isEmpty ? c.altCustId : c.customerId,
+          status: _mapComplaintStatus(c.status),
+          statusLabel: c.status.isEmpty ? null : c.status,
+          altCustomerId: c.altCustId,
+          realComplaintId: c.complaintId,
+        );
+        return _TicketCard(
+          item: item,
+          isLast: i == list.length - 1,
+          onRefresh: () {
+            _dash.loadComplaints(force: true);
+            setState(() {});
+          },
+        );
+      },
+    );
+  }
+
+  _TicketStatus _mapComplaintStatus(String status) {
+    final s = status.toUpperCase();
+    if (s.contains('PROCESS') || s.contains('PROGRESS')) {
+      return _TicketStatus.inprocess;
+    }
+    return _TicketStatus.assigned;
+  }
+
+  Widget _feedMessage(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.black26, size: 34),
+            const SizedBox(height: 8),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.black45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -844,8 +963,13 @@ class _FeedChip extends StatelessWidget {
 class _TicketCard extends StatelessWidget {
   final _TicketItem item;
   final bool isLast;
+  final VoidCallback? onRefresh; // called after a successful status update
 
-  const _TicketCard({required this.item, required this.isLast});
+  const _TicketCard({
+    required this.item,
+    required this.isLast,
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -853,7 +977,8 @@ class _TicketCard extends StatelessWidget {
     final statusColor = isAssigned
         ? AppColors.success
         : const Color(0xFFF59E0B);
-    final statusText = isAssigned ? 'ASSIGNED' : 'INPROCESS';
+    final statusText =
+        item.statusLabel ?? (isAssigned ? 'ASSIGNED' : 'INPROCESS');
 
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
@@ -991,12 +1116,17 @@ class _TicketCard extends StatelessWidget {
                             complaintId: item.ticketId,
                             customerName: item.name,
                             complaint: item.description,
-                            currentStatus: item.status == _TicketStatus.assigned
-                                ? 'ASSIGNED'
-                                : 'INPROCESS',
+                            currentStatus: item.statusLabel ??
+                                (item.status == _TicketStatus.assigned
+                                    ? 'ASSIGNED'
+                                    : 'INPROCESS'),
+                            altCustomerId: item.altCustomerId,
+                            realComplaintId: item.realComplaintId,
                           ),
                         ),
-                      );
+                      ).then((ok) {
+                        if (ok == true) onRefresh?.call();
+                      });
                     },
                     icon: const Icon(Icons.edit_note_rounded, size: 18),
                     style: ElevatedButton.styleFrom(
@@ -1020,6 +1150,105 @@ class _TicketCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unpaid Customer Card — real `unpaidCustomers` row. Tap → customer details
+// (same target as the Customer List screen). No complaint status / update button.
+// ─────────────────────────────────────────────────────────────────────────────
+class _UnpaidCard extends StatelessWidget {
+  final Customer customer;
+  final bool isLast;
+  const _UnpaidCard({required this.customer, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = customer.pendingAmount; // already '₹…' from Customer.fromJson
+    final account = customer.altCustomerId.isEmpty ? 'NA' : customer.altCustomerId;
+    final lcoId = customer.lcoCustomerId.isEmpty ? 'NA' : customer.lcoCustomerId;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CustomerDetailsScreen(customer: customer),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        customer.name.isEmpty ? 'NA' : customer.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        pending,
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Account : $account',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'LCO Customer ID : $lcoId',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black45,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

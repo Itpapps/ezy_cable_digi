@@ -100,6 +100,15 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         return;
       }
 
+      // Receipt values captured now, before pushReplacement disposes the controller.
+      final bbPaid =
+          _ctrl.isBroadbandCustomer ? _ctrl.parsedBroadbandAmount : 0.0;
+      final stbPaid = _ctrl.parsedAmount;
+      final discountPaid = double.tryParse(_ctrl.discountCtrl.text) ?? 0.0;
+      final dealerName = _ctrl.lastResult?.dealerBusinessName ?? '';
+      final dueAmt = _ctrl.receiptDueAmount;
+      final outAmt = _ctrl.receiptOutAmount;
+
       // Success popup before navigating
       await showPremiumDialog<void>(
         context: context,
@@ -122,6 +131,12 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           builder: (_) => ReceiptPreviewScreen(
             customer: widget.customer,
             payment: payment,
+            broadbandPaidAmount: bbPaid,
+            stbPaidAmount: stbPaid,
+            discountAmount: discountPaid,
+            dealerBusinessName: dealerName,
+            dueAmount: dueAmt,
+            outAmount: outAmt,
           ),
         ),
       );
@@ -427,15 +442,21 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         ),
         const SizedBox(height: 10),
 
-        // Discount
-        _CompactField(
-          controller: _ctrl.discountCtrl,
-          hint: 'Discount amount (₹)',
-          t: t,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        ),
-        const SizedBox(height: 10),
+        // Discount — shown only when the tenant enables payment discount
+        // (gate on enable_payment_discount; role permission deferred).
+        // Auto-recomputes the amount field (= due − discount).
+        if (_ctrl.discountEnabled) ...[
+          _CompactField(
+            controller: _ctrl.discountCtrl,
+            hint: 'Discount amount (₹)',
+            t: t,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => _ctrl.onDiscountChanged(),
+            errorText: _ctrl.discountError,
+          ),
+          const SizedBox(height: 10),
+        ],
 
         // Amount
         _CompactField(
@@ -445,6 +466,23 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           highlightColor: _ctrl.paymentMethod == 'bank' ? const Color(0xFFF59E0B) : null,
         ),
+
+        // ── Broadband leg (broadband customers only) ─────────────────────────
+        if (_ctrl.isBroadbandCustomer) ...[
+          const SizedBox(height: 10),
+          _CompactField(
+            controller: _ctrl.broadbandAmountCtrl,
+            hint: 'Broadband amount (₹)',
+            t: t,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 10),
+          _CheckToggle(
+            value: _ctrl.isForRenewal,
+            onChanged: _ctrl.setIsForRenewal,
+            label: 'Renewal',
+          ),
+        ],
 
         // ── Bank-only fields ─────────────────────────────────────────────────
         AnimatedSize(
@@ -786,6 +824,8 @@ class _CompactField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final Color? highlightColor;
+  final ValueChanged<String>? onChanged;
+  final String? errorText;
 
   const _CompactField({
     required this.controller,
@@ -794,6 +834,8 @@ class _CompactField extends StatelessWidget {
     this.keyboardType,
     this.inputFormatters,
     this.highlightColor,
+    this.onChanged,
+    this.errorText,
   });
 
   @override
@@ -803,9 +845,11 @@ class _CompactField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
+      onChanged: onChanged,
       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: t.cardBodyText),
       decoration: InputDecoration(
         hintText: hint,
+        errorText: errorText,
         hintStyle: TextStyle(color: t.inputHintColor, fontWeight: FontWeight.w400, fontSize: 12),
         filled: true,
         fillColor: t.inputBg,
@@ -947,6 +991,49 @@ class _SmsToggle extends StatelessWidget {
           const Text(
             'Send SMS',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _CheckToggle — labelled checkbox (used for the broadband Renewal flag)
+// ─────────────────────────────────────────────────────────────────────────────
+class _CheckToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String label;
+  const _CheckToggle({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              color: value ? AppColors.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: value ? AppColors.primary : AppColors.textSecondary,
+                width: 1.8,
+              ),
+            ),
+            child: value ? const Icon(Icons.check, color: Colors.white, size: 13) : null,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
           ),
         ],
       ),

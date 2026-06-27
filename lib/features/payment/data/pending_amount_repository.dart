@@ -7,9 +7,11 @@ import '../../../core/services/session_service.dart';
 class PendingAmountResult {
   final int statusCode; // 0 = ok
   final String statusMessage;
-  final double pendingAmount; // the live amount the customer owes
-  const PendingAmountResult(
-      this.statusCode, this.statusMessage, this.pendingAmount);
+  final double pendingAmount; // the live amount owed (= due_amount for mpay)
+  final int billingId;        // bill to settle — passed to mpay (verified: from GPA)
+  final double broadcasterPendingAmount; // broadband pending (0 for STB-only)
+  const PendingAmountResult(this.statusCode, this.statusMessage,
+      this.pendingAmount, this.billingId, this.broadcasterPendingAmount);
 }
 
 /// Get Pending Amount (config key `gpa`).
@@ -41,6 +43,13 @@ class PendingAmountRepository {
     final message = SoapClient.readField(xml, 'statusMessage') ?? '';
     final pending =
         double.tryParse(SoapClient.readField(xml, 'pendingAmount') ?? '') ?? 0.0;
-    return PendingAmountResult(status, message, pending);
+    final billingId =
+        int.tryParse(SoapClient.readField(xml, 'billingId') ?? '') ?? 0;
+    // Broadband pending (Android: broadcaster_pending_amount). 0 for STB-only.
+    final broadcasterPending = double.tryParse(
+            SoapClient.readField(xml, 'broadcaster_pending_amount') ?? '') ??
+        0.0;
+    return PendingAmountResult(
+        status, message, pending, billingId, broadcasterPending);
   }
 }

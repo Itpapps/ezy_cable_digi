@@ -12,6 +12,7 @@ class Customer {
   final String pendingAmount;
   final String lastPaidDate;
   final String customerType;
+  final String broadbandUserId; // broadband account id (empty = STB-only)
   final String address;
   final String groupName;
   final String areaName;
@@ -36,6 +37,7 @@ class Customer {
     required this.pendingAmount,
     required this.lastPaidDate,
     required this.customerType,
+    this.broadbandUserId = '',
     required this.address,
     required this.groupName,
     required this.areaName,
@@ -46,6 +48,21 @@ class Customer {
     this.latitude,
     this.longitude,
   });
+
+  /// Android-style label for the raw `customer_type` ("0"/"1"/"2").
+  /// Matches the existing app: STB / BroadBand / STB & BroadBand.
+  String get customerTypeLabel {
+    switch (customerType.trim()) {
+      case '0':
+        return 'STB';
+      case '1':
+        return 'BroadBand';
+      case '2':
+        return 'STB & BroadBand';
+      default:
+        return customerType; // already a label, or unknown — show as-is
+    }
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -62,6 +79,7 @@ class Customer {
       'pendingAmount': pendingAmount,
       'lastPaidDate': lastPaidDate,
       'customerType': customerType,
+      'broadbandUserId': broadbandUserId,
       'address': address,
       'groupName': groupName,
       'areaName': areaName,
@@ -89,6 +107,7 @@ class Customer {
       pendingAmount: map['pendingAmount'] ?? '₹0',
       lastPaidDate: map['lastPaidDate'] ?? '',
       customerType: map['customerType'] ?? '',
+      broadbandUserId: map['broadbandUserId'] ?? '',
       address: map['address'] ?? '',
       groupName: map['groupName'] ?? '',
       areaName: map['areaName'] ?? '',
@@ -122,6 +141,7 @@ class Customer {
       pendingAmount: total.isEmpty ? '₹0' : '₹$total',
       lastPaidDate: s('paid_on'),
       customerType: s('customer_type'),
+      broadbandUserId: s('broadband_user_id'),
       address: s('address1'),
       groupName: '',
       areaName: '',
@@ -146,6 +166,7 @@ class Customer {
     String? pendingAmount,
     String? lastPaidDate,
     String? customerType,
+    String? broadbandUserId,
     String? address,
     String? groupName,
     String? areaName,
@@ -170,6 +191,7 @@ class Customer {
       pendingAmount: pendingAmount ?? this.pendingAmount,
       lastPaidDate: lastPaidDate ?? this.lastPaidDate,
       customerType: customerType ?? this.customerType,
+      broadbandUserId: broadbandUserId ?? this.broadbandUserId,
       address: address ?? this.address,
       groupName: groupName ?? this.groupName,
       areaName: areaName ?? this.areaName,

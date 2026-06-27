@@ -1,16 +1,36 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../dashboard/data/complaints_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPLAINT DETAILS SCREEN
-// Matches the photo: Customer Name, Ticket No., Complaint, Status (read-only),
-// Complaint Status dropdown, Comment field, Update button
+// Phase 1: real implementation.
+//   • Loads status LOV from `complaintTypes` API on open (fallback list if it
+//     fails so the screen is always usable).
+//   • Calls `closeComplaint` on submit with real altCustomerId, realComplaintId,
+//     ticketNumber, status and comment.
+//   • Handles statusCode 0 (success), 1 (invalid details), 2 (contact support),
+//     3 / null / network / timeout / SOAP errors.
+//   • Success dialog → pops with `true` so the caller can refresh the dashboard.
+//   • Failure dialog → keeps the screen open so the user can correct and retry.
+//   • Never crashes on null / missing fields / malformed responses.
 // ─────────────────────────────────────────────────────────────────────────────
 class ComplaintDetailsScreen extends StatefulWidget {
+  /// Display ticket number (tkt_number); shown as "Ticket No." in the UI and
+  /// also sent as `ticketNumber` in the closeComplaint API call.
   final String complaintId;
   final String customerName;
   final String complaint;
   final String currentStatus;
+
+  /// alt_cust_id from the complaint record — required by the closeComplaint API.
+  /// Defaults to '' so existing call-sites that pre-date Phase 1 still compile.
+  final String altCustomerId;
+
+  /// Numeric complaint_id from the complaint record — required by the
+  /// closeComplaint API. Defaults to '' for backward compatibility.
+  final String realComplaintId;
 
   const ComplaintDetailsScreen({
     super.key,
@@ -18,6 +38,8 @@ class ComplaintDetailsScreen extends StatefulWidget {
     required this.customerName,
     required this.complaint,
     required this.currentStatus,
+    this.altCustomerId = '',
+    this.realComplaintId = '',
   });
 
   @override
@@ -25,25 +47,17 @@ class ComplaintDetailsScreen extends StatefulWidget {
 }
 
 class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
+  // ── State ──────────────────────────────────────────────────────────────────
+  List<String> _statusOptions = kDefaultComplaintStatuses;
   String _selectedStatus = 'Select';
+  bool _loadingStatuses = true;
+  bool _updating = false;
   final _commentCtrl = TextEditingController();
-
-  static const _statuses = [
-    'Select',
-    'ASSIGNED',
-    'INPROCESS',
-    'ONHOLD',
-    'RESOLVED',
-    'CLOSED',
-  ];
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill with current status if it matches a dropdown value
-    if (_statuses.contains(widget.currentStatus.toUpperCase())) {
-      _selectedStatus = widget.currentStatus.toUpperCase();
-    }
+    _loadStatuses();
   }
 
   @override
@@ -52,25 +66,196 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
     super.dispose();
   }
 
-  void _update() {
-    if (_selectedStatus == 'Select') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a complaint status'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
+  // ── API: load status LOV ───────────────────────────────────────────────────
+  Future<void> _loadStatuses() async {
+    try {
+      final statuses =
+          await ComplaintsRepository.instance.fetchComplaintStatuses();
+      if (!mounted) return;
+      setState(() {
+        _statusOptions = statuses;
+        // Pre-select the current status if the API returned it.
+        final upper = widget.currentStatus.toUpperCase();
+        if (_statusOptions.contains(upper)) {
+          _selectedStatus = upper;
+        } else if (_statusOptions.contains(widget.currentStatus)) {
+          _selectedStatus = widget.currentStatus;
+        } else {
+          _selectedStatus = 'Select';
+        }
+        _loadingStatuses = false;
+      });
+    } catch (_) {
+      // Even the fallback failed for some unexpected reason — still show safely.
+      if (!mounted) return;
+      setState(() {
+        _statusOptions = kDefaultComplaintStatuses;
+        _loadingStatuses = false;
+      });
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Status updated to $_selectedStatus'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    Navigator.pop(context);
   }
 
+  // ── API: update / close complaint ──────────────────────────────────────────
+  Future<void> _update() async {
+    if (_selectedStatus == 'Select') {
+      _showErrorDialog('Please select a complaint status before updating.');
+      return;
+    }
+    if (_updating) return;
+    setState(() => _updating = true);
+    try {
+      final result = await ComplaintsRepository.instance.closeComplaint(
+        altCustomerId: widget.altCustomerId,
+        complaintId: widget.realComplaintId,
+        ticketNumber: widget.complaintId,
+        status: _selectedStatus,
+        comment: _commentCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      if (result.isSuccess) {
+        // statusCode 0 → success
+        _showSuccessDialog();
+      } else if (result.statusCode == 1) {
+        // statusCode 1 → "Enter valid details"
+        final msg = result.statusMessage.isNotEmpty
+            ? result.statusMessage
+            : 'Invalid details. Please check and try again.';
+        _showErrorDialog(msg);
+      } else if (result.statusCode == 2) {
+        // statusCode 2 → "Contact support"
+        final msg = result.statusMessage.isNotEmpty
+            ? result.statusMessage
+            : 'An error occurred. Please contact support.';
+        _showErrorDialog(msg);
+      } else {
+        // statusCode 3 / null / unknown → server busy or unreachable
+        final msg = result.statusMessage.isNotEmpty
+            ? result.statusMessage
+            : 'Server busy or unreachable. Please try again.';
+        _showErrorDialog(msg);
+      }
+    } on TimeoutException {
+      if (!mounted) return;
+      _showErrorDialog('Request timed out. Please try again.');
+    } catch (_) {
+      if (!mounted) return;
+      _showErrorDialog('Could not connect to server. Please try again.');
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
+
+  // ── Dialogs ────────────────────────────────────────────────────────────────
+  void _showSuccessDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Complaint Updated',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _dialogRow('Ticket No.', widget.complaintId),
+            const SizedBox(height: 6),
+            _dialogRow('New Status', _selectedStatus),
+            if (_commentCtrl.text.trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _dialogRow('Comment', _commentCtrl.text.trim()),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx); // close dialog
+              Navigator.pop(context, true); // return true → caller refreshes
+            },
+            child: const Text('OK',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Update Failed',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 14, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dialogRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF5B7BAE),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0D47A1),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,7 +294,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
               ),
               _divider(),
 
-              // ── Complaint Status dropdown ───────────────────────────────
+              // ── Complaint Status dropdown ─────────────────────────────────
               Row(
                 children: [
                   const SizedBox(
@@ -124,41 +309,59 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                     ),
                   ),
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFD1D5DB)),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedStatus,
-                          isExpanded: true,
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down,
-                            color: AppColors.primary,
-                          ),
-                          items: _statuses
-                              .map(
-                                (s) => DropdownMenuItem(
-                                  value: s,
-                                  child: Text(
-                                    s,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0D47A1),
-                                    ),
-                                  ),
+                    child: _loadingStatuses
+                        ? const SizedBox(
+                            height: 40,
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              ),
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: const Color(0xFFD1D5DB)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedStatus,
+                                isExpanded: true,
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: AppColors.primary,
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedStatus = v);
-                          },
-                        ),
-                      ),
-                    ),
+                                items: _statusOptions
+                                    .map(
+                                      (s) => DropdownMenuItem(
+                                        value: s,
+                                        child: Text(
+                                          s,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF0D47A1),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: _updating
+                                    ? null
+                                    : (v) {
+                                        if (v != null) {
+                                          setState(
+                                              () => _selectedStatus = v);
+                                        }
+                                      },
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -186,6 +389,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                   Expanded(
                     child: TextField(
                       controller: _commentCtrl,
+                      enabled: !_updating,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -199,10 +403,12 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                           fontSize: 14,
                         ),
                         border: const UnderlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFFD1D5DB)),
+                          borderSide:
+                              BorderSide(color: Color(0xFFD1D5DB)),
                         ),
                         focusedBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(color: AppColors.primary, width: 2),
+                          borderSide:
+                              BorderSide(color: AppColors.primary, width: 2),
                         ),
                       ),
                     ),
@@ -215,7 +421,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
               // ── Update button ─────────────────────────────────────────────
               Center(
                 child: ElevatedButton(
-                  onPressed: _update,
+                  onPressed: _updating ? null : _update,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE0E0E0),
                     foregroundColor: AppColors.primary,
@@ -225,14 +431,23 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
-                    'Update',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
+                  child: _updating
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : const Text(
+                          'Update',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -256,7 +471,8 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
             color: Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+          child: const Icon(
+              Icons.arrow_back_ios_new, size: 16, color: Colors.white),
         ),
       ),
       title: const Text(

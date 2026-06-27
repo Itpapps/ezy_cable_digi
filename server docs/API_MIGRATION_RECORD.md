@@ -11,10 +11,13 @@ Type = SOAP (ksoap2 via `/wsController`) or REST (`/packagelist/...`, `/digi_res
 | 4 | Customer List (unpaid) | `uc` | SOAP | 🟡 Implemented; display verified (1 customer). customerType→param mapping to confirm | — |
 | 5 | Customer Search | `sc` | SOAP | ✅ **Complete — manually verified** | CUSTOMER_SEARCH.md |
 | 6 | Get Pending Amount | `gpa` | SOAP | 🟡 Implemented; verified `statusCode=0`/`pendingAmount`. Pending: Android compare + zero-amount check + user approval | — |
-| 7 | Make Payment | `mpay` | SOAP | 🔴 **LOCAL DUMMY ONLY** — pressing Pay writes to SQLite (`DatabaseHelper.insertPayment`), makes **NO** backend `mpay` call. NOT production-complete. | — |
+| 7 | Make Payment | `mpay` | SOAP | ✅ **STB cash VERIFIED end-to-end** (positive-due customer): `statusCode=0`, server receipt, `acc_payment_details` row (`payment_flag=4`, amount + receipt + billingId match). 28-field parity request. Broadband / STB+BB / card·bank = follow-up (out of launch scope). | MAKE_PAYMENT.md · PAYMENT_FLOW_SPEC.md |
 | 8 | Payment History | `payhist` | SOAP | ⬜ Pending | — |
 
-> ⚠️ **Payment is currently local-only:** `PaymentController.pay()` inserts into the local `payments` table and shows a receipt, but never calls the server `makePayments` (`mpay`). A real backend payment is not yet implemented.
+> ✅ **Payment now calls the server (STB cash):** `PaymentController.pay()` → `MakePaymentRepository`
+> posts real `makePayments` (`mpay`), uses the server receipt, and no longer writes a local dummy row.
+> ⚠️ Pending **device verification** (test server + disposable customer + tiny amount) and user approval.
+> Broadband / STB+Broadband / bank·card·upi are out of scope (not implemented).
 
 ## Conventions established
 - **Env switching:** comment/uncomment `namespace` / `namespaceBms` in `app_config.dart` (mirrors `EzyCableDigiConstants`). No runtime toggle.

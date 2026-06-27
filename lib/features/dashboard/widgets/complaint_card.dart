@@ -11,6 +11,11 @@ class ComplaintCard extends StatelessWidget {
   final String name;
   final String description;
   final ComplaintStatus status;
+  // Complaint identifiers for the real closeComplaint API.
+  // Optional so existing hardcoded call-sites (complaints_screen.dart) compile
+  // without changes until they are wired to real data in a later phase.
+  final String altCustomerId;
+  final String realComplaintId;
 
   const ComplaintCard({
     super.key,
@@ -18,6 +23,8 @@ class ComplaintCard extends StatelessWidget {
     required this.name,
     required this.description,
     required this.status,
+    this.altCustomerId = '',
+    this.realComplaintId = '',
   });
 
   @override
@@ -115,6 +122,8 @@ class ComplaintCard extends StatelessWidget {
                           customerName: name,
                           complaint: description,
                           currentStatus: statusText,
+                          altCustomerId: altCustomerId,
+                          realComplaintId: realComplaintId,
                         ),
                       ),
                     );

@@ -76,6 +76,7 @@ class SearchRepository {
       pendingAmount: total.isEmpty ? '₹0' : '₹$total',
       lastPaidDate: f('last_paid_date'),
       customerType: f('customer_type'),
+      broadbandUserId: f('broadband_user_id'),
       address: f('address'),
       groupName: f('group_name'),
       areaName: '',

@@ -155,7 +155,16 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // ── Build ──────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Back on a sub-tab returns to the Dashboard tab instead of popping (and
+    // crashing) the dashboard route. On the Dashboard tab, back behaves normally.
+    return PopScope(
+      canPop: _selectedTab == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _selectedTab != 0) {
+          setState(() => _selectedTab = 0);
+        }
+      },
+      child: Scaffold(
       drawer: const AppDrawer(),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(62),
@@ -494,6 +503,7 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
               ),
             )
           : _getScreen(),
+      ),
     );
   }
 
@@ -971,14 +981,24 @@ class _TicketCard extends StatelessWidget {
     this.onRefresh,
   });
 
+  /// Maps the real backend status string to its display colour.
+  /// Mirrors the Android app badge colours for each known status value.
+  static Color _statusColor(String s) {
+    final u = s.toUpperCase();
+    if (u.contains('ASSIGN'))                         return const Color(0xFF1565C0); // blue
+    if (u.contains('PROCESS') || u.contains('PROGRESS')) return const Color(0xFFF59E0B); // amber
+    if (u.contains('HOLD'))                           return const Color(0xFFE53935); // red
+    if (u.contains('RESOLV'))                         return const Color(0xFF43A047); // green
+    if (u.contains('CLOS'))                           return const Color(0xFF757575); // grey
+    return const Color(0xFF1565C0); // default → blue
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAssigned = item.status == _TicketStatus.assigned;
-    final statusColor = isAssigned
-        ? AppColors.success
-        : const Color(0xFFF59E0B);
     final statusText =
         item.statusLabel ?? (isAssigned ? 'ASSIGNED' : 'INPROCESS');
+    final statusColor = _statusColor(statusText);
 
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),

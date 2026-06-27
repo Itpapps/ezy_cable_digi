@@ -5,6 +5,8 @@ import '../../../core/config/app_config.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
 import '../../../core/services/session_service.dart';
+import '../../complaints/data/complaint_option.dart';
+import '../../complaints/data/customer_complaint.dart';
 import 'open_complaint.dart';
 
 /// Result of the dashboard Complaints call (`getopencomplaintslist`).
@@ -170,4 +172,190 @@ class ComplaintsRepository {
       return const ComplaintActionResult(3, 'Could not connect to server. Please try again.');
     }
   }
+
+  /// A customer's complaint history (key `gccl`, method `getCustomerComplaintList`).
+  /// Wrapper element `compListInfo`, i:type `getCustomerComplaintList`; request
+  /// `altCustomerId` + `authToken` + `imei`. Response = repeated
+  /// `customerComplaintList` elements. Defensive — never throws to the UI.
+  Future<CustomerComplaintsResult> fetchCustomerComplaints({
+    required String altCustomerId,
+  }) async {
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        soapAction: '$ns/getCustomerComplaintList',
+        methodName: 'getCustomerComplaintList',
+        wrapper: 'compListInfo',
+        wrapperType: 'getCustomerComplaintList',
+        fields: {
+          'altCustomerId': int.tryParse(altCustomerId) ?? 0,
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+      final items = <CustomerComplaint>[];
+      if (status == 0) {
+        for (final inner in SoapClient.readAll(xml, 'customerComplaintList')) {
+          String f(String k) => (SoapClient.readField(inner, k) ?? '').trim();
+          items.add(CustomerComplaint(
+            customerId: f('customer_id'),
+            altCustomerId: f('alt_cust_id'),
+            customNumber: f('customnumber'),
+            customerName: f('name'),
+            groupName: f('group_name'),
+            complaintId: f('complaint_id'),
+            ticketNumber: f('tkt_number'),
+            description: f('description'),
+            complaintTime: f('complaintTime'),
+            status: f('status'),
+          ));
+        }
+      }
+      return CustomerComplaintsResult(status, message, items);
+    } on TimeoutException {
+      return const CustomerComplaintsResult(3, 'Request timed out.', []);
+    } catch (_) {
+      return const CustomerComplaintsResult(3, 'Could not connect to server.', []);
+    }
+  }
+
+  /// Complaint categories LOV (key `comcat`, method `complaintCategories`).
+  /// Wrapper `compCatInfo`/`getComplaintCategoriesInfo`; request `authToken`+`imei`.
+  /// Returns a list led by `ComplaintOption.select`. On any failure returns just
+  /// `[Select]` — never throws (the Create screen stays usable).
+  Future<List<ComplaintOption>> fetchComplaintCategories() async {
+    final list = <ComplaintOption>[ComplaintOption.select];
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        soapAction: '$ns/complaintCategories',
+        methodName: 'complaintCategories',
+        wrapper: 'compCatInfo',
+        wrapperType: 'getComplaintCategoriesInfo',
+        fields: {
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+        },
+        timeout: const Duration(seconds: 60),
+      );
+      for (final inner in SoapClient.readAll(xml, 'complaintCategories')) {
+        final id = int.tryParse(SoapClient.readField(inner, 'categoryId') ?? '');
+        final name = (SoapClient.readField(inner, 'categoryName') ?? '').trim();
+        if (id != null && id != 0 && name.isNotEmpty) {
+          list.add(ComplaintOption(id, name));
+        }
+      }
+    } catch (_) {
+      // keep just [Select]
+    }
+    return list;
+  }
+
+  /// Assigned-employees LOV (key `aed`, method `assignedemployeedetails`).
+  /// Wrapper `assignedinfo`/`assignedEmployeeInfo`; request `authToken`+`imei`+
+  /// `customerId` (the numeric customer_id). Returns a list led by
+  /// `ComplaintOption.select`. Never throws.
+  Future<List<ComplaintOption>> fetchAssignedEmployees(String customerId) async {
+    final list = <ComplaintOption>[ComplaintOption.select];
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        soapAction: '$ns/assignedemployeedetails',
+        methodName: 'assignedemployeedetails',
+        wrapper: 'assignedinfo',
+        wrapperType: 'assignedEmployeeInfo',
+        fields: {
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+          // The SOAP element name is `customer_id` (getassignedinfo.getPropertyInfo
+          // case 2), even though the Java field is `customerId`. Sending the wrong
+          // name made the server return an empty employee list.
+          'customer_id': int.tryParse(customerId) ?? 0,
+        },
+        timeout: const Duration(seconds: 60),
+      );
+      for (final inner in SoapClient.readAll(xml, 'assignedemployee_details')) {
+        final id = int.tryParse(SoapClient.readField(inner, 'employee_id') ?? '');
+        final name =
+            (SoapClient.readField(inner, 'employee_name') ?? '').trim();
+        if (id != null && id != 0 && name.isNotEmpty) {
+          list.add(ComplaintOption(id, name));
+        }
+      }
+    } catch (_) {
+      // keep just [Select]
+    }
+    return list;
+  }
+
+  /// Create a complaint (key `crecomp`, method `createComplaint`).
+  /// Wrapper `newCompInfo`/`createComplaintInfo`. [customerId] is the numeric
+  /// customer_id. SIMPLE mode sends `error` = 0. Defensive — never throws.
+  Future<ComplaintActionResult> createComplaint({
+    required String customerId,
+    required String complaint,
+    required int category,
+    required int assignedTo,
+    int error = 0,
+    String latitude = '0.0',
+    String longitude = '0.0',
+  }) async {
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        soapAction: '$ns/createComplaint',
+        methodName: 'createComplaint',
+        wrapper: 'newCompInfo',
+        wrapperType: 'createComplaintInfo',
+        fields: {
+          'customerId': int.tryParse(customerId) ?? 0,
+          'authToken': SessionService.instance.authToken,
+          'complaint': complaint,
+          'category': category,
+          'error': error,
+          'imei': _imei,
+          'latitude': latitude,
+          'longitude': longitude,
+          'assigned_to': assignedTo,
+          'lat': latitude,
+          'lang': longitude,
+        },
+        timeout: const Duration(seconds: 100),
+      );
+      final codeStr = SoapClient.readField(xml, 'statusCode');
+      final code = int.tryParse(codeStr ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+      if (codeStr == null) {
+        return const ComplaintActionResult(
+            3, 'Server busy or unreachable. Please try again.');
+      }
+      return ComplaintActionResult(code, message);
+    } on TimeoutException {
+      return const ComplaintActionResult(3, 'Request timed out. Please try again.');
+    } catch (_) {
+      return const ComplaintActionResult(
+          3, 'Could not connect to server. Please try again.');
+    }
+  }
+}
+
+/// Result of `getCustomerComplaintList`.
+class CustomerComplaintsResult {
+  final int statusCode; // 0 = ok · 1 = no records · 2 = error · 3 = failed
+  final String statusMessage;
+  final List<CustomerComplaint> complaints;
+  const CustomerComplaintsResult(
+      this.statusCode, this.statusMessage, this.complaints);
 }

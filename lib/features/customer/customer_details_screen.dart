@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:iconsax/iconsax.dart';
@@ -13,7 +14,7 @@ import '../payment/payment_options_screen.dart';
 import 'customer_map_screen.dart';
 import 'location_preview_screen.dart';
 import 'payment_history_screen.dart';
-import '../complaints/create_complaint_screen.dart';
+import '../complaints/complaints_landing_screen.dart';
 import '../complaints/complaints_history_screen.dart';
 import '../billing/invoice_history_screen.dart';
 import '../complaints/package_operations_screen.dart';
@@ -142,7 +143,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               valueColor: AppColors.textPrimary, valueBold: true),
           _infoRow('Amount Payable', _customer.amountPayable, t,
               valueColor: t.accent, valueBold: true),
-          _infoRow('Customer Type', _customer.customerType, t),
+          _infoRow('Customer Type', _customer.customerTypeLabel, t),
           _infoRow('Group Name',
               _customer.groupName.isEmpty ? 'N/A' : _customer.groupName, t),
           _infoRow('Area Name',
@@ -250,7 +251,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           Row(
             children: [
               Expanded(
-                child: _locCell(_customer.lastPaidDate, 'Last Paid Date', t: t),
+                child: _locCell(
+                  _customer.lastPaidDate.trim().isEmpty
+                      ? 'N/A'
+                      : _customer.lastPaidDate,
+                  'Last Paid Date',
+                  t: t,
+                ),
               ),
               _locDivider(t),
               Expanded(
@@ -276,6 +283,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   'Box Number',
                   t: t,
                   valueColor: Colors.green.shade600,
+                  copyable: true,
                 ),
               ),
               _locDivider(t),
@@ -285,6 +293,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   'VC Number',
                   t: t,
                   valueColor: Colors.green.shade600,
+                  copyable: true,
                 ),
               ),
               const Expanded(child: SizedBox()),
@@ -294,6 +303,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         ],
       ),
     );
+  }
+
+  // Copy a value to the clipboard and confirm with a brief snackbar. Clipboard
+  // is a safe Flutter API (no permissions); guarded so it never throws.
+  void _copyValue(String value, String label) {
+    Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text('$label copied'),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ));
   }
 
   Widget _locDivider(AppThemeConst t) => Container(
@@ -308,8 +331,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     String label, {
     Color? valueColor,
     bool hasEditIcon = false,
+    bool copyable = false,
     required AppThemeConst t,
   }) {
+    final canCopy =
+        copyable && value.trim().isNotEmpty && value.trim() != 'N/A';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -327,6 +353,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             if (hasEditIcon) ...[
               const SizedBox(width: 4),
               const Icon(Icons.edit, size: 14, color: Color(0xFF9CA3AF)),
+            ],
+            if (canCopy) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => _copyValue(value.trim(), label),
+                behavior: HitTestBehavior.opaque,
+                child: Icon(Icons.copy_rounded, size: 14, color: t.accent),
+              ),
             ],
           ],
         ),
@@ -407,7 +441,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentHistoryScreen(customer: _customer)));
         break;
       case 'Create Complaints':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => CreateComplaintScreen(customer: _customer)));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintsLandingScreen(customer: _customer)));
         break;
       case 'Complaint History':
         Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintHistoryScreen(customer: _customer)));

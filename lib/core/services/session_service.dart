@@ -20,6 +20,15 @@ class SessionService {
   int enablePaymentDiscount = 0;
   int maxDiscountPercentAllowed = 100;
 
+  // ── Package-operation role permissions (from getRolePermissions, key `grp`) ──
+  // Each is the `{name}.permission` flag ("1" = allowed). Loaded ONCE after login
+  // (session-only; never refreshed). Default **false = deny** if missing/failed —
+  // the Package Hub shows/hides actions on these. See PACKAGE_OPERATIONS_COMPLETE.md §1.5.
+  bool packageActivation = false;   // Add Services
+  bool packageDeactivation = false; // Remove Services
+  bool scheduleService = false;     // Schedule Services
+  bool serviceExtension = false;    // Service Extension
+
   bool get isLoggedIn => authToken.isNotEmpty;
 
   void setFromLogin({
@@ -38,6 +47,20 @@ class SessionService {
     this.maxDiscountPercentAllowed = maxDiscountPercentAllowed;
   }
 
+  /// Package-operation permissions from `getRolePermissions` (after login).
+  /// Defaults stay false (deny) when the call fails or a flag is missing.
+  void setRolePermissions({
+    bool packageActivation = false,
+    bool packageDeactivation = false,
+    bool scheduleService = false,
+    bool serviceExtension = false,
+  }) {
+    this.packageActivation = packageActivation;
+    this.packageDeactivation = packageDeactivation;
+    this.scheduleService = scheduleService;
+    this.serviceExtension = serviceExtension;
+  }
+
   void clear() {
     authToken = '';
     dealerId = '';
@@ -45,5 +68,9 @@ class SessionService {
     employeeId = '';
     enablePaymentDiscount = 0;
     maxDiscountPercentAllowed = 100;
+    packageActivation = false;
+    packageDeactivation = false;
+    scheduleService = false;
+    serviceExtension = false;
   }
 }

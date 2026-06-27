@@ -1,9 +1,62 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../features/dashboard/widgets/complaint_card.dart';
+import '../dashboard/data/complaints_repository.dart';
+import '../dashboard/data/open_complaint.dart';
 
-class ComplaintsScreen extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+// OPEN COMPLAINTS (bottom-nav Complaints tab)
+// Real `getopencomplaintslist` data. Tapping "Update Status" opens the real
+// closeComplaint flow with the correct alt_cust_id / complaint_id / tkt_number,
+// and the list refetches after a successful update. Defensive: loading / error /
+// empty states; never crashes.
+// ─────────────────────────────────────────────────────────────────────────────
+class ComplaintsScreen extends StatefulWidget {
   const ComplaintsScreen({super.key});
+
+  @override
+  State<ComplaintsScreen> createState() => _ComplaintsScreenState();
+}
+
+class _ComplaintsScreenState extends State<ComplaintsScreen> {
+  bool _loading = true;
+  bool _error = false;
+  String _message = '';
+  List<OpenComplaint> _complaints = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    final r = await ComplaintsRepository.instance.fetchOpenComplaints();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (r.statusCode == 0) {
+        _complaints = r.complaints; // may be empty → empty-state
+        _error = false;
+      } else if (r.statusCode == 1) {
+        _complaints = const []; // no records → empty-state
+        _error = false;
+      } else {
+        _complaints = const [];
+        _error = true; // status 2/3 → error message
+        _message = r.statusMessage;
+      }
+    });
+  }
+
+  ComplaintStatus _mapStatus(String s) {
+    final u = s.toUpperCase();
+    if (u.contains('PROCESS') || u.contains('PROGRESS')) {
+      return ComplaintStatus.inProcess;
+    }
+    return ComplaintStatus.assigned;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,100 +68,110 @@ class ComplaintsScreen extends StatelessWidget {
         foregroundColor: t.appBarFg,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: t.backBtnBg, borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
+        // This screen is the dashboard's "Complaints" tab body (not a pushed
+        // route), so it must NOT show a back arrow — popping here would pop the
+        // dashboard route itself and crash. Navigation is via the bottom nav.
+        automaticallyImplyLeading: false,
         title: Text(
           'OPEN COMPLAINTS',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
-              letterSpacing: 1.1, color: t.appBarFg),
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+              color: t.appBarFg),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+            icon: Icon(Icons.refresh, color: t.appBarFg),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // ── Dealer filter ────────────────────────────────────────────────
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: t.cardBg,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(color: t.cardShadowColor, blurRadius: 8, offset: const Offset(0, 3)),
-              ],
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: 'Choose',
-                isExpanded: true,
-                icon: Icon(Icons.arrow_drop_down, color: t.accent),
-                items: const [
-                  DropdownMenuItem(value: 'Choose', child: Text('Choose')),
-                  DropdownMenuItem(value: 'itp',    child: Text('itp')),
-                ],
-                onChanged: (_) {},
-              ),
-            ),
-          ),
-
-          // ── Count badge ──────────────────────────────────────────────────
+          // ── Count badge (real) ───────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: t.accent.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: t.accent.withValues(alpha: 0.25)),
                   ),
                   child: Text(
-                    'Total: 8',
+                    'Total: ${_complaints.length}',
                     style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w800, color: t.accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: t.accent,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 10),
 
-          // ── Complaint list ───────────────────────────────────────────────
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(12),
-              children: const [
-                ComplaintCard(
-                  complaintId: 'CTS/116696/485/251030122316',
-                  name: 'Shaker',
-                  description: 'payment issue',
-                  status: ComplaintStatus.assigned,
-                ),
-                ComplaintCard(
-                  complaintId: 'CTS/116699/485/251017161847',
-                  name: 'Amol',
-                  description: 'Box Missing',
-                  status: ComplaintStatus.inProcess,
-                ),
-                ComplaintCard(
-                  complaintId: 'CTS/116702/485/251016220856',
-                  name: 'Narshmi',
-                  description: 'Box Missing',
-                  status: ComplaintStatus.inProcess,
-                ),
-              ],
-            ),
+          // ── List / states ────────────────────────────────────────────────
+          Expanded(child: _buildBody(t)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(AppThemeConst t) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error) {
+      return _message_(
+        Icons.error_outline_rounded,
+        _message.isEmpty ? 'Could not load complaints' : _message,
+      );
+    }
+    if (_complaints.isEmpty) {
+      return _message_(Icons.check_circle_outline, 'No open complaints');
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: _complaints.length,
+        itemBuilder: (_, i) {
+          final c = _complaints[i];
+          return ComplaintCard(
+            complaintId: c.tktNumber.isEmpty ? c.complaintId : c.tktNumber,
+            name: c.name.isEmpty ? 'NA' : c.name,
+            description: c.description.isEmpty ? c.des : c.description,
+            status: _mapStatus(c.status),
+            statusLabel: c.status.isEmpty ? null : c.status,
+            altCustomerId: c.altCustId,
+            realComplaintId: c.complaintId,
+            onUpdated: _load,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _message_(IconData icon, String text) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.black26, size: 36),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.black45, fontWeight: FontWeight.w600),
           ),
         ],
       ),

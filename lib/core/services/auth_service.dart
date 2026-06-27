@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:ezi_cable_digi/core/config/app_config.dart';
+import 'package:ezi_cable_digi/core/network/rest_client.dart';
 import 'package:ezi_cable_digi/core/network/server_url_resolver.dart';
 import 'package:ezi_cable_digi/core/network/soap_client.dart';
 import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
@@ -72,10 +75,10 @@ class AuthService {
         enablePaymentDiscount: enableDiscount,
         maxDiscountPercentAllowed: maxDiscountPct,
       );
-      // TEMP verification log (strip before release).
-      // ignore: avoid_print
-      print('[LOGIN] enable_payment_discount=$enableDiscount '
-          'max_discount_percent_allowed=$maxDiscountPct');
+
+      // Role permissions (getRolePermissions) — needed for the Package Hub gating.
+      // Loaded once here; failures keep safe (deny) defaults and never block login.
+      await _fetchRolePermissions();
 
       return LoginResult(true, message);
     } on SoapException catch (error, stackTrace) {
@@ -84,6 +87,40 @@ class AuthService {
     } catch (error, stackTrace) {
       ErrorHandlerService.recordError(error, stackTrace, reason: 'AuthService.login');
       return const LoginResult(false, 'Server is busy or not reachable.');
+    }
+  }
+
+  /// Fetch role permissions (Android: `getRolePermissions`, key `grp`) and store
+  /// the package-operation flags in SessionService. REST form-POST
+  /// `dealer_id, imei, authtoken` → `{status_code, status_msg, rolePermission}`
+  /// where `rolePermission` is a JSON STRING of `{ name: { permission: "1"/"0" } }`.
+  /// Defensive: any failure / missing flag leaves the safe `false` (deny) default.
+  Future<void> _fetchRolePermissions() async {
+    try {
+      final url =
+          '${ServerUrlResolver.instance.namespace}/packagelist/getRolePermissions';
+      final data = await RestClient.instance.postForm(url, {
+        'dealer_id': SessionService.instance.dealerId,
+        'imei': _imei,
+        'authtoken': SessionService.instance.authToken,
+      });
+      if ('${data['status_code']}' != '0') return; // keep deny defaults
+      final raw = data['rolePermission'];
+      final rp = raw is String ? jsonDecode(raw) : raw;
+      if (rp is! Map) return;
+      bool perm(String key) {
+        final node = rp[key];
+        return node is Map && '${node['permission']}' == '1';
+      }
+
+      SessionService.instance.setRolePermissions(
+        packageActivation: perm('package_activation'),
+        packageDeactivation: perm('package_deactivation'),
+        scheduleService: perm('schedule_service'),
+        serviceExtension: perm('service_extension'),
+      );
+    } catch (_) {
+      // keep safe deny defaults (all false)
     }
   }
 

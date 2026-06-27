@@ -16,6 +16,12 @@ class ComplaintCard extends StatelessWidget {
   // without changes until they are wired to real data in a later phase.
   final String altCustomerId;
   final String realComplaintId;
+  // Real status text (e.g. ONHOLD/RESOLVED/CLOSED) — the [status] enum only has
+  // two values for the badge colour; this preserves the true status for display
+  // and for the closeComplaint call. Null → fall back to the enum text.
+  final String? statusLabel;
+  // Called after the Update screen returns success, so the caller can refetch.
+  final VoidCallback? onUpdated;
 
   const ComplaintCard({
     super.key,
@@ -25,6 +31,8 @@ class ComplaintCard extends StatelessWidget {
     required this.status,
     this.altCustomerId = '',
     this.realComplaintId = '',
+    this.statusLabel,
+    this.onUpdated,
   });
 
   @override
@@ -33,10 +41,11 @@ class ComplaintCard extends StatelessWidget {
       ComplaintStatus.assigned => AppColors.success,
       ComplaintStatus.inProcess => AppColors.warning,
     };
-    final statusText = switch (status) {
-      ComplaintStatus.assigned => 'ASSIGNED',
-      ComplaintStatus.inProcess => 'INPROCESS',
-    };
+    final statusText = statusLabel ??
+        switch (status) {
+          ComplaintStatus.assigned => 'ASSIGNED',
+          ComplaintStatus.inProcess => 'INPROCESS',
+        };
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSizes.paddingS),
@@ -126,7 +135,9 @@ class ComplaintCard extends StatelessWidget {
                           realComplaintId: realComplaintId,
                         ),
                       ),
-                    );
+                    ).then((ok) {
+                      if (ok == true) onUpdated?.call();
+                    });
                   },
                   icon: const Icon(Iconsax.edit, size: 14),
                   style: ElevatedButton.styleFrom(

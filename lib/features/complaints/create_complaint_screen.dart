@@ -1,6 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/data/customer.dart';
+import '../dashboard/data/complaints_repository.dart';
+import 'data/complaint_option.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW COMPLAINT (Customer Details → Create Complaints)  — SIMPLE mode.
+//   • Category + Assigned-employee dropdowns load from the real APIs
+//     (complaintCategories / assignedemployeedetails) — never hardcoded.
+//   • GPS lat/long captured if available, else 0.0 (mirrors Android).
+//   • Submit calls createComplaint; handles statusCode 0/1/2/null.
+//   • Validates: category ≠ Select, employee ≠ Select, description not empty.
+//   • Never crashes on null / missing fields / malformed / network / timeout.
+// The "Employee / Service" dropdown is kept for visual parity with Android (it is
+// cosmetic there — it does not affect the request).
+// ─────────────────────────────────────────────────────────────────────────────
 class CreateComplaintScreen extends StatefulWidget {
   final Customer customer;
   const CreateComplaintScreen({super.key, required this.customer});
@@ -10,24 +24,33 @@ class CreateComplaintScreen extends StatefulWidget {
 }
 
 class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
-  String? _selectedCategory;
-  String? _selectedAssignTo;
-  String? _selectedEmployee;
+  bool _loading = true;
+  bool _submitting = false;
+
+  List<ComplaintOption> _categories = const [ComplaintOption.select];
+  List<ComplaintOption> _employees = const [ComplaintOption.select];
+  ComplaintOption _category = ComplaintOption.select;
+  ComplaintOption _employee = ComplaintOption.select;
+
+  // Cosmetic (parity with Android — no backend effect).
+  String _assignTo = 'Employee';
+  final _assignOptions = const ['Employee', 'Service'];
+
   final _descController = TextEditingController();
 
-  final _categories = [
-    'Select', 'Box Missing', 'Remote Problem', 'cable problem',
-    'VC Card chip problem', 'package addition request', 'Package addition',
-    'Invoice issue', 'No Signal', 'Box Problem', 'sound issue',
-  ];
+  String _lat = '0.0';
+  String _long = '0.0';
 
-  final _assignOptions = ['Employee', 'Service'];
+  /// The numeric customer_id used by every complaint API (Android `altCustId`).
+  String get _customerId => widget.customer.lcoCustomerId.isNotEmpty
+      ? widget.customer.lcoCustomerId
+      : widget.customer.altCustomerId;
 
-  final _employees = [
-    'Select', 'Eswar (EMPLOYEE)', 'Sagar (EMPLOYEE)', 'Devlakl Lak(EMPLOYEE)',
-    'Mahesh (EMPLOYEE)', 'Nandini (EMPLOYEE)', 'Raju (EMPLOYEE)',
-    'Naveen (EMPLOYEE)', 'Sharath (SERVICE)',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
 
   @override
   void dispose() {
@@ -35,17 +58,173 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
     super.dispose();
   }
 
-  void _register() {
-    if (_selectedCategory == null || _selectedCategory == 'Select') {
+  Future<void> _bootstrap() async {
+    // GPS is best-effort and must never block the form.
+    _loadLocation();
+    final repo = ComplaintsRepository.instance;
+    final results = await Future.wait([
+      repo.fetchComplaintCategories(),
+      repo.fetchAssignedEmployees(_customerId),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _categories = results[0];
+      _employees = results[1];
+      _loading = false;
+    });
+  }
+
+  Future<void> _loadLocation() async {
+    try {
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos != null && mounted) {
+        _lat = pos.latitude.toString();
+        _long = pos.longitude.toString();
+      }
+    } catch (_) {
+      // keep 0.0 / 0.0
+    }
+  }
+
+  Future<void> _register() async {
+    if (_category.id == 0) {
       _snack('Please select a complaint category');
       return;
     }
-    if (_selectedEmployee == null || _selectedEmployee == 'Select') {
+    if (_employee.id == 0) {
       _snack('Please select an employee/service');
       return;
     }
-    _snack('Complaint registered successfully!', success: true);
-    Navigator.pop(context);
+    if (_descController.text.trim().isEmpty) {
+      _snack('Please enter a description');
+      return;
+    }
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final result = await ComplaintsRepository.instance.createComplaint(
+        customerId: _customerId,
+        complaint: _descController.text.trim(),
+        category: _category.id,
+        assignedTo: _employee.id,
+        latitude: _lat,
+        longitude: _long,
+      );
+      if (!mounted) return;
+      if (result.isSuccess) {
+        _showSuccessDialog();
+      } else {
+        final msg = result.statusMessage.isNotEmpty
+            ? result.statusMessage
+            : (result.statusCode == 1
+                ? 'Please enter valid details.'
+                : result.statusCode == 2
+                    ? 'An error occurred. Please contact support.'
+                    : 'Server busy or unreachable. Please try again.');
+        _showErrorDialog(msg);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showErrorDialog('Could not connect to server. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _showSuccessDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('Complaint Registered',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _row('Category', _category.name),
+            const SizedBox(height: 6),
+            _row('Assigned To', _employee.name),
+            const SizedBox(height: 6),
+            _row('Description', _descController.text.trim()),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D47A1),
+              foregroundColor: Colors.white,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx); // dialog
+              Navigator.pop(context, true); // screen → caller refreshes
+            },
+            child:
+                const Text('OK', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('Could Not Register',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+        content: Text(message,
+            style: const TextStyle(fontSize: 14, color: Colors.black87)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                const Text('OK', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$label: ',
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF5B7BAE))),
+        Expanded(
+          child: Text(value,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0D47A1))),
+        ),
+      ],
+    );
   }
 
   void _snack(String msg, {bool success = false}) {
@@ -60,81 +239,150 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Complaint Category
-              const Text('Complaint Category',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-              const SizedBox(height: 10),
-              _dropdown(
-                value: _selectedCategory ?? 'Select',
-                items: _categories,
-                onChanged: (v) => setState(() => _selectedCategory = v),
-              ),
-              const SizedBox(height: 20),
-
-              // Assign To
-              const Text('Assign To',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-              const SizedBox(height: 10),
-              _dropdown(
-                value: _selectedAssignTo ?? 'Employee',
-                items: _assignOptions,
-                onChanged: (v) => setState(() => _selectedAssignTo = v),
-              ),
-              const SizedBox(height: 20),
-
-              // Select Employee/Service
-              const Text('Select Employee/Service',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-              const SizedBox(height: 10),
-              _dropdown(
-                value: _selectedEmployee ?? 'Select',
-                items: _employees,
-                onChanged: (v) => setState(() => _selectedEmployee = v),
-              ),
-              const SizedBox(height: 20),
-
-              // Description
-              const Text('Description',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _descController,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _label('Complaint Category'),
+                    const SizedBox(height: 10),
+                    _optionDropdown(
+                      value: _category,
+                      items: _categories,
+                      onChanged: (v) => setState(
+                          () => _category = v ?? ComplaintOption.select),
+                    ),
+                    const SizedBox(height: 20),
 
-              // Register button
-              ElevatedButton(
-                onPressed: _register,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE0E0E0),
-                  foregroundColor: const Color(0xFF0D47A1),
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
+                    _label('Assign To'),
+                    const SizedBox(height: 10),
+                    _stringDropdown(
+                      value: _assignTo,
+                      items: _assignOptions,
+                      onChanged: (v) =>
+                          setState(() => _assignTo = v ?? 'Employee'),
+                    ),
+                    const SizedBox(height: 20),
+
+                    _label('Select Employee/Service'),
+                    const SizedBox(height: 10),
+                    _optionDropdown(
+                      value: _employee,
+                      items: _employees,
+                      onChanged: (v) => setState(
+                          () => _employee = v ?? ComplaintOption.select),
+                    ),
+                    const SizedBox(height: 20),
+
+                    _label('Description'),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _descController,
+                      enabled: !_submitting,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 24),
+
+                    ElevatedButton(
+                      onPressed: _submitting ? null : _register,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE0E0E0),
+                        foregroundColor: const Color(0xFF0D47A1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 40, vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Color(0xFF0D47A1)),
+                            )
+                          : const Text('Register',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
                 ),
-                child: const Text('Register',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               ),
-            ],
-          ),
-        ),
+            ),
+    );
+  }
+
+  Widget _label(String text) => Text(text,
+      style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF0D47A1)));
+
+  Widget _dropdownBox({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFD1D5DB)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DropdownButtonHideUnderline(child: child),
+    );
+  }
+
+  Widget _optionDropdown({
+    required ComplaintOption value,
+    required List<ComplaintOption> items,
+    required ValueChanged<ComplaintOption?> onChanged,
+  }) {
+    return _dropdownBox(
+      child: DropdownButton<ComplaintOption>(
+        value: value,
+        isExpanded: true,
+        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
+        items: items
+            .map((e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(e.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14)),
+                ))
+            .toList(),
+        onChanged: _submitting ? null : onChanged,
+      ),
+    );
+  }
+
+  Widget _stringDropdown({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return _dropdownBox(
+      child: DropdownButton<String>(
+        value: value,
+        isExpanded: true,
+        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
+        items: items
+            .map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(e, style: const TextStyle(fontSize: 14))))
+            .toList(),
+        onChanged: _submitting ? null : onChanged,
       ),
     );
   }
@@ -152,30 +400,16 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
             color: Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+          child: const Icon(Icons.arrow_back_ios_new,
+              size: 16, color: Colors.white),
         ),
       ),
       title: const Text('NEW COMPLAINT',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
-    );
-  }
-
-  Widget _dropdown({
-    required String value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      decoration: InputDecoration(
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
-      icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
-      items: items
-          .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14))))
-          .toList(),
-      onChanged: onChanged,
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: 1)),
     );
   }
 }

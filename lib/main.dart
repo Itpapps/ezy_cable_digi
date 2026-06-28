@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:ezi_cable_digi/core/services/connectivity_service.dart';
 import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
 import 'package:ezi_cable_digi/core/services/localization_service.dart';
 import 'package:ezi_cable_digi/core/services/theme_service.dart';
@@ -26,6 +27,8 @@ Future<void> mainEntry() async {
     await LocalizationService.init();
     // Restore saved theme before the first frame
     await ThemeService.init();
+    // Start connectivity listener for offline auto-sync
+    ConnectivityService.instance.startListening();
     runApp(const EzyCableDigiApp());
   }, (error, stack) {
     ErrorHandlerService.recordError(error, stack, reason: 'Uncaught app error');

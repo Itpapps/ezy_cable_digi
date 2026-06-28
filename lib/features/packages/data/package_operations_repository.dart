@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
+import '../../../core/network/soap_client.dart';
 import '../../../core/services/session_service.dart';
 import 'customer_box.dart';
 import 'package.dart';
@@ -37,6 +38,15 @@ class ActivePackagesResult {
   final String statusMessage;
   final List<ActivePackage> packages;
   const ActivePackagesResult(this.statusCode, this.statusMessage, this.packages);
+}
+
+/// Result of `Customerdeactivereasons` (cdr) — deactivation reasons LOV.
+class DeactivateReasonsResult {
+  final int statusCode;
+  final String statusMessage;
+  final List<DeactivateReason> reasons;
+  const DeactivateReasonsResult(
+      this.statusCode, this.statusMessage, this.reasons);
 }
 
 /// Result of a `Customerpackageoperations` (cpo) WRITE — activate/deactivate.
@@ -241,6 +251,280 @@ class PackageOperationsRepository {
         timeout: const Duration(seconds: 70),
       );
       return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── Customerdeactivereasons (cdr) — per-box deactivation reasons LOV ─────────
+  // VERIFIED per-box request: ONLY imei + authtoken (Frag_Deactpack:940-949).
+  Future<DeactivateReasonsResult> getDeactivateReasons() async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('Customerdeactivereasons'),
+        {
+          'imei': _imei,
+          'authtoken': SessionService.instance.authToken,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final code = _statusOf(data);
+      final msg = '${data['status_msg'] ?? ''}';
+      final reasons = <DeactivateReason>[];
+      if (code == 0) {
+        final list = _decode(data['deactive_reasons']);
+        if (list is List) {
+          for (final r in list) {
+            if (r is Map) {
+              reasons
+                  .add(DeactivateReason.fromJson(Map<String, dynamic>.from(r)));
+            }
+          }
+        }
+      }
+      return DeactivateReasonsResult(code, msg, reasons);
+    } on TimeoutException {
+      return const DeactivateReasonsResult(3, 'Request timed out.', []);
+    } catch (_) {
+      return const DeactivateReasonsResult(
+          3, 'Could not connect to server.', []);
+    }
+  }
+
+  // ── Customerpackageoperations (cpo) — DEACTIVATE (act_type=2) ───────────────
+  // VERIFIED (Frag_Deactpack:1223-1234): packages CSV + deact_reason only — NO
+  // service_type_val/month_val. Caller must enforce reasonId > 0 (cdr "Select").
+  Future<PackageWriteResult> deactivatePackages({
+    required String customerId,
+    required String boxId,
+    required List<String> packageIds,
+    required int reasonId,
+  }) async {
+    if (packageIds.isEmpty) {
+      return const PackageWriteResult(3, 'No packages selected.');
+    }
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('Customerpackageoperations'),
+        {
+          ..._auth,
+          'customer_id': customerId,
+          'box_id': boxId,
+          'packages': packageIds.join(','),
+          'act_type': '2',
+          'deact_reason': '$reasonId',
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── Customerpackageoperations (cpo) — SCHEDULE (act_type=7) ─────────────────
+  // VERIFIED (SchedulePackage_frag:846-853): packages CSV + schedule_start_date
+  // (dd-MM-yyyy, strictly future) — NO service_type_val/month_val/deact_reason.
+  Future<PackageWriteResult> schedulePackages({
+    required String customerId,
+    required String boxId,
+    required List<String> packageIds,
+    required String scheduleStartDate, // dd-MM-yyyy
+  }) async {
+    if (packageIds.isEmpty) {
+      return const PackageWriteResult(3, 'No packages selected.');
+    }
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('Customerpackageoperations'),
+        {
+          ..._auth,
+          'customer_id': customerId,
+          'box_id': boxId,
+          'packages': packageIds.join(','),
+          'schedule_start_date': scheduleStartDate,
+          'act_type': '7',
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── reactivateBox (rbox) — VERIFIED (Box_Selection_new:513-523) ─────────────
+  // customer_id = the box's customer_id (NOT lcoCustomerId). Response status 0 and
+  // 1 both navigate home in production; transport error → "Failed" (caller handles).
+  Future<PackageWriteResult> reactivateBox({
+    required String customerId,
+    required String boxId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('reactivateBox'),
+        {..._auth, 'customer_id': customerId, 'box_id': boxId},
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── customerServicesExtendWithStock (csews) — box-wise Service Extension ─────
+  // VERIFIED (Box_Selection_new:317-414): req dealer_id, customer_id, imei,
+  // authtoken, box_id, stock_id. customer_id = the box's customer_id.
+  Future<PackageWriteResult> serviceExtensionWithBox({
+    required String customerId,
+    required String boxId,
+    required String stockId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('customerServicesExtendWithStock'),
+        {
+          ..._auth,
+          'customer_id': customerId,
+          'box_id': boxId,
+          'stock_id': stockId,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── STB Deactivation reasons — gdr (getDeactiveReasons, SOAP) ───────────────
+  // VERIFIED (Deactivatestb_Frag_New:388-468): wrapper reasonsInfo/DeactivateReasonsInfo,
+  // fields showforlco=0, authToken, imei; response = repeated <reasonList>{reasonId,
+  // reasonName}. (This is gdr/SOAP — distinct from the per-box cdr/REST.)
+  Future<DeactivateReasonsResult> getStbDeactivateReasons() async {
+    final ns = ServerUrlResolver.instance.namespace;
+    final url = ServerUrlResolver.instance.loginServerUrl;
+    if (ns.isEmpty || url.isEmpty) {
+      return const DeactivateReasonsResult(3, 'Server not ready.', []);
+    }
+    try {
+      final xml = await SoapClient.instance.call(
+        url: url,
+        namespace: ns,
+        soapAction: '$ns/getDeactiveReasons',
+        methodName: 'getDeactiveReasons',
+        wrapper: 'reasonsInfo',
+        wrapperType: 'DeactivateReasonsInfo',
+        fields: {
+          'showforlco': 0,
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final reasons = <DeactivateReason>[];
+      for (final item in SoapClient.readAll(xml, 'reasonList')) {
+        final id =
+            int.tryParse(SoapClient.readField(item, 'reasonId') ?? '') ?? -1;
+        final name = (SoapClient.readField(item, 'reasonName') ?? '').trim();
+        if (id >= 0) reasons.add(DeactivateReason(id, name));
+      }
+      return DeactivateReasonsResult(0, '', reasons);
+    } on SoapException {
+      return const DeactivateReasonsResult(3, 'Server error.', []);
+    } on TimeoutException {
+      return const DeactivateReasonsResult(3, 'Request timed out.', []);
+    } catch (_) {
+      return const DeactivateReasonsResult(3, 'Could not connect to server.', []);
+    }
+  }
+
+  // ── deactivateSTB (ds, REST) — non-17 reasons ──────────────────────────────
+  // VERIFIED (Deactivatestb_Frag_New:787-796).
+  Future<PackageWriteResult> deactivateStbRest({
+    required int reasonId,
+    required String serialNumber,
+    required String boxId,
+    required String customerId,
+    required String lat,
+    required String lang,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('deactivateSTB'),
+        {
+          'dealer_id': SessionService.instance.dealerId,
+          'reasonId': '$reasonId',
+          'imei': _imei,
+          'authtoken': SessionService.instance.authToken,
+          'serialNumber': serialNumber,
+          'lat': lat,
+          'lang': lang,
+          'box_id': boxId,
+          'customer_id': customerId,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── deactivateBox (db, SOAP) — reasonId 17 ("Unpaid Customer") ──────────────
+  // VERIFIED (Deactivatestb_Frag_New:575-600): wrapper deactivateSTB_info/
+  // DeactivateSTB_Info; SOAP response uses camelCase statusCode/statusMessage.
+  Future<PackageWriteResult> deactivateBoxSoap({
+    required int reasonId,
+    required String serialNumber,
+    required String boxId,
+    required String customerId,
+    required String lat,
+    required String lang,
+  }) async {
+    final ns = ServerUrlResolver.instance.namespace;
+    final url = ServerUrlResolver.instance.loginServerUrl;
+    if (ns.isEmpty || url.isEmpty) {
+      return const PackageWriteResult(3, 'Server not ready.');
+    }
+    try {
+      final xml = await SoapClient.instance.call(
+        url: url,
+        namespace: ns,
+        soapAction: '$ns/deactivateBox',
+        methodName: 'deactivateBox',
+        wrapper: 'deactivateSTB_info',
+        wrapperType: 'DeactivateSTB_Info',
+        fields: {
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+          'reasonId': reasonId,
+          'serialNumber': serialNumber,
+          'lat': lat,
+          'lang': lang,
+          'box_id': int.tryParse(boxId) ?? boxId,
+          'customer_id': int.tryParse(customerId) ?? customerId,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final code =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final msg = SoapClient.readField(xml, 'statusMessage') ?? '';
+      return PackageWriteResult(code, msg);
+    } on SoapException {
+      return const PackageWriteResult(3, 'Server error.');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {

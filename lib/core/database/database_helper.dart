@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../data/customer.dart';
 import '../data/collection_schedule.dart';
+import '../data/offline_customer.dart';
 import '../data/payment.dart';
 import '../utils/money_parser.dart';
 
@@ -37,7 +38,7 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'ezi_cable_digi.db');
     return await openDatabase(
       path,
-      version: 5,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -61,6 +62,7 @@ class DatabaseHelper {
           pendingAmount TEXT,
           lastPaidDate TEXT,
           customerType TEXT,
+          broadbandUserId TEXT,
           address TEXT,
           groupName TEXT,
           areaName TEXT,
@@ -113,6 +115,7 @@ class DatabaseHelper {
       ''');
       print('DatabaseHelper: Collection schedules table created successfully');
       
+      await _createOfflineTables(db);
       print('DatabaseHelper: All tables created successfully');
     } catch (e) {
       print('DatabaseHelper: Error creating tables: $e');
@@ -169,6 +172,15 @@ class DatabaseHelper {
             createdAt TEXT NOT NULL
           )
         ''');
+      }
+      if (oldVersion < 6) {
+        // customers.broadbandUserId was in Customer.toMap() but never in the
+        // schema → any customer insert (offline seed/cache) crashed.
+        await db.execute(
+            'ALTER TABLE customers ADD COLUMN broadbandUserId TEXT');
+      }
+      if (oldVersion < 7) {
+        await _createOfflineTables(db);
       }
     } catch (e) {
       print('DatabaseHelper: Error upgrading database: $e');
@@ -783,4 +795,321 @@ Future<List<Customer>> getFilteredCustomersPaginated({
   return maps.map((e) => Customer.fromMap(e)).toList();
 }
 
-} 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OFFLINE TABLES (Android parity: offline_data_4 + offliendataafter_pay)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static const _tblOfflineCustomers = 'offline_customers';
+  static const _tblOfflinePayments = 'offline_payments';
+
+  Future<void> _createOfflineTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_tblOfflineCustomers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lcoCrfNo TEXT,
+        accountNum TEXT,
+        name TEXT,
+        address TEXT,
+        billAmount TEXT,
+        taxAmount TEXT,
+        pendingAmount TEXT,
+        totalAmount TEXT,
+        amount TEXT,
+        month TEXT,
+        mobileNum TEXT,
+        lastPaidAmount TEXT,
+        lastPaidDate TEXT,
+        businessName TEXT,
+        customerId TEXT,
+        crfNumber TEXT,
+        lcoCustId TEXT,
+        paymentFlag TEXT,
+        flag INTEGER DEFAULT 0,
+        paymentDate TEXT,
+        syncPaymentDate TEXT,
+        chequeNumber TEXT,
+        bankName TEXT,
+        branchName TEXT,
+        insDate TEXT,
+        sendSms TEXT,
+        payMode TEXT,
+        discountAmount TEXT,
+        totalAfterDiscount TEXT,
+        discountStartDate TEXT,
+        discountEndDate TEXT,
+        penaltyAmount TEXT,
+        totalAfterPenalty TEXT,
+        penaltyStartDate TEXT,
+        penaltyEndDate TEXT,
+        discountPenaltyFlag TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_tblOfflinePayments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lcoCrfNo TEXT,
+        accountNum TEXT,
+        name TEXT,
+        address TEXT,
+        billAmount TEXT,
+        taxAmount TEXT,
+        pendingAmount TEXT,
+        totalAmount TEXT,
+        amount TEXT,
+        month TEXT,
+        mobileNum TEXT,
+        lastPaidAmount TEXT,
+        lastPaidDate TEXT,
+        businessName TEXT,
+        customerId TEXT,
+        crfNumber TEXT,
+        lcoCustId TEXT,
+        paymentFlag TEXT,
+        flag INTEGER DEFAULT 1,
+        paymentDate TEXT,
+        syncPaymentDate TEXT,
+        chequeNumber TEXT,
+        bankName TEXT,
+        branchName TEXT,
+        insDate TEXT,
+        sendSms TEXT,
+        payMode TEXT,
+        discountAmount TEXT,
+        totalAfterDiscount TEXT,
+        discountStartDate TEXT,
+        discountEndDate TEXT,
+        penaltyAmount TEXT,
+        totalAfterPenalty TEXT,
+        penaltyStartDate TEXT,
+        penaltyEndDate TEXT,
+        discountPenaltyFlag TEXT
+      )
+    ''');
+  }
+
+  // ── INSERT downloaded customer ──
+  Future<int> insertOfflineCustomer(OfflineCustomer c) async {
+    final db = await database;
+    final map = c.toMap();
+    map.remove('id');
+    return db.insert(_tblOfflineCustomers, map);
+  }
+
+  // ── INSERT payment queue record ──
+  Future<int> insertOfflinePayment(OfflineCustomer c) async {
+    final db = await database;
+    final map = c.toMap();
+    map.remove('id');
+    return db.insert(_tblOfflinePayments, map);
+  }
+
+  // ── GET all offline customers ──
+  Future<List<OfflineCustomer>> getAllOfflineCustomers() async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers, orderBy: 'name ASC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET unpaid offline customers (flag=0) ──
+  Future<List<OfflineCustomer>> getUnpaidOfflineCustomers({
+    bool currentMonthOnly = false,
+  }) async {
+    final db = await database;
+    String where = 'flag = 0';
+    if (currentMonthOnly) {
+      where += " AND paymentFlag = '000'";
+    }
+    final maps = await db.query(_tblOfflineCustomers,
+        where: where, orderBy: 'name ASC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET payments by flag (from offline_payments queue) ──
+  Future<List<OfflineCustomer>> getOfflinePaymentsByFlag(int f) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflinePayments,
+        where: 'flag = ?', whereArgs: [f], orderBy: 'id DESC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET all paid+synced from payment queue ──
+  Future<List<OfflineCustomer>> getAllPaidSyncOfflinePayments() async {
+    final db = await database;
+    final maps = await db.query(_tblOfflinePayments,
+        where: 'flag IN (1, 2)', orderBy: 'id DESC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET today's payments from payment queue ──
+  Future<List<OfflineCustomer>> getTodayOfflinePayments(String todayDate) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflinePayments,
+        where: "paymentDate LIKE ?",
+        whereArgs: ['$todayDate%'],
+        orderBy: 'id DESC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET payments between dates ──
+  Future<List<OfflineCustomer>> getOfflinePaymentsBetweenDates(
+      String startDate, String endDate) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflinePayments,
+        where: "paymentDate >= ? AND paymentDate <= ?",
+        whereArgs: [startDate, endDate],
+        orderBy: 'paymentDate DESC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── SEARCH offline customers by name (LIKE) ──
+  Future<List<OfflineCustomer>> searchOfflineByName(String query) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers,
+        where: "name LIKE ?", whereArgs: ['%$query%'], orderBy: 'name ASC');
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── SEARCH offline customers by CRF (exact, NOCASE) ──
+  Future<List<OfflineCustomer>> searchOfflineByCrf(String query) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers,
+        where: "crfNumber = ? COLLATE NOCASE", whereArgs: [query]);
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── SEARCH offline customers by LCO ID (exact, NOCASE) ──
+  Future<List<OfflineCustomer>> searchOfflineByLcoId(String query) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers,
+        where: "lcoCustId = ? COLLATE NOCASE", whereArgs: [query]);
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── SEARCH offline customers by mobile (LIKE) ──
+  Future<List<OfflineCustomer>> searchOfflineByMobile(String query) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers,
+        where: "mobileNum LIKE ?", whereArgs: ['%$query%']);
+    return maps.map(OfflineCustomer.fromMap).toList();
+  }
+
+  // ── GET single by customerId ──
+  Future<OfflineCustomer?> getOfflineCustomerById(String custId) async {
+    final db = await database;
+    final maps = await db.query(_tblOfflineCustomers,
+        where: "customerId = ?", whereArgs: [custId], limit: 1);
+    if (maps.isEmpty) return null;
+    return OfflineCustomer.fromMap(maps.first);
+  }
+
+  // ── UPDATE offline_customers after payment (set flag, amount, date) ──
+  Future<int> updateOfflineCustomerAfterPayment(OfflineCustomer c) async {
+    final db = await database;
+    return db.update(
+      _tblOfflineCustomers,
+      {
+        'flag': c.flag,
+        'amount': c.amount,
+        'paymentDate': c.paymentDate,
+        'lastPaidDate': c.lastPaidDate,
+        'lastPaidAmount': c.lastPaidAmount,
+        'chequeNumber': c.chequeNumber,
+        'bankName': c.bankName,
+        'branchName': c.branchName,
+        'insDate': c.insDate,
+        'sendSms': c.sendSms,
+        'payMode': c.payMode,
+        'discountPenaltyFlag': c.discountPenaltyFlag,
+        'syncPaymentDate': c.syncPaymentDate,
+      },
+      where: 'customerId = ?',
+      whereArgs: [c.customerId],
+    );
+  }
+
+  // ── UPDATE offline_payments queue (match by customerId AND paymentDate) ──
+  Future<int> updateOfflinePaymentAfterSync(OfflineCustomer c) async {
+    final db = await database;
+    return db.update(
+      _tblOfflinePayments,
+      {'flag': c.flag, 'syncPaymentDate': c.syncPaymentDate},
+      where: 'customerId = ? AND paymentDate = ?',
+      whereArgs: [c.customerId, c.paymentDate],
+    );
+  }
+
+  // ── UPDATE outstanding/total amount on offline_customers ──
+  Future<int> updateOfflineCustomerOutstanding(
+      String customerId, String newTotalAmount) async {
+    final db = await database;
+    return db.update(
+      _tblOfflineCustomers,
+      {'totalAmount': newTotalAmount},
+      where: 'customerId = ?',
+      whereArgs: [customerId],
+    );
+  }
+
+  // ── COUNT offline customers ──
+  Future<int> getOfflineCustomerCount() async {
+    final db = await database;
+    return Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM $_tblOfflineCustomers'),
+        ) ??
+        0;
+  }
+
+  // ── COUNT paid (flag=1) in payment queue ──
+  Future<int> getOfflinePaidCount() async {
+    final db = await database;
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+              'SELECT COUNT(*) FROM $_tblOfflinePayments WHERE flag = 1'),
+        ) ??
+        0;
+  }
+
+  // ── COUNT synced (flag=2) in payment queue ──
+  Future<int> getOfflineSyncedCount() async {
+    final db = await database;
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+              'SELECT COUNT(*) FROM $_tblOfflinePayments WHERE flag = 2'),
+        ) ??
+        0;
+  }
+
+  // ── DELETE ALL offline data (both tables) ──
+  Future<void> deleteAllOfflineData() async {
+    final db = await database;
+    await db.delete(_tblOfflineCustomers);
+    await db.delete(_tblOfflinePayments);
+  }
+
+  // ── Offline collection summary for today ──
+  Future<Map<String, dynamic>> getOfflineTodaySummary(String todayDate) async {
+    final payments = await getTodayOfflinePayments(todayDate);
+    var cashCount = 0;
+    var bankCount = 0;
+    var cashAmount = 0.0;
+    var bankAmount = 0.0;
+    for (final p in payments) {
+      final amt = double.tryParse(p.amount) ?? 0;
+      if (p.payMode == 'R') {
+        cashCount++;
+        cashAmount += amt;
+      } else {
+        bankCount++;
+        bankAmount += amt;
+      }
+    }
+    return {
+      'cashCount': cashCount,
+      'bankCount': bankCount,
+      'cashAmount': cashAmount,
+      'bankAmount': bankAmount,
+      'totalAmount': cashAmount + bankAmount,
+      'totalCount': cashCount + bankCount,
+    };
+  }
+}

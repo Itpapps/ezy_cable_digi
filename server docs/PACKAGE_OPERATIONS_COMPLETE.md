@@ -126,7 +126,24 @@ Loading: per-call `ProgressDialog` 🟡. Validation/error: see Phase 13.
 - Req: `dealer_id, customer_id, imei, authtoken, box_id, packages(CSV), service_type_val, month_val, act_type(1|2)` (Frag_act_Pack:844-852).
   - `customer_id` = lcoCustomerId (`getcustid`); `box_id` = selected box (`getbox`). **No `cas_id`** on cpo (only on gcp).
 - Resp: `status_code, status_msg` (Frag_act_Pack:786-787). `0` → success dialog "Package Request!" then `popBackStack`; `1` → failed dialog.
-- 🟡 deactivate path adds the selected `reasonId` (Frag_Deactpack uses `cdr`); exact param name on cpo-deactivate Not Yet Verified.
+- ✅ **deactivate (act_type=2) param resolved (VERIFIED, Frag_Deactpack:1223-1234):**
+  `dealer_id, customer_id, imei, authtoken, box_id, packages(CSV), act_type="2",
+  **`deact_reason`**=<reasonId>`. **No `service_type_val` / `month_val`** on the
+  deactivate path (only `packages` + `deact_reason`). `packages` = same `package_id`
+  CSV as activate (FilterTool.getCommonSeperatedString, Frag_Deactpack:578).
+
+#### ✅ cpo/gcp SCHEDULE (act_type=7) — VERIFIED (SchedulePackage_frag)
+Schedule Services is Add Services with a **future date** instead of qty/month:
+- **List:** `gcp` with `act_type="7"` (`:749-755`) — `dealer_id, customer_id, imei,
+  authtoken, box_id, cas_id, act_type="7"` → same `customer_packages{is_base,is_add_on,
+  is_al_a_carte}` shape.
+- **Write:** `cpo` with `act_type="7"` (`:846-853`) — `dealer_id, customer_id, imei,
+  authtoken, box_id, packages(CSV), **schedule_start_date**, act_type="7"`. **No**
+  `service_type_val` / `month_val` / `deact_reason`.
+- **`schedule_start_date` format = `dd-MM-yyyy`** (`df3`, `:1152`). Must be a **strictly
+  future** date — today and earlier are blocked (`:530-531` "must not be current date";
+  `:1137-1144` "must not be lesser than current date"). Confirm copy: "Are you sure you
+  want to schedule packages?" (`:536`).
 
 #### ✅ cpo ACTIVATE (act_type=1) — exact CSV construction (VERIFIED)
 The three CSV params are built from the selected packages (FilterTool:51-75, Frag_act_Pack:563-566,478-482):
@@ -158,21 +175,76 @@ The three CSV params are built from the selected packages (FilterTool:51-75, Fra
 - Resp: `status_code, status_msg, total_packages_list[]{name, start_date, end_date, status, serial_number, mac_vc_number, price}` (ActivePackagesFragment:165-183).
 - `start_date`+`end_date` → expiry / remaining-days; `status` filter = "1"/"0".
 
-### ✅ Customerdeactivereasons (`cdr`) — deactivate reasons LOV
-- Resp items: `reasonId, reasonName` (Deactivatestb_Frag_New:458-462; Frag_Deactpack reasonList).
+### ✅ Customerdeactivereasons (`cdr`, REST) — deactivate reasons LOV
+- Endpoint: `/packagelist/Customerdeactivereasons` (configg.properties `cdr`).
+- ✅ **Per-box request fields resolved (VERIFIED, Frag_Deactpack:940-949):** **ONLY
+  `imei, authtoken`** are sent — `dealer_id`/`customer_id`/`box_id`/`cas_id`/`act_type`
+  are explicitly commented out. (The STB-deactivate screen may send more; per-box does not.)
+- Resp: `status_code, status_msg, deactive_reasons[]{reasonId, reasonName}`
+  (Frag_Deactpack:831-852). Client prepends a synthetic `{reasonId:0,"Select"}`.
 - **Mandatory**: deactivation blocked until a reason is selected (Frag_Deactpack:504-505 "Select reason").
-- 🟡 exact request fields + transport (SOAP-style substring parse seen) Not fully read.
 
-### ✅ deactivateSTB (`ds`, REST) — deactivate STB
-- Req: `dealer_id, reasonId, imei, authtoken, serialNumber, lat, lang, box_id, customer_id` (Deactivatestb_Frag_New:787-796).
+### ✅ STB Deactivation (Deactivatestb_Frag_New) — VERIFIED flow + the magic branch
+Reached from Customer Operations (separate screen, not the per-box hub). Three steps:
+- **Boxes:** `gcb` (getCustomerBoxes) → serial / `box_id` / `customer_id` (:235-292).
+- **Reasons:** **`gdr` = `getDeactiveReasons` (SOAP)** — wrapper `reasonsInfo`/complex
+  `DeactivateReasonsInfo`, fields `showforlco=0, authToken, imei`; response = repeated
+  `reasonList` elements `{reasonId, reasonName}`, prepend "Choose Reason" (id 0)
+  (:388-468). ⚠️ This is **`gdr` (SOAP)**, NOT the per-box `cdr` (REST).
+- **GPS:** `lat`/`lang`, `0.0` fallback (:125-131). Validation: reason==0 / no box → toast.
+
+**⚠️ Write path branches on a hardcoded reason id (:196-201):**
+```java
+if (reason_selected == 17) Deactivation_asyncTask (SOAP db);  else  Deactivatestbrest (REST ds);
+```
+> 🔵 **LIVE-VERIFIED (2026-06-28, test dealer) — `gdr` list:**
+> `17=Unpaid Customer`, `21=Temporary Deactivation1`, `13=Others`, `16=On Vacation`,
+> `31=On Hold`, `6=Deactivation Package Change`. So **`reasonId 17` = "Unpaid Customer"**
+> → the **SOAP `db`** path; every other reason → **REST `ds`**. "Unpaid Customer" is a
+> primary deactivation reason, so the `db` branch is **NOT skippable**. The literal `17`
+> is dealer-config-specific, but production (magik) hardcodes it — exact parity = match `17`.
+
+#### ✅ deactivateSTB (`ds`, REST) — non-17 reasons
+- Endpoint `/packagelist/deactivateSTB`. Req: `dealer_id, reasonId, imei, authtoken,
+  serialNumber, lat, lang, box_id, customer_id` (Deactivatestb_Frag_New:787-796).
 - Resp: `status_code, status_msg` (:719).
 
-### ✅ deactivateBox (`db`, SOAP) — deactivate box
-- SOAP method (NAMESPACE+"/"+db), complex type `deactivateSTB_info` w/ `reasonId` (Deactivatestb_Frag_New:107-108,579-595).
-- REST variant in Box_Selection_new:408-413 req `dealer_id, customer_id, imei, authtoken, box_id, stock_id`. 🟡 reconcile SOAP vs REST usage.
+#### ✅ deactivateBox (`db`, SOAP) — reasonId 17 ("Unpaid Customer")
+- SOAP method `deactivateBox`; wrapper element `deactivateSTB_info`, complex
+  `DeactivateSTB_Info`, fields `authToken, imei, reasonId, serialNumber, lat, lang,
+  box_id, customer_id` (Deactivatestb_Frag_New:575-595). (No `stock_id` on this SOAP path.)
+- Resp: `status_code, status_msg`.
+- 🟡 exact response/post-success dialogs to re-read at implementation (:620-700).
 
-### ✅ reactivateBox (`rbox`, REST)
-- Req: `dealer_id, customer_id, imei, authtoken, box_id` (Box_Selection_new:516-520). Resp `status_code, status_msg`.
+### ✅ reactivateBox (`rbox`, REST) — VERIFIED & IMPLEMENTED
+- Endpoint `/packagelist/reactivateBox` (configg.properties `rbox`).
+- Req: `dealer_id, customer_id, imei, authtoken, box_id` (Box_Selection_new:513-523).
+  **`customer_id` = the box's `customer_id`** (`CustomerBox.customerId`, set from
+  `getCustomerBoxes…getCustomer_id()` :161) — NOT lcoCustomerId. Flutter falls back
+  to lcoCustomerId only if the box field is empty.
+- Resp: `status_code, status_msg`.
+  - `0` → "Success!" dialog → OK → **`startActivity(MainActivity)` (home)** (:443-465).
+  - `1` → "No Details Found!" dialog → OK → **also home** (:471-493).
+  - transport error → Toast "Failed." (:503-509).
+- **Flutter (exact parity):** confirm "Reactivate Box / Are you sure you want to
+  Reactivate?" → `reactivateBox` → result dialog → OK → `Navigator.popUntil(isFirst)`
+  (Dashboard) on BOTH 0 and 1; transport error → "Failed" dialog, stay. Double-submit
+  guarded. 🔵 verify live.
+
+### ✅ customerServicesExtendWithStock (`csews`, REST) — Service Extension — IMPLEMENTED
+- Endpoint `/packagelist/customerServicesExtendWithStock` (configg.properties `csews`).
+- **Gate:** hub tile shows only if **`box_wise_service_extension == "1"`** — a
+  **validateLogin response property** (LoginActivity:562, default "0"), parsed into
+  `SessionService.boxWiseServiceExtension`. NOT the `service_extension` role permission.
+- Req (Box_Selection_new:408-413): `dealer_id, customer_id, imei, authtoken, box_id,
+  **stock_id**`. `customer_id` = the box's `customer_id`; `stock_id` = the box's
+  `stock_id` (added to `CustomerBox` — gcb returns it though §gcb list omitted it).
+- Confirm: "Service Extension with Box / Are you sure you want to extend services with box?".
+- Resp `status_code/status_msg`: `0`→"Success!"→home; `1`→"No Details Found!"→home;
+  error→"Failed." (same home-on-both pattern as `rbox`, Box_Selection_new:335-385).
+- **Flutter:** tile gated by `boxWiseServiceExtension`; confirm → `csews` → result dialog
+  → `popUntil(isFirst)` on 0 and 1; double-submit guarded. analyze-clean. ⬜ live-verify
+  pending (depends on this dealer's `box_wise_service_extension` value).
 
 ### 🟡 stbTemporaryActivation (`sta`, REST) — Phase 6
 - Button `custoper_btn_tmpactivation` (CustomerOperations:1146,1210); `tmpact_url` (:203).
@@ -422,11 +494,12 @@ Flutter rule: never crash on null/empty/malformed/timeout/unauthorized; show
 | Aspect | State |
 |--------|-------|
 | Customer info (name/lco/serial dropdown/vc) | ✅ real fields |
-| Active Packages view | ❌ **hardcoded** ("GOLD Pack Postpaid ₹140"), no `gcpl` |
+| Active Packages view | ✅ **DONE** — live `gcpl` with status filter (Active "1"/Deactive "0"), shows dates + price |
 | Add Services (Base/Add-On/Alacarte tabs) | ✅ **DONE** — `gcp` catalogue + `cpo` activate (default path, confirm dialog, double-submit guard, hub refresh). 🔵 LIVE-VERIFIED 2026-06-28 (`status_code 0`, "Packages will be processed shortly") |
-| Schedule Services | ❌ placeholder |
+| Remove Services (deactivate) | ✅ **DONE** — `gcp` act_type=2 + `cdr` reasons (mandatory) + `cpo` act_type=2 (`deact_reason`); confirm dialog, double-submit guard, hub refresh. 🔵 LIVE-VERIFIED 2026-06-28 (`status_code 0`, reason=16) |
+| Schedule Services | ✅ **DONE** — `gcp` act_type=7 + `cpo` act_type=7 (`schedule_start_date` dd-MM-yyyy, future-only date picker); confirm dialog, double-submit guard, hub refresh. 🔵 LIVE-VERIFIED 2026-06-28 (`status_code 0`, date 30-06-2026) |
 | Reactivation | ❌ snackbar only; no `rbox` |
-| Deactivate STB (`deactivate_stb_screen.dart`) | ❌ hardcoded reasons, no `ds`/`cdr` (per earlier complaints investigation) |
+| Deactivate STB (`deactivate_stb_screen.dart`) | ✅ **DONE (⬜ live-verify pending)** — `gcb` boxes + `gdr` reasons (SOAP) + GPS; branch `reasonId==17`("Unpaid Customer")→`db` SOAP, else `ds` REST; validation, double-submit guard, per-path result handling. analyze-clean; not yet run live (test-server network was down) |
 | Package model / repository / controller | ❌ **none exist** |
 | Validation / refresh / error handling | ❌ none |
 | Reports / Dashboard / Billing integration | ❌ none (and backend-driven 🔴) |
@@ -435,8 +508,11 @@ Flutter rule: never crash on null/empty/malformed/timeout/unauthorized; show
 exposes **6** services (each **role-gated** by `LoginActivity.package_activation`
 / `schedule_service` / `package_deactivation`): **Active Packages, Add Services,
 Remove Services, Service Extension, Reactivation, Schedule Services**. The current
-Flutter has **4** — **missing "Remove Services"** (deactivate via `cpo` act_type=2
-+ `cdr` reason) and **"Service Extension"** (`serext`/`csews`). Boxes are loaded
+Flutter now has **5** (Active Packages, Add Services, **Remove Services ✅ done**,
+Schedule Services, Reactivation, **Service Extension ✅**) — **all 6 hub services now
+present**. Service Extension (`csews`) is gated by `box_wise_service_extension`
+(config flag), NOT the role permission.
+Boxes are loaded
 via `getCustomerBoxes` (passed into the hub) and shown in a box spinner.
 
 **Missing to build (after approval & after Phase 6/7 verified):**

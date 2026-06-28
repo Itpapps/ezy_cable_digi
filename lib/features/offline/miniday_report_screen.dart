@@ -28,9 +28,12 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
   }
 
   Future<void> _load() async {
-    final s = await _db.getTodayCollectionSummary();
-    final todayPayments = await _db.getPaymentsTodayList();
-    _pendingToSync = todayPayments.where((p) => !p.synced).length;
+    final now = DateTime.now();
+    final todayStr =
+        '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
+    final s = await _db.getOfflineTodaySummary(todayStr);
+    final pendingPayments = await _db.getOfflinePaidCount();
+    _pendingToSync = pendingPayments;
     setState(() {
       _summary = s;
       _loading = false;

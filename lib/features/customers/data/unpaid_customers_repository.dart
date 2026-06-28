@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-
 import '../../../core/config/app_config.dart';
 import '../../../core/data/customer.dart';
 import '../../../core/network/server_url_resolver.dart';
@@ -59,7 +57,6 @@ class UnpaidCustomersRepository {
     final status =
         int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
     final message = SoapClient.readField(xml, 'statusMessage') ?? '';
-    debugPrint('[UC] statusCode=$status statusMessage=$message'); // TEMP
     if (status != 0) {
       return UnpaidResult(status, message, const []);
     }
@@ -75,8 +72,6 @@ class UnpaidCustomersRepository {
         }
       }
     }
-    debugPrint('[UC] parsed ${customers.length} customers: '
-        '${customers.map((c) => c.name).toList()}'); // TEMP
     return UnpaidResult(status, message, customers);
   }
 }

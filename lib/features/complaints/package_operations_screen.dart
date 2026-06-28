@@ -29,6 +29,8 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   String _message = '';
   List<CustomerBox> _boxes = const [];
   CustomerBox? _selectedBox;
+  bool _reactivating = false; // double-submit guard for rbox
+  bool _extending = false; // double-submit guard for csews (Service Extension)
 
   @override
   void initState() {
@@ -241,32 +243,54 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
             final changed = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
-                builder: (_) => _ServicesScreen(
-                    title: 'ADD SERVICES', customer: widget.customer, box: box),
+                builder: (_) =>
+                    _ServicesScreen(customer: widget.customer, box: box),
               ),
             );
             // cpo succeeded → re-fetch hub (Refresh Behavior Matrix).
             if (changed == true && mounted) _loadBoxes();
           },
         ),
+      if (s.packageDeactivation)
+        _ServiceTile(
+          label: 'Remove Services',
+          onTap: () async {
+            final changed = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    RemoveServicesScreen(customer: widget.customer, box: box),
+              ),
+            );
+            if (changed == true && mounted) _loadBoxes();
+          },
+        ),
       if (s.scheduleService)
         _ServiceTile(
           label: 'Schedule Services',
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => _ServicesScreen(
-                  title: 'SCHEDULE SERVICES',
-                  customer: widget.customer,
-                  box: box),
-            ),
-          ),
+          onTap: () async {
+            final changed = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ScheduleServicesScreen(customer: widget.customer, box: box),
+              ),
+            );
+            if (changed == true && mounted) _loadBoxes();
+          },
         ),
+      // Service Extension — gated by box_wise_service_extension config flag
+      // (Box_Selection_new:239), NOT the service_extension role permission.
+      if (s.boxWiseServiceExtension)
+        _ServiceTile(
+            label: 'Service Extension',
+            onTap: () => _confirmServiceExtension(box)),
       // Production parity (Box_Selection_new.java:164-166 + frag_box_selection
       // .xml:331-339 default VISIBLE): Reactivation is hidden ONLY when
       // box_status == "0"; shown otherwise (incl. Active "1"). NOT role-gated.
       if (box.boxStatus.trim() != '0')
-        _ServiceTile(label: 'Reactivation', onTap: _confirmReactivate),
+        _ServiceTile(
+            label: 'Reactivation', onTap: () => _confirmReactivate(box)),
     ];
 
     return _WhiteCard(
@@ -301,8 +325,8 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
     );
   }
 
-  void _confirmReactivate() {
-    showDialog(
+  Future<void> _confirmReactivate(CustomerBox box) async {
+    final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -311,23 +335,134 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
         content: const Text('Are you sure you want to Reactivate?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('NO',
-                style:
-                    TextStyle(color: Colors.orange, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Box Reactivated Successfully'),
-                    backgroundColor: Colors.green),
-              );
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('YES',
-                style:
-                    TextStyle(color: Colors.orange, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    await _doReactivate(box);
+  }
+
+  Future<void> _doReactivate(CustomerBox box) async {
+    if (_reactivating) return; // double-submit guard
+    _reactivating = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    // Production sends the box's customer_id (not lcoCustomerId); fall back if empty.
+    final customerId = box.customerId.isNotEmpty
+        ? box.customerId
+        : widget.customer.lcoCustomerId;
+    final r = await PackageOperationsRepository.instance
+        .reactivateBox(customerId: customerId, boxId: box.boxId);
+    _reactivating = false;
+    if (!mounted) return;
+    Navigator.pop(context); // dismiss loading
+
+    // Production parity: status 0 → "Success!", status 1 → "No Details Found!" —
+    // both navigate home (restart MainActivity). Transport error → "Failed", stay.
+    if (r.statusCode == 0 || r.statusCode == 1) {
+      await _reactResultDialog(
+        r.statusCode == 0 ? 'Success!' : 'No Details Found!',
+        r.statusMessage,
+      );
+      if (!mounted) return;
+      Navigator.popUntil(context, (route) => route.isFirst); // home (Dashboard)
+    } else {
+      await _reactResultDialog(
+          'Failed', r.statusMessage.isEmpty ? 'Please try again.' : r.statusMessage);
+    }
+  }
+
+  Future<void> _confirmServiceExtension(CustomerBox box) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Service Extension with Box',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: const Text('Are you sure you want to extend services with box?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    await _doServiceExtension(box);
+  }
+
+  Future<void> _doServiceExtension(CustomerBox box) async {
+    if (_extending) return; // double-submit guard
+    _extending = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    final customerId = box.customerId.isNotEmpty
+        ? box.customerId
+        : widget.customer.lcoCustomerId;
+    final r = await PackageOperationsRepository.instance.serviceExtensionWithBox(
+      customerId: customerId,
+      boxId: box.boxId,
+      stockId: box.stockId,
+    );
+    _extending = false;
+    if (!mounted) return;
+    Navigator.pop(context); // dismiss loading
+
+    // Production parity (Box_Selection_new:335-385): status 0 → "Success!",
+    // status 1 → "No Details Found!" — both navigate home. Error → "Failed", stay.
+    if (r.statusCode == 0 || r.statusCode == 1) {
+      await _reactResultDialog(
+        r.statusCode == 0 ? 'Success!' : 'No Details Found!',
+        r.statusMessage,
+      );
+      if (!mounted) return;
+      Navigator.popUntil(context, (route) => route.isFirst); // home (Dashboard)
+    } else {
+      await _reactResultDialog('Failed',
+          r.statusMessage.isEmpty ? 'Please try again.' : r.statusMessage);
+    }
+  }
+
+  Future<void> _reactResultDialog(String title, String message) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(message.isEmpty ? '-' : message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK',
+                style: TextStyle(
+                    color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -686,15 +821,12 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
 }
 
 // Reusable Services Screen (Add Services / Schedule Services).
-// Loads the per-box package catalogue live via getCustomerPackages (gcp,
-// act_type=1 → activatable list) and groups it into Base / Add On / Alacarte.
-// SAVE still only previews the selection — the write (cpo) is the next step.
+// Add Services — loads the per-box catalogue live via getCustomerPackages (gcp,
+// act_type=1) grouped into Base / Add On / Alacarte; SAVE writes via cpo (act_type=1).
 class _ServicesScreen extends StatefulWidget {
-  final String title;
   final Customer customer;
   final CustomerBox box;
-  const _ServicesScreen(
-      {required this.title, required this.customer, required this.box});
+  const _ServicesScreen({required this.customer, required this.box});
 
   @override
   State<_ServicesScreen> createState() => _ServicesScreenState();
@@ -806,8 +938,8 @@ class _ServicesScreenState extends State<_ServicesScreen>
                 size: 16, color: Colors.white),
           ),
         ),
-        title: Text(widget.title,
-            style: const TextStyle(
+        title: const Text('ADD SERVICES',
+            style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
@@ -987,12 +1119,6 @@ class _ServicesScreenState extends State<_ServicesScreen>
       _snack('No packages selected');
       return;
     }
-    // Only Add Services performs the cpo write (act_type=1). Schedule Services
-    // is a separate, not-yet-investigated feature.
-    if (widget.title != 'ADD SERVICES') {
-      _snack('Scheduling is not enabled yet.');
-      return;
-    }
     final packageIds =
         selected.map((p) => p.packageId).where((id) => id.isNotEmpty).toList();
     if (packageIds.isEmpty) {
@@ -1070,6 +1196,922 @@ class _ServicesScreenState extends State<_ServicesScreen>
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('ACTIVATE',
+                style: TextStyle(
+                    color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _resultDialog(String title, String message) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK',
+                style: TextStyle(
+                    color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// RemoveServicesScreen — per-box package DEACTIVATION (mirrors Android
+// Frag_Deactpack). Loads the deactivatable catalogue via gcp act_type=2 and the
+// reasons LOV via cdr; a reason is mandatory; writes via cpo act_type=2 with
+// deact_reason. Defensive throughout; double-submit guarded.
+class RemoveServicesScreen extends StatefulWidget {
+  final Customer customer;
+  final CustomerBox box;
+  const RemoveServicesScreen(
+      {super.key, required this.customer, required this.box});
+
+  @override
+  State<RemoveServicesScreen> createState() => _RemoveServicesScreenState();
+}
+
+class _RemoveServicesScreenState extends State<RemoveServicesScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+  final _search = TextEditingController();
+
+  bool _loading = true;
+  bool _error = false;
+  String _message = '';
+  bool _submitting = false;
+  List<Package> _base = const [];
+  List<Package> _addOn = const [];
+  List<Package> _alaCarte = const [];
+
+  // Reasons (cdr). Index 0 is always the synthetic "Select" sentinel.
+  List<DeactivateReason> _reasons = const [DeactivateReason(0, 'Select')];
+  int _reasonId = 0;
+
+  final Set<String> _selected = {}; // selected package ids
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 3, vsync: this, initialIndex: 0);
+    _tab.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    final repo = PackageOperationsRepository.instance;
+    // Fetch the deactivatable list and the reasons together.
+    final pkgFuture = repo.getCustomerPackages(
+      customerId: widget.customer.lcoCustomerId,
+      boxId: widget.box.boxId,
+      casId: widget.box.casServerId,
+      actType: 2, // deactivatable list
+    );
+    final reasonsFuture = repo.getDeactivateReasons();
+    final pkg = await pkgFuture;
+    final reasons = await reasonsFuture;
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _reasons = [
+        const DeactivateReason(0, 'Select'),
+        if (reasons.statusCode == 0) ...reasons.reasons,
+      ];
+      _reasonId = 0;
+      if (pkg.statusCode == 0) {
+        _base = pkg.base;
+        _addOn = pkg.addOn;
+        _alaCarte = pkg.alaCarte;
+        _error = false;
+      } else if (pkg.statusCode == 1) {
+        _base = const [];
+        _addOn = const [];
+        _alaCarte = const [];
+        _error = false; // nothing to deactivate
+      } else {
+        _base = const [];
+        _addOn = const [];
+        _alaCarte = const [];
+        _error = true;
+        _message = pkg.statusMessage;
+      }
+    });
+  }
+
+  List<Package> get _currentList {
+    switch (_tab.index) {
+      case 0:
+        return _base;
+      case 1:
+        return _addOn;
+      case 2:
+        return _alaCarte;
+      default:
+        return const [];
+    }
+  }
+
+  List<Package> get _filtered {
+    final q = _search.text.toLowerCase();
+    if (q.isEmpty) return _currentList;
+    return _currentList.where((p) => p.name.toLowerCase().contains(q)).toList();
+  }
+
+  List<Package> get _allPackages => [..._base, ..._addOn, ..._alaCarte];
+  String _idOf(Package p) => p.packageId.isEmpty ? p.name : p.packageId;
+  String _priceText(Package p) =>
+      p.price.isEmpty ? '' : (p.price.contains('₹') ? p.price : '₹${p.price}');
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF0D47A1)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F4F8),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D47A1),
+        elevation: 0,
+        centerTitle: true,
+        leading: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.arrow_back_ios_new,
+                size: 16, color: Colors.white),
+          ),
+        ),
+        title: const Text('REMOVE SERVICES',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 1)),
+      ),
+      body: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tab,
+              labelColor: Colors.red,
+              unselectedLabelColor: Colors.black87,
+              labelStyle:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              unselectedLabelStyle:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              indicator: const UnderlineTabIndicator(
+                borderSide: BorderSide(color: Colors.red, width: 2.5),
+              ),
+              tabs: const [
+                Tab(text: 'Base'),
+                Tab(text: 'Add On'),
+                Tab(text: 'Alacarte'),
+              ],
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '',
+                icon: Icon(Icons.search, color: Colors.grey),
+              ),
+            ),
+          ),
+          Expanded(child: _listArea()),
+          _reasonBar(),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: GestureDetector(
+          onTap: _submitting ? null : _onSave,
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0E0E0),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: _submitting
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Color(0xFF0D47A1)))
+                  : const Text('SAVE',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0D47A1))),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reasonBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        children: [
+          const Text('Reason',
+              style: TextStyle(fontSize: 13, color: Color(0xFF5B7BAE))),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _reasonId,
+                isExpanded: true,
+                isDense: true,
+                icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                items: _reasons
+                    .map((r) => DropdownMenuItem(
+                          value: r.reasonId,
+                          child: Text(r.reasonName,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13)),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _reasonId = v ?? 0),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _listArea() {
+    if (_loading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF0D47A1)));
+    }
+    if (_error) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: Colors.black45, size: 44),
+              const SizedBox(height: 12),
+              Text(_message.isEmpty ? 'Could not load packages' : _message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 15, color: Colors.black54)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D47A1),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final list = _filtered;
+    if (list.isEmpty) {
+      return const Center(
+          child: Text('List is Empty',
+              style: TextStyle(fontSize: 18, color: Colors.black54)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: list.length,
+      itemBuilder: (_, i) {
+        final p = list[i];
+        final id = _idOf(p);
+        final price = _priceText(p);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: CheckboxListTile(
+            value: _selected.contains(id),
+            onChanged: (v) {
+              setState(() {
+                if (v == true) {
+                  _selected.add(id);
+                } else {
+                  _selected.remove(id);
+                }
+              });
+            },
+            activeColor: const Color(0xFF0D47A1),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(p.name,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0D47A1))),
+            subtitle: price.isEmpty
+                ? null
+                : Text(price,
+                    style:
+                        const TextStyle(fontSize: 13, color: Colors.black87)),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onSave() async {
+    if (_submitting) return; // double-submit guard
+    final selected =
+        _allPackages.where((p) => _selected.contains(_idOf(p))).toList();
+    if (selected.isEmpty) {
+      _snack('No packages selected');
+      return;
+    }
+    // Mandatory reason — production blocks reasonId==0 with "Select reason".
+    if (_reasonId == 0) {
+      _snack('Select reason');
+      return;
+    }
+    final packageIds =
+        selected.map((p) => p.packageId).where((id) => id.isNotEmpty).toList();
+    if (packageIds.isEmpty) {
+      _snack('Selected package has no id; cannot proceed.');
+      return;
+    }
+
+    final confirmed = await _confirmDeactivation(selected);
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _submitting = true);
+    final r = await PackageOperationsRepository.instance.deactivatePackages(
+      customerId: widget.customer.lcoCustomerId,
+      boxId: widget.box.boxId,
+      packageIds: packageIds,
+      reasonId: _reasonId,
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    if (r.isSuccess) {
+      await _resultDialog('Package Request!',
+          r.statusMessage.isEmpty ? 'Request submitted.' : r.statusMessage);
+      if (!mounted) return;
+      Navigator.pop(context, true); // signal the hub to re-fetch
+    } else {
+      await _resultDialog(
+          'Failed',
+          r.statusMessage.isEmpty
+              ? 'Could not complete the request.'
+              : r.statusMessage);
+    }
+  }
+
+  Future<bool?> _confirmDeactivation(List<Package> selected) {
+    final reasonName = _reasons
+        .firstWhere((r) => r.reasonId == _reasonId,
+            orElse: () => const DeactivateReason(0, 'Select'))
+        .reasonName;
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirm Removal',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final p in selected)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child:
+                    Text('• ${p.name}', style: const TextStyle(fontSize: 14)),
+              ),
+            const SizedBox(height: 8),
+            Text('Reason: $reasonName',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('REMOVE',
+                style:
+                    TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _resultDialog(String title, String message) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK',
+                style: TextStyle(
+                    color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ScheduleServicesScreen — per-box scheduled activation (mirrors Android
+// SchedulePackage_frag). Loads the schedulable catalogue via gcp act_type=7,
+// requires a strictly-future date (dd-MM-yyyy), and writes via cpo act_type=7
+// with schedule_start_date. Defensive throughout; double-submit guarded.
+class ScheduleServicesScreen extends StatefulWidget {
+  final Customer customer;
+  final CustomerBox box;
+  const ScheduleServicesScreen(
+      {super.key, required this.customer, required this.box});
+
+  @override
+  State<ScheduleServicesScreen> createState() => _ScheduleServicesScreenState();
+}
+
+class _ScheduleServicesScreenState extends State<ScheduleServicesScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+  final _search = TextEditingController();
+
+  bool _loading = true;
+  bool _error = false;
+  String _message = '';
+  bool _submitting = false;
+  List<Package> _base = const [];
+  List<Package> _addOn = const [];
+  List<Package> _alaCarte = const [];
+  DateTime? _scheduleDate; // strictly future (production blocks today/past)
+
+  final Set<String> _selected = {}; // selected package ids
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 3, vsync: this, initialIndex: 0);
+    _tab.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
+    final r = await PackageOperationsRepository.instance.getCustomerPackages(
+      customerId: widget.customer.lcoCustomerId,
+      boxId: widget.box.boxId,
+      casId: widget.box.casServerId,
+      actType: 7, // schedulable list
+    );
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (r.statusCode == 0) {
+        _base = r.base;
+        _addOn = r.addOn;
+        _alaCarte = r.alaCarte;
+        _error = false;
+      } else if (r.statusCode == 1) {
+        _base = const [];
+        _addOn = const [];
+        _alaCarte = const [];
+        _error = false;
+      } else {
+        _base = const [];
+        _addOn = const [];
+        _alaCarte = const [];
+        _error = true;
+        _message = r.statusMessage;
+      }
+    });
+  }
+
+  List<Package> get _currentList {
+    switch (_tab.index) {
+      case 0:
+        return _base;
+      case 1:
+        return _addOn;
+      case 2:
+        return _alaCarte;
+      default:
+        return const [];
+    }
+  }
+
+  List<Package> get _filtered {
+    final q = _search.text.toLowerCase();
+    if (q.isEmpty) return _currentList;
+    return _currentList.where((p) => p.name.toLowerCase().contains(q)).toList();
+  }
+
+  List<Package> get _allPackages => [..._base, ..._addOn, ..._alaCarte];
+  String _idOf(Package p) => p.packageId.isEmpty ? p.name : p.packageId;
+  String _priceText(Package p) =>
+      p.price.isEmpty ? '' : (p.price.contains('₹') ? p.price : '₹${p.price}');
+
+  // schedule_start_date wire format (verified): dd-MM-yyyy.
+  String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF0D47A1)),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    // Strictly future — production blocks today and earlier.
+    final first =
+        DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _scheduleDate ?? first,
+      firstDate: first,
+      lastDate: DateTime(now.year + 2, now.month, now.day),
+    );
+    if (picked != null && mounted) setState(() => _scheduleDate = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F4F8),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0D47A1),
+        elevation: 0,
+        centerTitle: true,
+        leading: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.arrow_back_ios_new,
+                size: 16, color: Colors.white),
+          ),
+        ),
+        title: const Text('SCHEDULE SERVICES',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 1)),
+      ),
+      body: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tab,
+              labelColor: Colors.red,
+              unselectedLabelColor: Colors.black87,
+              labelStyle:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              unselectedLabelStyle:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              indicator: const UnderlineTabIndicator(
+                borderSide: BorderSide(color: Colors.red, width: 2.5),
+              ),
+              tabs: const [
+                Tab(text: 'Base'),
+                Tab(text: 'Add On'),
+                Tab(text: 'Alacarte'),
+              ],
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                hintText: '',
+                icon: Icon(Icons.search, color: Colors.grey),
+              ),
+            ),
+          ),
+          Expanded(child: _listArea()),
+          _dateBar(),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: GestureDetector(
+          onTap: _submitting ? null : _onSave,
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE0E0E0),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: _submitting
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Color(0xFF0D47A1)))
+                  : const Text('SAVE',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0D47A1))),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dateBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        children: [
+          const Text('Schedule Date',
+              style: TextStyle(fontSize: 13, color: Color(0xFF5B7BAE))),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: _pickDate,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    _scheduleDate == null ? 'Select date' : _fmt(_scheduleDate!),
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _scheduleDate == null
+                            ? Colors.grey
+                            : const Color(0xFF0D47A1)),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.calendar_today,
+                      size: 18, color: Color(0xFF0D47A1)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _listArea() {
+    if (_loading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF0D47A1)));
+    }
+    if (_error) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: Colors.black45, size: 44),
+              const SizedBox(height: 12),
+              Text(_message.isEmpty ? 'Could not load packages' : _message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 15, color: Colors.black54)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D47A1),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final list = _filtered;
+    if (list.isEmpty) {
+      return const Center(
+          child: Text('List is Empty',
+              style: TextStyle(fontSize: 18, color: Colors.black54)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: list.length,
+      itemBuilder: (_, i) {
+        final p = list[i];
+        final id = _idOf(p);
+        final price = _priceText(p);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: CheckboxListTile(
+            value: _selected.contains(id),
+            onChanged: (v) {
+              setState(() {
+                if (v == true) {
+                  _selected.add(id);
+                } else {
+                  _selected.remove(id);
+                }
+              });
+            },
+            activeColor: const Color(0xFF0D47A1),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(p.name,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0D47A1))),
+            subtitle: price.isEmpty
+                ? null
+                : Text(price,
+                    style:
+                        const TextStyle(fontSize: 13, color: Colors.black87)),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onSave() async {
+    if (_submitting) return; // double-submit guard
+    final selected =
+        _allPackages.where((p) => _selected.contains(_idOf(p))).toList();
+    if (selected.isEmpty) {
+      _snack('No packages selected');
+      return;
+    }
+    if (_scheduleDate == null) {
+      _snack('Select a schedule date');
+      return;
+    }
+    final packageIds =
+        selected.map((p) => p.packageId).where((id) => id.isNotEmpty).toList();
+    if (packageIds.isEmpty) {
+      _snack('Selected package has no id; cannot proceed.');
+      return;
+    }
+
+    final confirmed = await _confirmSchedule(selected);
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _submitting = true);
+    final r = await PackageOperationsRepository.instance.schedulePackages(
+      customerId: widget.customer.lcoCustomerId,
+      boxId: widget.box.boxId,
+      packageIds: packageIds,
+      scheduleStartDate: _fmt(_scheduleDate!),
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    if (r.isSuccess) {
+      await _resultDialog('Package Request!',
+          r.statusMessage.isEmpty ? 'Request submitted.' : r.statusMessage);
+      if (!mounted) return;
+      Navigator.pop(context, true); // signal the hub to re-fetch
+    } else {
+      await _resultDialog(
+          'Failed',
+          r.statusMessage.isEmpty
+              ? 'Could not complete the request.'
+              : r.statusMessage);
+    }
+  }
+
+  Future<bool?> _confirmSchedule(List<Package> selected) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Schedule Packages',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final p in selected)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child:
+                    Text('• ${p.name}', style: const TextStyle(fontSize: 14)),
+              ),
+            const SizedBox(height: 8),
+            Text('Date: ${_fmt(_scheduleDate!)}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text('Are you sure you want to schedule packages?',
+                style: TextStyle(fontSize: 13)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES',
                 style: TextStyle(
                     color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
           ),

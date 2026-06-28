@@ -6,8 +6,12 @@ import 'package:iconsax/iconsax.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
 import '../../core/database/database_helper.dart';
+import '../../core/network/server_url_resolver.dart';
+import '../../core/network/soap_client.dart';
+import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../payment/payment_options_screen.dart';
@@ -709,21 +713,57 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     final messenger2 = ScaffoldMessenger.of(context);
     showPremiumLoading(context, message: 'Saving location...');
     try {
+      // ── Local DB ──
       await _db.updateCustomerLocation(
         lcoCustomerId: _customer.lcoCustomerId,
         areaName: areaName,
         latitude: lat,
         longitude: lng,
       );
+
+      // ── Server SOAP (Android: updateCustomerlocation via wsController) ──
+      // Android sends customerid as int (altCustId = getCustomerId()).
+      // Flutter lcoCustomerId holds the same numeric value as a String.
+      bool soapFailed = false;
+      try {
+        final ns = ServerUrlResolver.instance.namespace;
+        await SoapClient.instance.call(
+          url: ServerUrlResolver.instance.loginServerUrl,
+          namespace: ns,
+          soapAction: '$ns/updateCustomerlocation',
+          methodName: 'updateCustomerlocation',
+          wrapper: 'updateCustomerlocationInfo',
+          wrapperType: 'updateCustomerlocationInfo',
+          fields: {
+            'authToken': SessionService.instance.authToken,
+            'imei': AppConfig.deviceImei,
+            'customerid': int.tryParse(_customer.lcoCustomerId) ?? 0,
+            'lat': lat.toString(),
+            'lang': lng.toString(),
+          },
+        );
+      } catch (_) {
+        // Server sync failed — local save is still good.
+        soapFailed = true;
+      }
+
       if (!mounted) return;
       nav2.pop();
       messenger2.showSnackBar(SnackBar(
-        content: const Row(children: [
-          Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
-          SizedBox(width: 10),
-          Text('Location saved successfully', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        content: Row(children: [
+          Icon(
+            soapFailed ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
+            color: Colors.white, size: 18,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            soapFailed
+                ? 'Location saved locally (server sync failed)'
+                : 'Location saved successfully',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
         ]),
-        backgroundColor: Colors.green.shade600,
+        backgroundColor: soapFailed ? Colors.orange.shade700 : Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),

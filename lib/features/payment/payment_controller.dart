@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../core/data/collection_schedule.dart';
+import '../collections/data/pay_later_repository.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/payment.dart';
-import '../../core/database/database_helper.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
@@ -17,10 +16,8 @@ import 'data/make_payment_repository.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 class PaymentController extends ChangeNotifier {
   final Customer customer;
-  final DatabaseHelper _db;
 
-  PaymentController({required this.customer, DatabaseHelper? db})
-      : _db = db ?? DatabaseHelper();
+  PaymentController({required this.customer});
 
   // ── TextEditingControllers ──────────────────────────────────────────────────
   final amountCtrl    = TextEditingController();
@@ -91,11 +88,6 @@ class PaymentController extends ChangeNotifier {
     try {
       final id = int.tryParse(customer.lcoCustomerId) ?? 0;
       final result = await PendingAmountRepository.instance.fetch(id);
-      debugPrint('[GPA] altCustomerId=$id statusCode=${result.statusCode} '
-          'pendingAmount=${result.pendingAmount} '
-          'broadcasterPending=${result.broadcasterPendingAmount} '
-          'isBroadband=$isBroadbandCustomer bbUserId=${customer.broadbandUserId} '
-          'msg=${result.statusMessage}'); // TEMP
       if (result.statusCode == 0) {
         pendingAmount = result.pendingAmount;
         _dueAmount = result.pendingAmount; // due_amount for mpay
@@ -279,24 +271,38 @@ class PaymentController extends ChangeNotifier {
   }
 
   // ── Pay Later (collection schedule) ─────────────────────────────────────────
-  Future<CollectionSchedule> schedulePayLater({
-    required DateTime scheduleDate,
-    required String   status,
-    required String   employee,
-    required String   remarks,
-  }) async {
-    final schedule = CollectionSchedule(
-      customerId:    customer.lcoCustomerId,
-      customerName:  customer.name,
-      accountNumber: customer.lcoCustomerId,
-      employee:      employee == 'Choose' ? '' : employee,
-      status:        status,
-      scheduleDate:  DateTime(scheduleDate.year, scheduleDate.month, scheduleDate.day),
-      remarks:       remarks,
-      createdAt:     DateTime.now(),
+  // Pay Later — server-side (Android parity: lookup → submit). The legacy local
+  // CollectionSchedule path (DatabaseHelper.insert/searchCollectionSchedule) is kept
+  // but unused; see OPERATIONAL_MODULES_PARITY.md.
+  //
+  // Step 1: look up this customer's schedule record (Android gethitapipaylater) —
+  // gives the server customer_id, current values, is_editable, and the status LOV.
+  Future<PayLaterListResult> lookupPayLater() {
+    return PayLaterRepository.instance.getPayLaterList(
+      customerId: customer.altCustomerId,
+      scheduledStartDate: '',
+      scheduledEndDate: '',
     );
-    await _db.insertCollectionSchedule(schedule);
-    return schedule;
+  }
+
+  // Step 2: create/update (Android gethitapipaylatersubmit → scheduled_collection_create).
+  Future<PayLaterWriteResult> submitPayLater({
+    required String customerId,
+    required DateTime scheduleDate,
+    required String status,
+    required String remarks,
+    required String isEdited,
+  }) {
+    final d = '${scheduleDate.year}-'
+        '${scheduleDate.month.toString().padLeft(2, '0')}-'
+        '${scheduleDate.day.toString().padLeft(2, '0')}';
+    return PayLaterRepository.instance.submitPayLater(
+      customerId: customerId,
+      scheduledDate: d,
+      status: status,
+      remarks: remarks,
+      isEdited: isEdited,
+    );
   }
 
   // ── Dispose ─────────────────────────────────────────────────────────────────

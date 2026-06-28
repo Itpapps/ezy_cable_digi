@@ -2,16 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/database/database_helper.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../search/search_customer_screen.dart';
+import 'download_records_screen.dart';
 import 'offline_reports_screen.dart';
 import 'offline_unpaid_list_screen.dart';
 
-class OfflineDashboardScreen extends StatelessWidget {
+class OfflineDashboardScreen extends StatefulWidget {
   const OfflineDashboardScreen({super.key});
+
+  @override
+  State<OfflineDashboardScreen> createState() => _OfflineDashboardScreenState();
+}
+
+class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
+  final _db = DatabaseHelper();
+  int _totalCustomers = 0;
+  int _paidCount = 0;
+  int _syncedCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final total = await _db.getOfflineCustomerCount();
+    final paid = await _db.getOfflinePaidCount();
+    final synced = await _db.getOfflineSyncedCount();
+    if (mounted) {
+      setState(() {
+        _totalCustomers = total;
+        _paidCount = paid;
+        _syncedCount = synced;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +97,47 @@ class OfflineDashboardScreen extends StatelessWidget {
                 child: Image.asset('assets/ezy_digi_pics.png', height: 52),
               ),
               const SizedBox(height: 12),
+              // Summary card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Customers: $_totalCustomers',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Paid (pending sync): $_paidCount',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Synced: $_syncedCount',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
@@ -101,6 +173,44 @@ class OfflineDashboardScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DashCard(
+                      icon: Iconsax.document_download,
+                      iconColor: Colors.teal,
+                      label: 'DOWNLOAD\nRECORDS',
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DownloadRecordsScreen(),
+                          ),
+                        );
+                        _refresh();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DashCard(
+                      icon: Iconsax.people,
+                      iconColor: Colors.blue,
+                      label: 'UNPAID\nCUSTOMERS',
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const OfflineUnpaidListScreen(),
+                          ),
+                        );
+                        _refresh();
+                      },
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
               Container(
                 width: double.infinity,
@@ -125,13 +235,14 @@ class OfflineDashboardScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
+                          onPressed: () async {
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => const OfflineUnpaidListScreen(),
                               ),
                             );
+                            _refresh();
                           },
                           child: const Text(
                             '*CLICK HERE!*',
@@ -153,25 +264,6 @@ class OfflineDashboardScreen extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset('assets/ezy_digi_pics.png', height: 24),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Theme1',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),

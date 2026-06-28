@@ -67,6 +67,33 @@ class AuthService {
       final maxDiscountPct =
           int.tryParse(SoapClient.readField(xml, 'max_discount_percent_allowed') ?? '') ?? 100;
 
+      // Gates the Package Hub's Service Extension tile (validateLogin property,
+      // default "0"). Same response parsed for the discount config above.
+      final boxWiseExt =
+          (SoapClient.readField(xml, 'box_wise_service_extension') ?? '0')
+                  .trim() ==
+              '1';
+
+      // Offline-mode fields from the same validateLogin response.
+      final machineNum =
+          (SoapClient.readField(xml, 'machineNumber') ?? '').trim();
+      final offlineUserCode =
+          (SoapClient.readField(xml, 'offline_user_code') ?? '').trim();
+      final offlineStatus =
+          int.tryParse(SoapClient.readField(xml, 'offlineStatus') ?? '') ?? 0;
+      final restrictPartial = int.tryParse(
+              SoapClient.readField(xml, 'lovvalue_restrict_partial_payment') ??
+                  '') ??
+          0;
+      final serverDate =
+          (SoapClient.readField(xml, 'current_date') ?? '').trim();
+      final employeeName =
+          (SoapClient.readField(xml, 'employeeName') ?? '').trim();
+      final lastLogin =
+          (SoapClient.readField(xml, 'last_login') ?? 'NA').trim();
+      final businessName =
+          (SoapClient.readField(xml, 'businessName') ?? 'itp').trim();
+
       SessionService.instance.setFromLogin(
         authToken: SoapClient.readField(xml, 'authToken') ?? '',
         dealerId: SoapClient.readField(xml, 'dealerId') ?? '',
@@ -74,6 +101,16 @@ class AuthService {
         employeeId: SoapClient.readField(xml, 'employeeId') ?? '',
         enablePaymentDiscount: enableDiscount,
         maxDiscountPercentAllowed: maxDiscountPct,
+        boxWiseServiceExtension: boxWiseExt,
+        machineNumber: machineNum,
+        offlineUserCode: offlineUserCode,
+        offlineStatus: offlineStatus,
+        restrictPartialPayment: restrictPartial,
+        serverCurrentDate: serverDate,
+        username: username,
+        employeeName: employeeName,
+        lastLogin: lastLogin,
+        businessName: businessName,
       );
 
       // Role permissions (getRolePermissions) — needed for the Package Hub gating.

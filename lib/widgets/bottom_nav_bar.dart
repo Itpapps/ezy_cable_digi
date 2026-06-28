@@ -23,7 +23,7 @@ class BottomNavBar extends StatelessWidget {
     final items = [
       _NavItem(icon: Iconsax.element_3,  activeIcon: Iconsax.element_3,  label: AppStrings.of(context, 'dashboard')),
       _NavItem(icon: Iconsax.message_question, activeIcon: Iconsax.message_question, label: AppStrings.of(context, 'complaints')),
-      _NavItem(icon: Iconsax.graph,       activeIcon: Iconsax.graph,      label: AppStrings.of(context, 'reports')),
+      _NavItem(icon: Iconsax.graph,       activeIcon: Iconsax.graph,      label: AppStrings.of(context, 'analytics')),
       _NavItem(icon: Iconsax.wallet_3,    activeIcon: Iconsax.wallet_3,   label: AppStrings.of(context, 'expenses')),
     ];
 

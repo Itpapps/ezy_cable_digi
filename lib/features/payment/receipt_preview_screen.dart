@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/real_bluetooth_service.dart';
+import '../../core/services/settings_store.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/payment.dart';
 import '../../core/theme/theme_constants.dart';
@@ -59,6 +60,11 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     _fadeAnim =
         CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
+    // Load receipt header/footer (printer settings) so the thermal lines can
+    // include them — matches Android DisplayPaymentDetails reading settings_Pref.
+    SettingsStore.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -101,11 +107,23 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         '${d.month.toString().padLeft(2, '0')}-${d.year} '
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+    final st = SettingsStore.instance;
     final lines = <String>[];
-    // Android prints printer-settings header1/header2 (blank by default) then
-    // "PAYMENT RECEIPT" — it does NOT print the dealer business name here
-    // (BluetoothChatService.write :1057-1059). header1/header2 are Group B
-    // (printer settings, not yet sourced) so we emit only the title.
+    // Printer-settings header1/header2 (Android DisplayPaymentDetails:662-670):
+    // leading separator, then each header (raw/left, only when set) followed by a
+    // separator, then the title. Blank default → receipt unchanged. It does NOT
+    // print the dealer business name here (matches Android).
+    if (st.header1.isNotEmpty || st.header2.isNotEmpty) {
+      lines.add(sep);
+      if (st.header1.isNotEmpty) {
+        lines.add(st.header1);
+        lines.add(sep);
+      }
+      if (st.header2.isNotEmpty) {
+        lines.add(st.header2);
+        lines.add(sep);
+      }
+    }
     lines.add(ctr('PAYMENT RECEIPT'));
     lines.add(sep);
     lines.add(date);
@@ -135,8 +153,17 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       lines.add(fld('DISCOUNT.AMT', money(widget.discountAmount)));
     }
     lines.add(sep);
-    // Group B (omitted until sourced from the backend): dealer header1/header2 +
-    // footer1/footer2 (printer settings), CRF, LAST PAID DATE, taxes. See RECEIPT_LAYOUT.md.
+    // Printer-settings footer1/footer2 (Android DisplayPaymentDetails:728-735):
+    // each footer (raw, only when set) followed by a separator. Remaining Group B
+    // (CRF, LAST PAID DATE, taxes) stays backend-sourced — see RECEIPT_LAYOUT.md.
+    if (st.footer1.isNotEmpty) {
+      lines.add(st.footer1);
+      lines.add(sep);
+    }
+    if (st.footer2.isNotEmpty) {
+      lines.add(st.footer2);
+      lines.add(sep);
+    }
     return lines;
   }
 

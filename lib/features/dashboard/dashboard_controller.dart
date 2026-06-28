@@ -1,9 +1,14 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
+import '../../features/collections/data/pay_later.dart';
+import '../../features/collections/data/pay_later_repository.dart';
 import 'data/complaints_repository.dart';
 import 'data/dashboard_repository.dart';
+import 'data/nearest_repository.dart';
 import 'data/open_complaint.dart';
 
 /// Owns the dashboard KPI-card state (Due / Month Billing / Onetime /
@@ -104,6 +109,98 @@ class DashboardController extends ChangeNotifier {
     } finally {
       complaintsLoading = false;
       complaintsLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  // ── Pay Later feed (scheduled_collection_data, from_dashboard=1) ───────────
+  List<PayLaterSchedule> payLaterItems = [];
+  bool payLaterLoading = false;
+  bool payLaterLoaded = false;
+  bool payLaterError = false;
+  String payLaterMessage = '';
+
+  Future<void> loadPayLater({bool force = false}) async {
+    if (payLaterLoading) return;
+    if (payLaterLoaded && !force) return;
+    payLaterLoading = true;
+    payLaterError = false;
+    notifyListeners();
+    try {
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final r = await PayLaterRepository.instance.getPayLaterList(
+        scheduledStartDate: today,
+        scheduledEndDate: today,
+        fromDashboard: true,
+      );
+      payLaterMessage = r.statusMessage;
+      if (r.statusCode == 0) {
+        payLaterItems = r.schedules;
+        payLaterError = false;
+      } else {
+        payLaterItems = const [];
+        payLaterError = r.statusCode > 1;
+      }
+    } catch (e, s) {
+      payLaterItems = const [];
+      payLaterError = true;
+      payLaterMessage = 'Could not load pay later';
+      ErrorHandlerService.recordError(e, s,
+          reason: 'DashboardController.loadPayLater');
+    } finally {
+      payLaterLoading = false;
+      payLaterLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  // ── Nearest feed (NearestNextCustomer REST, from_dashboard=1) ──────────────
+  List<NearestCustomerItem> nearestItems = [];
+  bool nearestLoading = false;
+  bool nearestLoaded = false;
+  bool nearestError = false;
+  String nearestMessage = '';
+
+  Future<void> loadNearest({bool force = false}) async {
+    if (nearestLoading) return;
+    if (nearestLoaded && !force) return;
+    nearestLoading = true;
+    nearestError = false;
+    notifyListeners();
+    try {
+      double lat = 0;
+      double lng = 0;
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+        lat = pos.latitude;
+        lng = pos.longitude;
+      } catch (_) {
+        // GPS unavailable — send 0,0 as Android does
+      }
+      final r = await NearestRepository.instance.fetchNearest(
+        lat: lat,
+        lng: lng,
+      );
+      nearestMessage = r.statusMessage;
+      if (r.statusCode == 0) {
+        nearestItems = r.customers;
+        nearestError = false;
+      } else {
+        nearestItems = const [];
+        nearestError = r.statusCode > 1;
+      }
+    } catch (e, s) {
+      nearestItems = const [];
+      nearestError = true;
+      nearestMessage = 'Could not load nearest customers';
+      ErrorHandlerService.recordError(e, s,
+          reason: 'DashboardController.loadNearest');
+    } finally {
+      nearestLoading = false;
+      nearestLoaded = true;
       notifyListeners();
     }
   }

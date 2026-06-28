@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/data/customer.dart';
+import '../packages/data/customer_box.dart';
+import '../packages/data/package.dart';
+import '../packages/data/package_operations_repository.dart';
 
+// DeactivateStbScreen — STB deactivation (mirrors Android Deactivatestb_Frag_New).
+// Boxes via gcb; reasons via gdr (SOAP). Branches on the VERIFIED magic
+// reasonId==17 ("Unpaid Customer") → db (SOAP deactivateBox); all other reasons →
+// ds (REST deactivateSTB). GPS lat/lang with 0.0 fallback. Double-submit guarded;
+// never crashes on null/empty/error.
 class DeactivateStbScreen extends StatefulWidget {
   final Customer customer;
   const DeactivateStbScreen({super.key, required this.customer});
@@ -10,56 +19,76 @@ class DeactivateStbScreen extends StatefulWidget {
 }
 
 class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
-  String? _selectedSerial;
-  String? _selectedReason;
+  bool _loading = true;
+  bool _error = false;
+  String _message = '';
+  bool _submitting = false;
 
-  final _reasons = [
-    'Choose Reason',
-    'Unpaid Customer',
-    'Temporary Deactivation1',
-    'Others',
-    'On Vacation',
-    'On Hold',
-    'Deactivation Package Change',
-  ];
+  List<CustomerBox> _boxes = const [];
+  CustomerBox? _selectedBox;
 
-  void _submit() {
-    if (_selectedSerial == null) {
-      _snack('Please select STB');
-      return;
+  List<DeactivateReason> _reasons = const [DeactivateReason(0, 'Choose Reason')];
+  int _reasonId = 0;
+
+  String _lat = '0.0';
+  String _lang = '0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
     }
-    if (_selectedReason == null || _selectedReason == 'Choose Reason') {
-      _snack('Please select a reason');
-      return;
+    final repo = PackageOperationsRepository.instance;
+    final boxesFuture = repo.getCustomerBoxes(widget.customer.lcoCustomerId);
+    final reasonsFuture = repo.getStbDeactivateReasons();
+    _loadLocation(); // fire-and-forget GPS (0.0 fallback)
+    final boxesRes = await boxesFuture;
+    final reasonsRes = await reasonsFuture;
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _reasons = [
+        const DeactivateReason(0, 'Choose Reason'),
+        // Defensive: drop any server "0" to avoid a duplicate dropdown value.
+        ...reasonsRes.reasons.where((r) => r.reasonId != 0),
+      ];
+      _reasonId = 0;
+      if (boxesRes.statusCode == 0 && boxesRes.boxes.isNotEmpty) {
+        _boxes = boxesRes.boxes;
+        _selectedBox = boxesRes.boxes.first;
+        _error = false;
+      } else if (boxesRes.statusCode == 3) {
+        _boxes = const [];
+        _selectedBox = null;
+        _error = true;
+        _message = boxesRes.statusMessage;
+      } else {
+        _boxes = const [];
+        _selectedBox = null;
+        _error = true;
+        _message = 'No Boxes For this Customer';
+      }
+    });
+  }
+
+  Future<void> _loadLocation() async {
+    try {
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos != null && mounted) {
+        _lat = pos.latitude.toString();
+        _lang = pos.longitude.toString();
+      }
+    } catch (_) {
+      // keep 0.0 / 0.0
     }
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Deactivate STB',
-            style: TextStyle(fontWeight: FontWeight.w800)),
-        content: Text('Deactivate $_selectedSerial with reason "$_selectedReason"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('NO', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w700)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('STB Deactivated Successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              Navigator.pop(context);
-            },
-            child: const Text('YES', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _snack(String msg) {
@@ -70,103 +99,264 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final serials = [widget.customer.serialNumber, widget.customer.boxNumber]
-        .where((e) => e.isNotEmpty)
-        .toSet()
-        .toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_error || _selectedBox == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Please select STB
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Please select STB',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0D47A1))),
-                  ),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedSerial,
-                      hint: const Text('Select'),
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        isDense: true,
-                      ),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      items: serials
-                          .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedSerial = v),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Please select a reason
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Please select a reason',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0D47A1))),
-                  ),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedReason,
-                      hint: const Text('Select'),
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        isDense: true,
-                      ),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      items: _reasons
-                          .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedReason = v),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D47A1),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Text('DEACTIVATE',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const Icon(Icons.tv_off_rounded, color: Colors.white70, size: 44),
+              const SizedBox(height: 12),
+              Text(_message.isEmpty ? 'Could not load' : _message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF0D47A1),
                 ),
               ),
             ],
           ),
         ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Please select STB',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0D47A1))),
+                ),
+                Expanded(child: _boxDropdown()),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Please select a reason',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0D47A1))),
+                ),
+                Expanded(child: _reasonDropdown()),
+              ],
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submitting ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D47A1),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: _submitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2.5, color: Colors.white))
+                    : const Text('DEACTIVATE',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dropdownBox({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButtonHideUnderline(child: child),
+    );
+  }
+
+  Widget _boxDropdown() {
+    return _dropdownBox(
+      child: DropdownButton<CustomerBox>(
+        value: _selectedBox,
+        isDense: true,
+        isExpanded: true,
+        icon: const Icon(Icons.keyboard_arrow_down),
+        items: _boxes
+            .map((b) => DropdownMenuItem(
+                  value: b,
+                  child: Text(b.boxNumber.isEmpty ? b.vcNumber : b.boxNumber,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13)),
+                ))
+            .toList(),
+        onChanged: (b) => setState(() => _selectedBox = b),
+      ),
+    );
+  }
+
+  Widget _reasonDropdown() {
+    return _dropdownBox(
+      child: DropdownButton<int>(
+        value: _reasonId,
+        isDense: true,
+        isExpanded: true,
+        icon: const Icon(Icons.keyboard_arrow_down),
+        items: _reasons
+            .map((r) => DropdownMenuItem(
+                  value: r.reasonId,
+                  child: Text(r.reasonName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13)),
+                ))
+            .toList(),
+        onChanged: (v) => setState(() => _reasonId = v ?? 0),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return; // double-submit guard
+    final box = _selectedBox;
+    if (box == null) {
+      _snack('Select Box to Deactivate');
+      return;
+    }
+    if (_reasonId == 0) {
+      _snack('Select Reason to Deactivate');
+      return;
+    }
+
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Deactivate STB',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: const Text('Do you want to Deactivate STB?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+
+    // Production sends the box's customer_id (fall back to lcoCustomerId if empty).
+    final customerId = box.customerId.isNotEmpty
+        ? box.customerId
+        : widget.customer.lcoCustomerId;
+    final serial = box.boxNumber;
+
+    setState(() => _submitting = true);
+    final repo = PackageOperationsRepository.instance;
+    // VERIFIED branch: reasonId 17 ("Unpaid Customer") → db (SOAP); else → ds (REST).
+    final PackageWriteResult r = _reasonId == 17
+        ? await repo.deactivateBoxSoap(
+            reasonId: _reasonId,
+            serialNumber: serial,
+            boxId: box.boxId,
+            customerId: customerId,
+            lat: _lat,
+            lang: _lang)
+        : await repo.deactivateStbRest(
+            reasonId: _reasonId,
+            serialNumber: serial,
+            boxId: box.boxId,
+            customerId: customerId,
+            lat: _lat,
+            lang: _lang);
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    // Production response handling:
+    //   ds (REST): 0 → "Success!" pop; 1 → "No Details Found!" pop.
+    //   db (SOAP): 0 → "Success!" pop; 1 → "No Details Found!" STAY; 2 → toast;
+    //              null/transport → "Server busy" dialog, stay.
+    if (r.statusCode == 0) {
+      await _resultDialog('Success!', r.statusMessage);
+      if (!mounted) return;
+      Navigator.pop(context, true); // back to previous screen
+    } else if (r.statusCode == 1) {
+      await _resultDialog('No Details Found!', r.statusMessage);
+      if (!mounted) return;
+      if (_reasonId != 17) Navigator.pop(context, true); // ds pops; db stays
+    } else if (r.statusCode == 2) {
+      _snack('${r.statusMessage}: Contact Support');
+    } else {
+      await _resultDialog(
+          'Server is busy or Un-reachable!',
+          r.statusMessage.isEmpty
+              ? 'Please try again after sometime'
+              : r.statusMessage);
+    }
+  }
+
+  Future<void> _resultDialog(String title, String message) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(message.isEmpty ? '-' : message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK',
+                style: TextStyle(
+                    color: Color(0xFF0D47A1), fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }
@@ -184,11 +374,16 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
             color: Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+          child: const Icon(Icons.arrow_back_ios_new,
+              size: 16, color: Colors.white),
         ),
       ),
       title: const Text('DEACTIVATE STB',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: 1)),
     );
   }
 }

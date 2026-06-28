@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
-import '../../core/data/customer.dart';
-import '../../core/data/payment.dart';
+import '../../core/data/offline_customer.dart';
 import '../../core/database/database_helper.dart';
-import 'offline_payment_flow.dart';
+import '../../core/services/offline_data_service.dart';
+import 'widgets/offline_payment_dialog.dart';
 
 class OfflineUnpaidListScreen extends StatefulWidget {
   const OfflineUnpaidListScreen({super.key});
@@ -19,7 +20,7 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   final _db = DatabaseHelper();
   bool _loading = true;
   bool _onlyCurrentMonth = false;
-  List<Customer> _filtered = [];
+  List<OfflineCustomer> _filtered = [];
 
   @override
   void initState() {
@@ -29,9 +30,8 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    await _db.insertDemoData();
-    final list = await _db.getUnpaidCustomers(
-      onlyCurrentMonth: _onlyCurrentMonth,
+    final list = await _db.getUnpaidOfflineCustomers(
+      currentMonthOnly: _onlyCurrentMonth,
     );
     setState(() {
       _filtered = list;
@@ -42,6 +42,63 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   void _applyMonthFilter(bool v) {
     setState(() => _onlyCurrentMonth = v);
     _load();
+  }
+
+  Future<void> _onPayCustomer(OfflineCustomer customer) async {
+    final initial = customer.totalAmount;
+    final result = await showDialog<OfflinePaymentResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => OfflinePaymentDialog(
+        customerName: customer.name,
+        initialAmount: initial,
+        restrictPartial: false,
+        discountPenaltyFlag: customer.discountPenaltyFlag,
+        discountAmount: customer.discountAmount,
+        penaltyAmount: customer.penaltyAmount,
+        totalAfterDiscount: customer.totalAfterDiscount,
+        totalAfterPenalty: customer.totalAfterPenalty,
+        discountStartDate: customer.discountStartDate,
+        discountEndDate: customer.discountEndDate,
+        penaltyStartDate: customer.penaltyStartDate,
+        penaltyEndDate: customer.penaltyEndDate,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    try {
+      await OfflineDataService.instance.commitPayment(
+        customer: customer,
+        amount: result.amount,
+        payMode: result.method == 'cash' ? 'R' : 'B',
+        sendSms: result.sendSms,
+        chequeNumber: result.chequeNo,
+        bankName: result.bankName,
+        branchName: result.branch,
+        insDate: result.instrumentDate,
+        discountPenaltyFlag: result.discountPenaltyFlag,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Payment of ₹${result.amount.toStringAsFixed(2)} recorded for ${customer.name}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _load();
+    } on OfflineDataException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Payment failed: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -122,9 +179,9 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
             itemCount: _filtered.length,
             itemBuilder: (context, i) {
               final c = _filtered[i];
-              return _CustomerPayCard(
+              return _OfflineCustomerPayCard(
                 customer: c,
-                onProceedPayment: () => openOfflinePaymentFlow(context, c),
+                onProceedPayment: () => _onPayCustomer(c),
               );
             },
           ),
@@ -134,11 +191,11 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   }
 }
 
-class _CustomerPayCard extends StatelessWidget {
-  final Customer customer;
+class _OfflineCustomerPayCard extends StatelessWidget {
+  final OfflineCustomer customer;
   final VoidCallback onProceedPayment;
 
-  const _CustomerPayCard({
+  const _OfflineCustomerPayCard({
     required this.customer,
     required this.onProceedPayment,
   });
@@ -155,16 +212,16 @@ class _CustomerPayCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _row('LCO Customer ID', customer.lcoCustomerId),
+              _row('LCO Customer ID', customer.lcoCustId),
               _row('CRF Number', customer.crfNumber),
               _row('Name', customer.name),
               _row('Address', customer.address),
-              _row('Mobile Number', customer.primaryMobileNumber),
-              _row('Bill Amount', customer.totalDue),
-              _row('Tax Amount', '₹0.00'),
-              _row('Pending Amount', customer.pendingAmount),
-              _row('Amount Payable', customer.amountPayable),
-              _row('Last Paid amount', customer.pendingAmount),
+              _row('Mobile Number', customer.mobileNum),
+              _row('Bill Amount', '₹${customer.billAmount}'),
+              _row('Tax Amount', '₹${customer.taxAmount}'),
+              _row('Pending Amount', '₹${customer.pendingAmount}'),
+              _row('Total Amount', '₹${customer.totalAmount}'),
+              _row('Last Paid Amount', '₹${customer.lastPaidAmount}'),
               _row('Last Paid Date', customer.lastPaidDate),
               Align(
                 alignment: Alignment.centerRight,
@@ -228,7 +285,7 @@ class _PaidTodayTab extends StatefulWidget {
 class _PaidTodayTabState extends State<_PaidTodayTab> {
   final _db = DatabaseHelper();
   bool _loading = true;
-  var _items = <Payment>[];
+  var _items = <OfflineCustomer>[];
 
   @override
   void initState() {
@@ -237,7 +294,8 @@ class _PaidTodayTabState extends State<_PaidTodayTab> {
   }
 
   Future<void> _load() async {
-    final p = await _db.getPaymentsTodayList();
+    final today = DateFormat('dd-MM-yyyy').format(DateTime.now());
+    final p = await _db.getTodayOfflinePayments(today);
     setState(() {
       _items = p;
       _loading = false;
@@ -262,18 +320,20 @@ class _PaidTodayTabState extends State<_PaidTodayTab> {
       itemCount: _items.length,
       itemBuilder: (context, i) {
         final pay = _items[i];
-        final syncedText = pay.synced ? 'Synced.' : 'Not Synced.';
+        final synced = pay.flag == 2;
+        final syncedText = synced ? 'Synced' : 'Pending';
+        final method = pay.payMode == 'R' ? 'CASH' : 'BANK';
         return Card(
           child: ListTile(
-            title: Text(pay.customerName),
+            title: Text(pay.name),
             subtitle: Text(
-              '${pay.paymentMethod.toUpperCase()} · ₹${pay.amount} · ${pay.transactionId}',
+              '$method · ₹${pay.amount} · ${pay.paymentDate}',
             ),
             trailing: Text(
               syncedText,
               style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: pay.synced ? Colors.green : Colors.redAccent,
+                color: synced ? Colors.green : Colors.redAccent,
                 fontSize: 12,
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:ezi_cable_digi/core/services/localization_service.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
+import '../../core/services/settings_store.dart';
 import '../../core/theme/theme_constants.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
@@ -18,6 +19,65 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   final _footer1      = TextEditingController();
   final _footer2      = TextEditingController();
   final _amountFilter = TextEditingController(text: '500.0');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSaved();
+  }
+
+  Future<void> _loadSaved() async {
+    await SettingsStore.instance.load();
+    if (!mounted) return;
+    final s = SettingsStore.instance;
+    setState(() {
+      _header1.text = s.header1;
+      _header2.text = s.header2;
+      _footer1.text = s.footer1;
+      _footer2.text = s.footer2;
+      _amountFilter.text = s.amtFilter.toString();
+    });
+  }
+
+  // Persist all five (Android PrinterSetting_Fragment Submit → settings_Pref +
+  // restart). Flutter reads them fresh when building each receipt, so no restart.
+  Future<void> _save() async {
+    final amt = double.tryParse(_amountFilter.text.trim()) ?? 500.0;
+    await SettingsStore.instance.save(
+      header1: _header1.text.trim(),
+      header2: _header2.text.trim(),
+      footer1: _footer1.text.trim(),
+      footer2: _footer2.text.trim(),
+      amtFilter: amt,
+    );
+    if (!mounted) return;
+    _amountFilter.text = amt.toString();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppStrings.get('printer_settings_saved'))),
+    );
+  }
+
+  void _confirmSave() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: const Text('Are you sure you want to submit?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _save();
+            },
+            child: const Text('Ok'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -160,11 +220,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(AppStrings.get('printer_settings_saved'))),
-                      );
-                    },
+                    onPressed: _confirmSave,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
@@ -180,11 +236,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
+                      // Android Clear wipes only the header/footer fields
+                      // (PrinterSetting_Fragment:125-128) — not the amount, not prefs.
                       _header1.clear();
                       _header2.clear();
                       _footer1.clear();
                       _footer2.clear();
-                      _amountFilter.text = '500.0';
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade400,

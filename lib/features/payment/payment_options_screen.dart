@@ -149,10 +149,34 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
 
   // ── Pay Later ────────────────────────────────────────────────────────────────
   Future<void> _handlePayLater() async {
-    final remarksCtrl    = TextEditingController();
-    DateTime scheduleDate = DateTime.now();
-    String status        = 'Scheduled';
-    String employee      = 'Choose';
+    // Android parity (CustomerMgmt_MakePayment_Fragment): lookup the customer's
+    // schedule (gethitapipaylater) → pre-filled dialog with the server status LOV →
+    // submit (scheduled_collection_create). Server-side; no local fallback.
+    showPremiumLoading(context, message: 'Fetching Details, Please wait');
+    final lookup = await _ctrl.lookupPayLater();
+    if (!mounted) return;
+    Navigator.of(context).pop(); // dismiss loading
+    if (lookup.statusCode == 3) {
+      showPremiumSnackBar(context, lookup.statusMessage, isError: true);
+      return;
+    }
+    final record = lookup.schedules.isNotEmpty ? lookup.schedules.first : null;
+    if (record == null) {
+      showPremiumSnackBar(
+          context,
+          lookup.statusMessage.isEmpty
+              ? 'No schedule details found'
+              : lookup.statusMessage,
+          isError: true);
+      return;
+    }
+    final statuses =
+        lookup.statuses.isNotEmpty ? lookup.statuses : const ['Scheduled'];
+
+    final remarksCtrl = TextEditingController(text: record.remarks);
+    DateTime scheduleDate = _parseYmd(record.scheduledDate) ?? DateTime.now();
+    String status =
+        statuses.contains(record.status) ? record.status : statuses.first;
 
     final ok = await showPremiumDialog<bool>(
       context: context,
@@ -210,7 +234,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                         child: _CompactDropdown<String>(
                           hint: 'Status',
                           value: status,
-                          items: const ['Scheduled', 'Completed'],
+                          items: statuses,
                           onChanged: (v) { if (v != null) setD(() => status = v); },
                         ),
                       ),
@@ -249,14 +273,6 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Employee
-                  _CompactDropdown<String>(
-                    hint: 'Select Employee',
-                    value: employee,
-                    items: const ['Choose', 'itp'],
-                    onChanged: (v) { if (v != null) setD(() => employee = v); },
                   ),
                   const SizedBox(height: 10),
                   // Remarks
@@ -305,7 +321,8 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text('SCHEDULE', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                          child: Text(record.isEditable == '1' ? 'UPDATE' : 'SUBMIT',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                         ),
                       ),
                     ],
@@ -318,27 +335,80 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       ),
     );
 
-    if (ok != true || !mounted) return;
-
-    // Show loading
-    showPremiumLoading(context, message: 'Scheduling collection...');
-    try {
-      await _ctrl.schedulePayLater(
-        scheduleDate: scheduleDate,
-        status: status,
-        employee: employee,
-        remarks: remarksCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(); // dismiss loading
-      showPremiumSnackBar(context, 'Collection scheduled successfully', isSuccess: true);
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      showPremiumSnackBar(context, 'Scheduling failed: $e', isError: true);
-    } finally {
+    if (ok != true || !mounted) {
       remarksCtrl.dispose();
+      return;
     }
+
+    showPremiumLoading(context, message: 'Scheduling collection...');
+    final res = await _ctrl.submitPayLater(
+      customerId: record.customerId,
+      scheduleDate: scheduleDate,
+      status: status,
+      remarks: remarksCtrl.text.trim(),
+      isEdited: record.isEditable,
+    );
+    remarksCtrl.dispose();
+    if (!mounted) return;
+    Navigator.of(context).pop(); // dismiss loading
+    // Android shows a "Success" / "Fail!" dialog with the server message.
+    await _payLaterResultDialog(res.success, res.message);
+  }
+
+  DateTime? _parseYmd(String s) {
+    final p = s.split('-');
+    if (p.length < 3) return null;
+    final y = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    final d = int.tryParse(p[2].length > 2 ? p[2].substring(0, 2) : p[2]);
+    if (y == null || m == null || d == null) return null;
+    return DateTime(y, m, d);
+  }
+
+  Future<void> _payLaterResultDialog(bool success, String message) {
+    return showPremiumDialog<void>(
+      context: context,
+      child: PremiumDialogShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(success ? Icons.check_circle : Icons.error,
+                  color: success ? Colors.green : Colors.red, size: 44),
+              const SizedBox(height: 12),
+              Text(success ? 'Success' : 'Fail!',
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 8),
+              Text(message.isEmpty ? (success ? 'Scheduled' : 'Failed') : message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.textSecondary)),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('OK',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────

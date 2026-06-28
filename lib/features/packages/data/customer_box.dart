@@ -11,6 +11,7 @@ class CustomerBox {
   final String casServerId;
   final String status;
   final String boxStatus;
+  final String stockId; // needed by Service Extension (csews)
 
   const CustomerBox({
     this.boxId = '',
@@ -20,6 +21,7 @@ class CustomerBox {
     this.casServerId = '',
     this.status = '',
     this.boxStatus = '',
+    this.stockId = '',
   });
 
   /// Frozen rule: box_status "1" = Active, else DeActive.
@@ -36,6 +38,7 @@ class CustomerBox {
       casServerId: s('cas_server_id'),
       status: s('status'),
       boxStatus: s('box_status'),
+      stockId: s('stock_id'),
     );
   }
 }

@@ -14,11 +14,35 @@ class SessionService {
   String userType = '';
   String employeeId = '';
 
+  // ── Drawer and Dashboard dynamic fields (Android: LoginActivity static fields) ──
+  String username = '';
+  String employeeName = '';
+  String lastLogin = '';
+  String businessName = '';
+
   // Discount config from the login response (Android LoginActivity statics).
   // enable_payment_discount: 1 = discount feature on for this tenant (default 0).
   // max_discount_percent_allowed: the % cap (default 100).
   int enablePaymentDiscount = 0;
   int maxDiscountPercentAllowed = 100;
+
+  // ── Offline-mode fields (from validateLogin response) ──
+  // machineNumber: device machine ID used in sync/download requests (11 chars).
+  String machineNumber = '';
+  // offline_user_code: stored in prefs for offline identity.
+  String offlineUserCode = '';
+  // offlineStatus: 1 = offline feature enabled for this user.
+  int offlineStatus = 0;
+  // lovvalue_restrict_partial_payment: 1 = paid amount must be >= total_amount.
+  int restrictPartialPayment = 0;
+  // Server current_date for discount/penalty date range checks.
+  String serverCurrentDate = '';
+
+  // box_wise_service_extension from the validateLogin response ("1" = enabled,
+  // default false). Gates the Package Hub's "Service Extension" tile (csews).
+  // NOTE: this is the config flag the hub uses — NOT the `service_extension` role
+  // permission below. See PACKAGE_OPERATIONS_COMPLETE.md (Service Extension).
+  bool boxWiseServiceExtension = false;
 
   // ── Package-operation role permissions (from getRolePermissions, key `grp`) ──
   // Each is the `{name}.permission` flag ("1" = allowed). Loaded ONCE after login
@@ -38,6 +62,16 @@ class SessionService {
     required String employeeId,
     int enablePaymentDiscount = 0,
     int maxDiscountPercentAllowed = 100,
+    bool boxWiseServiceExtension = false,
+    String machineNumber = '',
+    String offlineUserCode = '',
+    int offlineStatus = 0,
+    int restrictPartialPayment = 0,
+    String serverCurrentDate = '',
+    String username = '',
+    String employeeName = '',
+    String lastLogin = '',
+    String businessName = '',
   }) {
     this.authToken = authToken;
     this.dealerId = dealerId;
@@ -45,6 +79,16 @@ class SessionService {
     this.employeeId = employeeId;
     this.enablePaymentDiscount = enablePaymentDiscount;
     this.maxDiscountPercentAllowed = maxDiscountPercentAllowed;
+    this.boxWiseServiceExtension = boxWiseServiceExtension;
+    this.machineNumber = machineNumber;
+    this.offlineUserCode = offlineUserCode;
+    this.offlineStatus = offlineStatus;
+    this.restrictPartialPayment = restrictPartialPayment;
+    this.serverCurrentDate = serverCurrentDate;
+    this.username = username;
+    this.employeeName = employeeName;
+    this.lastLogin = lastLogin;
+    this.businessName = businessName;
   }
 
   /// Package-operation permissions from `getRolePermissions` (after login).
@@ -68,9 +112,19 @@ class SessionService {
     employeeId = '';
     enablePaymentDiscount = 0;
     maxDiscountPercentAllowed = 100;
+    boxWiseServiceExtension = false;
     packageActivation = false;
     packageDeactivation = false;
     scheduleService = false;
     serviceExtension = false;
+    machineNumber = '';
+    offlineUserCode = '';
+    offlineStatus = 0;
+    restrictPartialPayment = 0;
+    serverCurrentDate = '';
+    username = '';
+    employeeName = '';
+    lastLogin = '';
+    businessName = '';
   }
 }

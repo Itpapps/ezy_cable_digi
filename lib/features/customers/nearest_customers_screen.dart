@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/data/customer.dart';
-import '../../core/database/database_helper.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
-import '../customer/customer_map_screen.dart';
+import '../dashboard/data/nearest_repository.dart';
 
+/// Drawer "Nearest Customer" screen — matches Android `LocateNextCustomer.java`.
+/// Uses the same `NearestNextCustomer` REST API as the dashboard, with
+/// `from_dashboard=0` and user-entered `distance_km`.
 class NearestCustomersScreen extends StatefulWidget {
   const NearestCustomersScreen({super.key});
 
@@ -18,13 +20,13 @@ class NearestCustomersScreen extends StatefulWidget {
 }
 
 class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
-  final _db = DatabaseHelper();
   final _distanceController = TextEditingController();
   bool _loading = true;
   bool _mapView = false;
+  bool _hasError = false;
+  String _errorMessage = '';
   LatLng? _current;
-  List<_CustomerDistance> _customers = [];
-  List<_CustomerDistance> _filtered = [];
+  List<NearestCustomerItem> _customers = [];
 
   @override
   void initState() {
@@ -37,54 +39,99 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
     _distanceController.dispose();
     super.dispose();
   }
+
+  /// Fetches nearest customers from the server API — same endpoint as Android.
+  /// GPS coordinates are sent to server; distance is calculated server-side.
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      showPremiumLoading(context, message: 'Finding Nearby Customers...');
+      if (mounted) showPremiumLoading(context, message: 'Loading...Please wait...');
     });
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings:
-        const LocationSettings(accuracy: LocationAccuracy.high),
+      // Get GPS (Android: GPSTracker, sends 0.0 if unavailable)
+      double lat = 0.0;
+      double lng = 0.0;
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings:
+              const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 8));
+        lat = position.latitude;
+        lng = position.longitude;
+      } catch (_) {
+        // GPS unavailable — send 0.0 as Android does
+      }
+      _current = LatLng(lat, lng);
+
+      // Distance from user input (default "2" matching Android)
+      final distText = _distanceController.text.trim();
+      final distanceKm = distText.isEmpty ? '2' : distText;
+
+      final result = await NearestRepository.instance.fetchNearest(
+        lat: lat,
+        lng: lng,
+        distanceKm: distanceKm,
+        fromDashboard: false,
       );
-      final current = LatLng(position.latitude, position.longitude);
-      final customers = await _db.getCustomersWithLocation();
-      final items = customers.map((c) {
-        final distance = Geolocator.distanceBetween(
-          current.latitude,
-          current.longitude,
-          c.latitude!,
-          c.longitude!,
-        );
-        return _CustomerDistance(c, distance / 1000);
-      }).toList()
-        ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
 
       if (mounted) Navigator.of(context).pop(); // dismiss loading
 
-      setState(() {
-        _current = current;
-        _customers = items;
-        _filtered = items;
-        _loading = false;
-      });
+      if (result.statusCode == 0) {
+        setState(() {
+          _customers = result.customers;
+          _loading = false;
+        });
+      } else if (result.statusCode == 1) {
+        // "No Details Found" — Android shows AlertDialog
+        setState(() {
+          _customers = [];
+          _loading = false;
+        });
+        if (mounted) {
+          _showNoDetailsDialog(result.statusMessage);
+        }
+      } else {
+        setState(() {
+          _customers = [];
+          _loading = false;
+          _hasError = true;
+          _errorMessage = result.statusMessage.isNotEmpty
+              ? result.statusMessage
+              : 'Could not load nearest customers';
+        });
+      }
     } catch (e) {
       if (mounted) Navigator.of(context).pop(); // dismiss loading
-      setState(() => _loading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not get location. Please enable GPS.')),
-        );
-      }
+      setState(() {
+        _loading = false;
+        _hasError = true;
+        _errorMessage = 'Failed.';
+      });
     }
   }
 
-  void _applyDistanceFilter() {
-    final km = double.tryParse(_distanceController.text.trim());
-    setState(() {
-      _filtered =
-      km == null ? _customers : _customers.where((c) => c.distanceKm <= km).toList();
-    });
+  void _showNoDetailsDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No Details Found!'),
+        content: Text(message.isNotEmpty ? message : 'No customers found in the given range.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Search button — re-fetches with user-entered distance (Android: searchcust_btn_search_distance)
+  void _onSearchTap() {
+    _load();
   }
 
   @override
@@ -156,7 +203,7 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
                       ),
                     ),
                     GestureDetector(
-                      onTap: _applyDistanceFilter,
+                      onTap: _onSearchTap,
                       child: Container(
                         margin: const EdgeInsets.only(right: 6),
                         padding: const EdgeInsets.all(10),
@@ -209,7 +256,22 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
   }
 
   Widget _buildListView() {
-    if (_filtered.isEmpty) {
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Iconsax.warning_2, color: Colors.black38, size: 32),
+            const SizedBox(height: 8),
+            Text(_errorMessage,
+                style: const TextStyle(color: Colors.black45, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            TextButton(onPressed: _load, child: const Text('RETRY')),
+          ],
+        ),
+      );
+    }
+    if (_customers.isEmpty) {
       return const Center(
         child: Text('No customers found',
             style: TextStyle(color: Colors.black45)),
@@ -217,34 +279,19 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
-      itemCount: _filtered.length,
+      itemCount: _customers.length,
       itemBuilder: (context, index) {
-        final item = _filtered[index];
-        return _CustomerCard(
-          item: item,
-          current: _current,
-          onNavigate: () {
-            if (_current == null) return;
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CustomerMapScreen(
-                  customer: item.customer,
-                  currentLocation: _current!,
-                ),
-              ),
-            );
-          },
-        );
+        final item = _customers[index];
+        return _NearestCustomerCard(item: item);
       },
     );
   }
 
   Widget _buildMapView() {
-    if (_current == null) {
+    if (_current == null || (_current!.latitude == 0.0 && _current!.longitude == 0.0)) {
       return const Center(child: Text('Current location unavailable'));
     }
-    if (_filtered.isEmpty) {
+    if (_customers.isEmpty) {
       return const Center(child: Text('No customers in selected range'));
     }
 
@@ -256,23 +303,23 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
         BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         infoWindow: const InfoWindow(title: 'Your location'),
       ),
-      ..._filtered.map(
+      ..._customers
+          .where((c) => c.latitude != 0 && c.longitude != 0)
+          .map(
             (item) => Marker(
-          markerId: MarkerId(item.customer.lcoCustomerId),
-          position:
-          LatLng(item.customer.latitude!, item.customer.longitude!),
-          icon:
-          BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          markerId: MarkerId(item.altCustomNumber),
+          position: LatLng(item.latitude, item.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           infoWindow: InfoWindow(
-            title: item.customer.name,
-            snippet: '${item.distanceKm.toStringAsFixed(2)} km',
+            title: item.name,
+            snippet: '${item.distance} km',
           ),
         ),
       ),
     };
 
     return GoogleMap(
-      initialCameraPosition: CameraPosition(target: _current!, zoom: 14),
+      initialCameraPosition: CameraPosition(target: _current!, zoom: 16),
       markers: markers,
       myLocationEnabled: false,
       compassEnabled: true,
@@ -284,102 +331,106 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer card — fixed height with proper layout, no overflow
+// Customer card — matches Android NextCustomerAdapter: name, custId, distance, map tap
 // ─────────────────────────────────────────────────────────────────────────────
-class _CustomerCard extends StatelessWidget {
-  final _CustomerDistance item;
-  final LatLng? current;
-  final VoidCallback onNavigate;
+class _NearestCustomerCard extends StatelessWidget {
+  final NearestCustomerItem item;
 
-  const _CustomerCard({
-    required this.item,
-    required this.current,
-    required this.onNavigate,
-  });
+  const _NearestCustomerCard({required this.item});
+
+  /// Android: tapping the card row opens Google Maps with directions to lat/lng
+  void _onNavigate(BuildContext context) {
+    final lat = item.latitude;
+    final lng = item.longitude;
+    if (lat == 0 && lng == 0) return;
+    final url = Uri.parse('http://maps.google.com/maps?daddr=$lat,$lng');
+    launchUrl(url, mode: LaunchMode.externalApplication);
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = AppThemeConst.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-      decoration: BoxDecoration(
-        color: t.cardBg,
-        borderRadius: t.cardBorderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: t.cardShadowColor,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: t.accent.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(12),
+    final custId = item.altCustomNumber.isEmpty ? 'NA' : item.altCustomNumber;
+    final distanceText = '${item.distance}km';
+
+    return GestureDetector(
+      onTap: () => _onNavigate(context),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        decoration: BoxDecoration(
+          color: t.cardBg,
+          borderRadius: t.cardBorderRadius,
+          boxShadow: [
+            BoxShadow(
+              color: t.cardShadowColor,
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: Center(
-              child: Text(
-                item.customer.name.isNotEmpty
-                    ? item.customer.name[0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                  color: t.accent,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
+          ],
+        ),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: t.accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: t.accent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Name + ID
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.customer.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
+            // Name + Customer ID
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black87,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  item.customer.lcoCustomerId,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black.withValues(alpha: 0.45),
+                  const SizedBox(height: 3),
+                  Text(
+                    custId,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black.withValues(alpha: 0.45),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          const SizedBox(width: 8),
+            const SizedBox(width: 8),
 
-          // Distance + location button
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              GestureDetector(
-                onTap: onNavigate,
-                child: Container(
+            // Distance + map icon
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: t.accent.withValues(alpha: 0.10),
@@ -387,19 +438,19 @@ class _CustomerCard extends StatelessWidget {
                   ),
                   child: Icon(Iconsax.location, color: t.accent, size: 20),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                '${item.distanceKm.toStringAsFixed(2)} km',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: t.accent,
+                const SizedBox(height: 5),
+                Text(
+                  distanceText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: t.accent,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -451,9 +502,4 @@ class _ToggleBtn extends StatelessWidget {
     );
   }
 }
-
-class _CustomerDistance {
-  final Customer customer;
-  final double distanceKm;
-  _CustomerDistance(this.customer, this.distanceKm);
-}
+

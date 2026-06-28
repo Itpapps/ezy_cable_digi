@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import '../../core/data/customer.dart';
+import '../../core/data/offline_customer.dart';
+import '../../core/database/database_helper.dart';
 import '../../core/services/error_handler_service.dart';
+import '../../core/services/offline_mode_service.dart';
 import 'data/search_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +76,10 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Offline search results (parallel to _results for offline mode)
+  List<OfflineCustomer> _offlineResults = [];
+  List<OfflineCustomer> get offlineResults => _offlineResults;
+
   Future<void> search(String query) async {
     final q = query.trim();
     if (q.isEmpty) return;
@@ -80,8 +87,22 @@ class SearchProvider extends ChangeNotifier {
     _isLoading = true;
     _hasSearched = true;
     _error = null;
+    _offlineResults = [];
     notifyListeners();
 
+    // Check if in offline mode
+    final isOffline = await OfflineModeService.instance.isOfflineMode;
+    if (isOffline) {
+      await _searchOffline(q);
+    } else {
+      await _searchOnline(q);
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> _searchOnline(String q) async {
     try {
       final result = await SearchRepository.instance.search(
         searchType: _searchType(),
@@ -103,14 +124,45 @@ class SearchProvider extends ChangeNotifier {
         stackTrace,
         reason: 'SearchProvider.search',
       );
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    }
+  }
+
+  Future<void> _searchOffline(String q) async {
+    final db = DatabaseHelper();
+    try {
+      List<OfflineCustomer> results;
+      switch (_criteria) {
+        case 'Name':
+        case 'NickName':
+          results = await db.searchOfflineByName(q);
+          break;
+        case 'CRF Number':
+          results = await db.searchOfflineByCrf(q);
+          break;
+        case 'Lco Customer Id':
+          results = await db.searchOfflineByLcoId(q);
+          break;
+        case 'Primary Mobile Number':
+        case 'Secondary Mobile Number':
+          results = await db.searchOfflineByMobile(q);
+          break;
+        default:
+          results = await db.searchOfflineByName(q);
+      }
+      _offlineResults = results;
+      _results = []; // clear online results
+      if (results.isEmpty) {
+        _error = 'No records found';
+      }
+    } catch (e) {
+      _error = 'Search failed: $e';
+      _offlineResults = [];
     }
   }
 
   void clear() {
     _results = [];
+    _offlineResults = [];
     _hasSearched = false;
     _error = null;
     notifyListeners();

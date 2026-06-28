@@ -18,6 +18,8 @@ import '../complaints/complaints_screen.dart';
 import '../complaints/complaint_details_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../expenses/add_expenses_screen.dart';
+import '../offline/static_content_screen.dart';
+import '../../core/services/session_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../main.dart';
@@ -26,6 +28,7 @@ import '../../widgets/bottom_nav_bar.dart';
 import '../customers/customer_list_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
 import 'dashboard_controller.dart';
+import 'data/nearest_repository.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
 
@@ -56,15 +59,35 @@ class _TicketItem {
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
+class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   Widget _getScreen() {
     if (_selectedTab == 1) return const ComplaintsScreen();
     if (_selectedTab == 2) return const AnalyticsScreen();
-    if (_selectedTab == 3) return const AddExpensesScreen();
+    if (_selectedTab == 3) {
+      return AddExpensesScreen(
+        isTab: true,
+        onSuccess: () => setState(() => _selectedTab = 0),
+      );
+    }
+    if (_selectedTab == 4) {
+      return const StaticContentScreen(
+        title: 'About Us',
+        body: kDummyAboutUs,
+        hideAppBar: true,
+      );
+    }
     return const SizedBox();
+  }
+
+  void setTab(int index) {
+    if (mounted) {
+      setState(() {
+        _selectedTab = index;
+      });
+    }
   }
 
   int _selectedTab = 0;
@@ -76,48 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
     if (mounted) setState(() {});
   }
 
-  // ── Dummy data — Nearest / Pay Later still placeholders (their own sections).
-  // Complaints + Unpaid now use real APIs (_buildComplaintsFeed / _buildUnpaidFeed).
-  final List<_TicketItem> _nearest = const [
-    _TicketItem(
-      ticketId: 'NEAR/0011',
-      name: 'Shaker',
-      description: 'Distance : 0.8 km',
-      customerId: 'LCO-SH_08',
-      status: _TicketStatus.assigned,
-    ),
-    _TicketItem(
-      ticketId: 'NEAR/0013',
-      name: 'Amol',
-      description: 'Distance : 1.9 km',
-      customerId: 'LCO-AM_11',
-      status: _TicketStatus.inprocess,
-    ),
-  ];
-
-  final List<_TicketItem> _payLater = const [
-    _TicketItem(
-      ticketId: 'PL/1020',
-      name: 'Pay Later Customer',
-      description: 'Installment pending (next due soon)',
-      customerId: 'PL-01',
-      status: _TicketStatus.assigned,
-    ),
-    _TicketItem(
-      ticketId: 'PL/1017',
-      name: 'Pay Later Customer',
-      description: 'Installment in progress',
-      customerId: 'PL-02',
-      status: _TicketStatus.inprocess,
-    ),
-  ];
-
-  List<_TicketItem> get _currentFeed => switch (_feed) {
-    _FeedType.complaints => const [], // real path: _buildComplaintsFeed
-    _FeedType.unpaid => const [],     // real path: _buildUnpaidFeed
-    _FeedType.nearest => _nearest,
-    _FeedType.payLater => _payLater,
-  };
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
@@ -183,9 +164,11 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // ── itp label ─────────────────────────────────────────────────
-                    const Text(
-                      'itp',
-                      style: TextStyle(
+                    Text(
+                      SessionService.instance.businessName.isNotEmpty
+                          ? SessionService.instance.businessName
+                          : 'itp',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
@@ -455,17 +438,21 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _FeedChip(
                                     label: AppStrings.of(context, 'nearest'),
                                     selected: _feed == _FeedType.nearest,
-                                    onTap: () => setState(
-                                      () => _feed = _FeedType.nearest,
-                                    ),
+                                    onTap: () {
+                                      setState(
+                                          () => _feed = _FeedType.nearest);
+                                      _dash.loadNearest(force: true);
+                                    },
                                   ),
                                   const SizedBox(width: 8),
                                   _FeedChip(
                                     label: AppStrings.of(context, 'pay_later'),
                                     selected: _feed == _FeedType.payLater,
-                                    onTap: () => setState(
-                                      () => _feed = _FeedType.payLater,
-                                    ),
+                                    onTap: () {
+                                      setState(
+                                          () => _feed = _FeedType.payLater);
+                                      _dash.loadPayLater(force: true);
+                                    },
                                   ),
                                 ],
                               ),
@@ -483,17 +470,9 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                 ? _buildUnpaidFeed()
                                 : _feed == _FeedType.complaints
                                     ? _buildComplaintsFeed()
-                                    : ListView.builder(
-                                        itemCount: _currentFeed.length,
-                                        shrinkWrap: true,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        itemBuilder: (_, i) => _TicketCard(
-                                          item: _currentFeed[i],
-                                          isLast:
-                                              i == _currentFeed.length - 1,
-                                        ),
-                                      ),
+                                    : _feed == _FeedType.payLater
+                                        ? _buildPayLaterFeed()
+                                        : _buildNearestFeed(),
                           ),
                         ],
                       ),
@@ -603,6 +582,76 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
     return _TicketStatus.assigned;
   }
 
+  // ── Pay Later feed (real scheduled_collection_data via DashboardController) ─
+  Widget _buildPayLaterFeed() {
+    if (_dash.payLaterLoading && !_dash.payLaterLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_dash.payLaterError) {
+      return _feedMessage(
+        Iconsax.warning_2,
+        _dash.payLaterMessage.isEmpty
+            ? 'Could not load pay later'
+            : _dash.payLaterMessage,
+      );
+    }
+    final list = _dash.payLaterItems;
+    if (list.isEmpty) {
+      return _feedMessage(Iconsax.tick_circle, 'No scheduled collections');
+    }
+    return ListView.builder(
+      itemCount: list.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (_, i) {
+        final s = list[i];
+        final item = _TicketItem(
+          ticketId: s.altCustomNumber.isEmpty ? s.customnumber : s.altCustomNumber,
+          name: s.customerName.isEmpty ? 'NA' : s.customerName,
+          description: 'Date: ${s.scheduledDate}  Amt: ${s.amount}',
+          customerId: s.altCustId.isEmpty ? s.customerId : s.altCustId,
+          status: _TicketStatus.assigned,
+          statusLabel: s.status,
+        );
+        return _TicketCard(item: item, isLast: i == list.length - 1);
+      },
+    );
+  }
+
+  // ── Nearest feed (real NearestNextCustomer via DashboardController) ─────────
+  Widget _buildNearestFeed() {
+    if (_dash.nearestLoading && !_dash.nearestLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_dash.nearestError) {
+      return _feedMessage(
+        Iconsax.warning_2,
+        _dash.nearestMessage.isEmpty
+            ? 'Could not load nearest customers'
+            : _dash.nearestMessage,
+      );
+    }
+    final list = _dash.nearestItems;
+    if (list.isEmpty) {
+      return _feedMessage(Iconsax.location, 'No nearby customers found');
+    }
+    return ListView.builder(
+      itemCount: list.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (_, i) {
+        final n = list[i];
+        return _NearestCard(item: n, isLast: i == list.length - 1);
+      },
+    );
+  }
+
   Widget _feedMessage(IconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
@@ -625,9 +674,6 @@ class _DashboardScreenState extends State<DashboardScreen> with RouteAware {
     );
   }
 
-  void _snack(String label) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text('$label (coming soon)')));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1268,6 +1314,115 @@ class _UnpaidCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nearest Customer Card — real `NearestNextCustomer` row (parallel-array API).
+// Shows name, alt_custom_number, and distance from the REST response.
+// ─────────────────────────────────────────────────────────────────────────────
+class _NearestCard extends StatelessWidget {
+  final NearestCustomerItem item;
+  final bool isLast;
+  const _NearestCard({required this.item, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Name + Account
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item.name.isEmpty ? 'NA' : item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    item.altCustomNumber.isEmpty
+                        ? 'NA'
+                        : item.altCustomNumber,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black45,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Distance badge
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF43A047).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: const Color(0xFF43A047).withValues(alpha: 0.30)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Iconsax.location, size: 13,
+                      color: Color(0xFF43A047)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${item.distance} km',
+                    style: const TextStyle(
+                      color: Color(0xFF43A047),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

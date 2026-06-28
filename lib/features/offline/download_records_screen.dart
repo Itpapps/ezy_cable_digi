@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/database/database_helper.dart';
-import '../../core/services/offline_mode_service.dart';
+import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/widgets/premium_dialog.dart';
 
@@ -30,44 +30,71 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    await _db.insertDemoData();
-    final count = await _db.getCustomerCount();
-    final payToday = await _db.countPaymentsToday();
-    final pending = await _db.countUnsyncedPayments();
-    final todayList = await _db.getPaymentsTodayList();
-    final totalSynced =
-        todayList.where((p) => p.synced).length; // synced payments today
+    final count = await _db.getOfflineCustomerCount();
+    final paid = await _db.getOfflinePaidCount();
+    final synced = await _db.getOfflineSyncedCount();
     if (mounted) {
       setState(() {
         _totalRecords = count;
-        _paymentsToday = payToday;
-        _pendingToSync = pending;
-        _totalSynced = totalSynced;
+        _paymentsToday = paid + synced;
+        _pendingToSync = paid;
+        _totalSynced = synced;
         _loading = false;
       });
     }
   }
 
   Future<void> _download() async {
-    await _db.insertDemoData();
-    final count = await _db.getCustomerCount();
-    await OfflineModeService.instance.recordDownload(totalRecords: count);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Downloaded $count records (local DB)')),
-    );
-    await _refresh();
+    try {
+      await OfflineDataService.instance.guardBeforeDownload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Getting count...')),
+      );
+      final count = await OfflineDataService.instance.downloadGetCount();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Downloading $count records...')),
+      );
+      final inserted =
+          await OfflineDataService.instance.downloadRecords(count);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Downloaded $inserted records successfully')),
+      );
+      await _refresh();
+    } on OfflineDataException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Download failed: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _sync() async {
-    final n = await OfflineSyncService.instance.syncPendingToServer();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(n > 0 ? 'Synced $n record(s)' : 'No pending records to sync'),
-      ),
-    );
-    await _refresh();
+    try {
+      final n = await OfflineSyncService.instance.syncPendingToServer();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(n > 0 ? 'Synced $n record(s)' : 'No pending records to sync'),
+        ),
+      );
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Sync failed: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _clearData() async {
@@ -82,9 +109,25 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
     );
     if (ok != true) return;
 
-    await _db.resetDatabase();
-    await OfflineModeService.instance.setOfflineMode(true);
-    await _refresh();
+    try {
+      await OfflineDataService.instance.clearAllData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All offline data cleared')),
+      );
+      await _refresh();
+    } on OfflineDataException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.orange),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Clear failed: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override

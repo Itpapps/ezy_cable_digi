@@ -5,10 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
-import '../../core/database/database_helper.dart';
+import '../../core/data/offline_customer.dart';
 import '../../core/theme/theme_constants.dart';
 import '../customer/customer_details_screen.dart';
 import '../customer/customer_map_screen.dart';
+import '../offline/offline_payment_flow.dart';
 import 'search_provider.dart';
 
 class SearchCustomerScreen extends StatefulWidget {
@@ -30,7 +31,6 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
     _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
-    DatabaseHelper().insertDemoData().catchError((_) {});
 
     // Clear previous search results exactly as requested when opening the screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -86,6 +86,21 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                     return _empty(p.error!, Iconsax.warning_2, t);
                   }
                   if (!p.hasSearched) return const SizedBox.shrink();
+                  // Offline results
+                  if (p.offlineResults.isNotEmpty) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _offlineResultBanner(p, t),
+                        const SizedBox(height: 10),
+                        ...p.offlineResults.map((c) => _OfflineSearchCard(
+                              customer: c,
+                              t: t,
+                              onTap: () => openOfflinePaymentFlowForOfflineCustomer(context, c),
+                            )),
+                      ],
+                    );
+                  }
                   if (p.results.isEmpty) return _empty('No customers found', Iconsax.user_search, t);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -250,6 +265,41 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
               ),
               child: Text('${p.results.length} found',
                   style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+
+  // ── Offline results count banner ────────────────────────────────────────────
+  Widget _offlineResultBanner(SearchProvider p, AppThemeConst t) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+              colors: [Color(0xFF00796B), Color(0xFF26A69A)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Text('OFFLINE: ${p.criteria}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: 0.3)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('${p.offlineResults.length} found',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -463,6 +513,92 @@ class _CustomerCard extends StatelessWidget {
               )),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _OfflineSearchCard — simple card for offline customer search results
+// ─────────────────────────────────────────────────────────────────────────────
+class _OfflineSearchCard extends StatelessWidget {
+  final OfflineCustomer customer;
+  final AppThemeConst t;
+  final VoidCallback onTap;
+  const _OfflineSearchCard(
+      {required this.customer, required this.t, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(customer.name,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0D1B4B))),
+              const SizedBox(height: 6),
+              _infoRow('CRF', customer.crfNumber),
+              _infoRow('LCO ID', customer.lcoCustId),
+              _infoRow('Mobile', customer.mobileNum),
+              _infoRow('Total Due', '₹${customer.totalAmount}'),
+              _infoRow('Status', customer.flag == 0
+                  ? 'Unpaid'
+                  : customer.flag == 1
+                      ? 'Paid (pending sync)'
+                      : 'Synced'),
+              const SizedBox(height: 8),
+              if (customer.flag == 0)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: onTap,
+                    child: const Text('Pay Now',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+              width: 80,
+              child: Text('$label:',
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w500))),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0D1B4B)))),
+        ],
+      ),
     );
   }
 }

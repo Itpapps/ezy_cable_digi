@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show debugPrint;
-
 import '../../../core/config/app_config.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
@@ -128,14 +126,6 @@ class MakePaymentRepository {
       dealerBusinessName: SoapClient.readField(xml, 'dealerBusinessName') ?? '',
       billForMonth: SoapClient.readField(xml, 'bill_for_month') ?? '',
     );
-
-    // TEMP verification log (strip before release — Production Blocker #4).
-    debugPrint('[MPAY] altCustomerId=$altCustomerId billingId=$billingId '
-        'amount=$amount due=$dueAmount discount=$discountApplied mode=$modeType '
-        'bbAmount=$broadbandAmount bbUser=$broadbandUserId bbDue=$broadbandDue '
-        'renewal=$isForRenewal '
-        '=> status=${result.statusCode} receipt=${result.receiptNumber} '
-        'msg=${result.statusMessage}');
 
     return result;
   }

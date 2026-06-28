@@ -1,11 +1,12 @@
 import 'package:ezi_cable_digi/core/services/localization_service.dart';
 import 'package:ezi_cable_digi/core/services/theme_service.dart';
-import 'package:ezi_cable_digi/features/expenses/list_expenses-screen.dart';
+import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
 import 'package:ezi_cable_digi/features/reports/search_collections_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
+import '../core/services/session_service.dart';
 import '../core/constants/app_colors.dart';
 import '../core/services/offline_mode_service.dart';
 import '../core/services/offline_sync_service.dart';
@@ -17,8 +18,10 @@ import '../features/search/search_customer_screen.dart';
 import '../features/customers/nearest_customers_screen.dart';
 import '../features/customers/customer_list_screen.dart';
 import '../features/collections/collection_schedule_screen.dart';
+import '../features/employee_track/employee_track_screen.dart';
 import '../features/offline/download_records_screen.dart';
 import '../features/offline/static_content_screen.dart';
+import '../features/dashboard/dashboard_screen.dart';
 
 void _closeDrawerThen(
   BuildContext drawerContext,
@@ -356,8 +359,12 @@ class AppDrawer extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const UserProfileScreen()),
                 );
               }),
-              userId: 'EDD00485',
-              lastLogin: '2026-03-16  12:37:59',
+              userId: SessionService.instance.username.isNotEmpty
+                  ? SessionService.instance.username
+                  : 'EDD00485',
+              lastLogin: SessionService.instance.lastLogin.isNotEmpty
+                  ? SessionService.instance.lastLogin
+                  : '2026-03-16  12:37:59',
               lastLoginLabel: _s('last_login'),
             ),
 
@@ -556,9 +563,13 @@ class AppDrawer extends StatelessWidget {
               ),
               title: Text(_s('about_us'), style: const TextStyle(fontSize: 14)),
               onTap: () {
-                _closeDrawerThen(context, (navCtx) {
+                Navigator.pop(context); // Close drawer
+                final state = context.findAncestorStateOfType<DashboardScreenState>();
+                if (state != null) {
+                  state.setTab(4);
+                } else {
                   Navigator.push(
-                    navCtx,
+                    context,
                     MaterialPageRoute(
                       builder: (_) => const StaticContentScreen(
                         title: 'About Us',
@@ -566,7 +577,7 @@ class AppDrawer extends StatelessWidget {
                       ),
                     ),
                   );
-                });
+                }
               },
             ),
             ListTile(
@@ -580,17 +591,13 @@ class AppDrawer extends StatelessWidget {
                 style: const TextStyle(fontSize: 14),
               ),
               onTap: () {
-                _closeDrawerThen(context, (navCtx) {
-                  Navigator.push(
-                    navCtx,
-                    MaterialPageRoute(
-                      builder: (_) => const StaticContentScreen(
-                        title: 'Privacy Policy',
-                        body: kDummyPrivacyPolicy,
-                      ),
-                    ),
-                  );
-                });
+                Navigator.pop(context); // Close drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyWebView(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -957,6 +964,11 @@ class _DrawerItem extends StatelessWidget {
               MaterialPageRoute(
                 builder: (_) => const CollectionScheduleScreen(),
               ),
+            );
+            break;
+          case 'employee_track':
+            Navigator.of(navCtx).push(
+              MaterialPageRoute(builder: (_) => const EmployeeTrackScreen()),
             );
             break;
           case 'select_theme':

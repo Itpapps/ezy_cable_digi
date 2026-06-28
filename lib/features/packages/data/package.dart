@@ -36,6 +36,22 @@ class Package {
   }
 }
 
+/// One deactivation reason from `Customerdeactivereasons` (key `cdr`).
+/// Item fields: `reasonId, reasonName`. A synthetic `{0, "Select"}` is used as
+/// the unselected sentinel — deactivation is blocked while `reasonId == 0`.
+class DeactivateReason {
+  final int reasonId;
+  final String reasonName;
+  const DeactivateReason(this.reasonId, this.reasonName);
+
+  factory DeactivateReason.fromJson(Map<String, dynamic> j) {
+    return DeactivateReason(
+      int.tryParse('${j['reasonId'] ?? ''}') ?? 0,
+      (j['reasonName'] ?? '').toString().trim(),
+    );
+  }
+}
+
 /// One active package from `getcustomerpackageslist` (key `gcpl`).
 /// Has expiry dates: `start_date` / `end_date`. Item fields:
 /// `name, start_date, end_date, status, serial_number, mac_vc_number, price`.

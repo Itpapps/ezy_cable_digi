@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
+import '../../core/services/session_service.dart';
 
 class UserProfileScreen extends StatelessWidget {
   const UserProfileScreen({super.key});
@@ -34,14 +35,31 @@ class UserProfileScreen extends StatelessWidget {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    _ProfileRow(label: 'Employee Name', value: 'PraveenKumar'),
-                    _ProfileRow(label: 'User Name', value: 'EDD00485'),
+                  children: [
+                    _ProfileRow(
+                      label: 'Employee Name',
+                      value: SessionService.instance.employeeName.isNotEmpty
+                          ? SessionService.instance.employeeName
+                          : 'PraveenKumar',
+                    ),
+                    _ProfileRow(
+                      label: 'User Name',
+                      value: SessionService.instance.username.isNotEmpty
+                          ? SessionService.instance.username
+                          : 'EDD00485',
+                    ),
                     _ProfileRow(
                       label: 'Machine Number',
-                      value: 'YWD28GFPJNA',
+                      value: SessionService.instance.machineNumber.isNotEmpty
+                          ? SessionService.instance.machineNumber
+                          : 'YWD28GFPJNA',
                     ),
-                    _ProfileRow(label: 'Business Name', value: 'itp'),
+                    _ProfileRow(
+                      label: 'Business Name',
+                      value: SessionService.instance.businessName.isNotEmpty
+                          ? SessionService.instance.businessName
+                          : 'itp',
+                    ),
                   ],
                 ),
               ),

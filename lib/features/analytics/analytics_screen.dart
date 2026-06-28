@@ -1,6 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
+import '../../core/services/error_handler_service.dart';
+import '../dashboard/data/dashboard_repository.dart';
+
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
 
@@ -13,8 +16,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   late AnimationController _ctrl;
   late Animation<double> _anim;
 
-  final double outstanding = 390000;
-  final double collection = 44339;
+  double outstanding = 0;
+  double collection = 0;
+  bool _loading = true;
+  bool _error = false;
 
   @override
   void initState() {
@@ -22,7 +27,26 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400));
     _anim = CurveTween(curve: Curves.easeOutCubic).animate(_ctrl);
-    _ctrl.forward();
+    _loadKpis();
+  }
+
+  Future<void> _loadKpis() async {
+    try {
+      final r = await DashboardRepository.instance.fetchKpis();
+      if (r.isSuccess) {
+        outstanding = r.outstandingAmount;
+        collection = r.collectionAmount;
+      }
+    } catch (e, s) {
+      _error = true;
+      ErrorHandlerService.recordError(e, s,
+          reason: 'AnalyticsScreen._loadKpis');
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+        _ctrl.forward();
+      }
+    }
   }
 
   @override
@@ -47,7 +71,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Column(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error && outstanding == 0 && collection == 0
+              ? const Center(
+                  child: Text('Could not load analytics data',
+                      style: TextStyle(color: Colors.black45,
+                          fontWeight: FontWeight.w600)))
+              : Column(
         children: [
           Expanded(
             child: Center(
@@ -57,7 +88,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   return Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Animated Doughnut Chart
                       SizedBox(
                         width: 250,
                         height: 250,
@@ -68,16 +98,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           ),
                         ),
                       ),
-                      // Center Text
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "₹${outstanding.toInt()}",
+                            "₹${outstanding.toStringAsFixed(2)}",
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFFB52B4D), // Maroon
+                              color: Color(0xFFB52B4D),
                             ),
                           ),
                           const Text(
@@ -90,11 +119,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            "₹${collection.toInt()}",
+                            "₹${collection.toStringAsFixed(2)}",
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFFFF8A65), // Orange
+                              color: Color(0xFFFF8A65),
                             ),
                           ),
                           const Text(
@@ -113,7 +142,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               ),
             ),
           ),
-          // Legend
           Padding(
             padding: const EdgeInsets.only(bottom: 24.0, left: 24.0, right: 24.0),
             child: Row(

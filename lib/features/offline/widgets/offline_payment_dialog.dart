@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/data/customer.dart';
+import 'package:intl/intl.dart';
 
 class OfflinePaymentResult {
   final double amount;
-  final String method;
+  final String method; // 'cash' or 'bank'
   final bool sendSms;
   final String chequeNo;
   final String bankName;
   final String branch;
   final String instrumentDate;
+  final String discountPenaltyFlag; // "0000", "DM00", "DA00", "00PM", "00PA"
 
   OfflinePaymentResult({
     required this.amount,
@@ -19,17 +19,40 @@ class OfflinePaymentResult {
     required this.bankName,
     required this.branch,
     required this.instrumentDate,
+    this.discountPenaltyFlag = '0000',
   });
 }
 
+/// Offline payment dialog — Android parity (alertChangeAmountDialog).
+/// Supports cash/bank, SMS toggle, discount/penalty display, partial pay guard.
 class OfflinePaymentDialog extends StatefulWidget {
-  final Customer customer;
+  final String customerName;
   final String initialAmount;
+  final bool restrictPartial;
+  final String discountPenaltyFlag;
+  final String discountAmount;
+  final String penaltyAmount;
+  final String totalAfterDiscount;
+  final String totalAfterPenalty;
+  final String discountStartDate;
+  final String discountEndDate;
+  final String penaltyStartDate;
+  final String penaltyEndDate;
 
   const OfflinePaymentDialog({
     super.key,
-    required this.customer,
+    required this.customerName,
     required this.initialAmount,
+    this.restrictPartial = false,
+    this.discountPenaltyFlag = '0000',
+    this.discountAmount = '0.00',
+    this.penaltyAmount = '0.00',
+    this.totalAfterDiscount = '0.00',
+    this.totalAfterPenalty = '0.00',
+    this.discountStartDate = '',
+    this.discountEndDate = '',
+    this.penaltyStartDate = '',
+    this.penaltyEndDate = '',
   });
 
   @override
@@ -44,11 +67,62 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
   String _method = 'cash';
   bool _sendSms = false;
   DateTime? _instrumentDate;
+  bool _discountApplied = false;
+  bool _penaltyApplied = false;
 
   @override
   void initState() {
     super.initState();
-    _amountCtrl = TextEditingController(text: widget.initialAmount);
+    _resolveDiscountPenalty();
+    _amountCtrl = TextEditingController(text: _getDisplayAmount());
+  }
+
+  void _resolveDiscountPenalty() {
+    final now = DateTime.now();
+    final flag = widget.discountPenaltyFlag;
+
+    // Check discount eligibility (first 2 chars "DM" or "DA")
+    if (flag.length >= 2 && (flag.substring(0, 2) == 'DM' || flag.substring(0, 2) == 'DA')) {
+      if (_isDateInRange(widget.discountStartDate, widget.discountEndDate, now)) {
+        _discountApplied = true;
+      }
+    }
+    // Check penalty eligibility (last 2 chars "PM" or "PA")
+    if (flag.length >= 4 && (flag.substring(2, 4) == 'PM' || flag.substring(2, 4) == 'PA')) {
+      if (_isDateInRange(widget.penaltyStartDate, widget.penaltyEndDate, now)) {
+        _penaltyApplied = true;
+      }
+    }
+    // Discount overrides penalty
+    if (_discountApplied) _penaltyApplied = false;
+  }
+
+  bool _isDateInRange(String start, String end, DateTime now) {
+    if (start.isEmpty || end.isEmpty) return false;
+    try {
+      final fmt = DateFormat('dd-MM-yyyy');
+      final s = fmt.parse(start);
+      final e = fmt.parse(end);
+      return !now.isBefore(s) && !now.isAfter(e);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _getDisplayAmount() {
+    if (_discountApplied) return widget.totalAfterDiscount;
+    if (_penaltyApplied) return widget.totalAfterPenalty;
+    return widget.initialAmount;
+  }
+
+  String _computeDpFlag() {
+    if (_discountApplied) {
+      return '${widget.discountPenaltyFlag.substring(0, 2)}00';
+    }
+    if (_penaltyApplied) {
+      return '00${widget.discountPenaltyFlag.substring(2, 4)}';
+    }
+    return '0000';
   }
 
   @override
@@ -78,6 +152,16 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
       );
       return;
     }
+    // Partial pay restriction
+    if (widget.restrictPartial) {
+      final total = double.tryParse(_getDisplayAmount()) ?? 0;
+      if (amt < total) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Partial payment not allowed')),
+        );
+        return;
+      }
+    }
     if (_method == 'bank') {
       if (_chequeCtrl.text.trim().isEmpty ||
           _bankCtrl.text.trim().isEmpty ||
@@ -98,7 +182,10 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
         chequeNo: _chequeCtrl.text.trim(),
         bankName: _bankCtrl.text.trim(),
         branch: _branchCtrl.text.trim(),
-        instrumentDate: _instrumentDate?.toIso8601String() ?? '',
+        instrumentDate: _instrumentDate != null
+            ? DateFormat('ddMMyyyy').format(_instrumentDate!)
+            : '',
+        discountPenaltyFlag: _computeDpFlag(),
       ),
     );
   }
@@ -113,15 +200,45 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Are you sure?',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            Text(
+              'Payment: ${widget.customerName}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
               'Please select an option and enter amount below',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
+            if (_discountApplied) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Discount: ₹${widget.discountAmount} applied\n'
+                  'Amount after discount: ₹${widget.totalAfterDiscount}',
+                  style: TextStyle(color: Colors.green.shade800, fontSize: 12),
+                ),
+              ),
+            ],
+            if (_penaltyApplied) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Penalty: ₹${widget.penaltyAmount} added\n'
+                  'Amount after penalty: ₹${widget.totalAfterPenalty}',
+                  style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -175,12 +292,15 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Text('* Instrument Date'),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
+                  const Text('* Instrument Date: '),
+                  TextButton.icon(
                     onPressed: _pickDate,
-                    icon: const Icon(Icons.calendar_today, size: 18),
-                    label: const Text('SELECT'),
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(
+                      _instrumentDate != null
+                          ? DateFormat('dd-MM-yyyy').format(_instrumentDate!)
+                          : 'SELECT',
+                    ),
                   ),
                 ],
               ),
@@ -199,7 +319,7 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
                   onPressed: () => Navigator.pop(context),
                   child: const Text('CANCEL'),
                 ),
-                TextButton(
+                ElevatedButton(
                   onPressed: _submit,
                   child: const Text(
                     'DONE AND PAY',

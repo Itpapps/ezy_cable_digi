@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -27,6 +28,7 @@ class ReceiptPreviewScreen extends StatefulWidget {
   final String dealerBusinessName;  // from the server response (receipt header)
   final double dueAmount;           // TOT.DUE.AMT — GPA pending of the primary leg
   final double outAmount;           // OUT.AMT — outstanding after this payment
+  final double billAmount;          // BILL.AMT — from the makePayments response
 
   const ReceiptPreviewScreen({
     super.key,
@@ -39,6 +41,7 @@ class ReceiptPreviewScreen extends StatefulWidget {
     this.dealerBusinessName = '',
     this.dueAmount = 0,
     this.outAmount = 0,
+    this.billAmount = 0,
   });
 
   @override
@@ -100,7 +103,9 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     final isBroadbandOnly = isBroadband && !isCombined;
     final stbPaid = widget.stbPaidAmount;
     final bbPaid = widget.broadbandPaidAmount;
-    final billAmt = c.totalDue.replaceAll('₹', '').trim();
+    // BILL.AMT from the makePayments response (Android parity) — the customer
+    // list total is 0 for broadband, so never use c.totalDue here.
+    final billAmt = money(widget.billAmount);
 
     final d = p.paymentDate;
     final date = '${d.day.toString().padLeft(2, '0')}-'
@@ -137,7 +142,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     lines.add(fld(isBroadbandOnly ? 'Broadband Amt' : 'PAID.AMT',
         money(isBroadbandOnly ? bbPaid : stbPaid)));
     lines.add(sep);
-    if (billAmt.isNotEmpty) lines.add(fld('BILL.AMT', billAmt));
+    lines.add(fld('BILL.AMT', billAmt)); // Android always prints BILL.AMT
     if (isBroadband) {
       lines.add(fld('BROADBAND ID', c.broadbandUserId));
       if (isCombined) {
@@ -187,7 +192,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     final isBroadbandOnly = isBroadband && !isCombined;
     final stbPaid = widget.stbPaidAmount;
     final bbPaid = widget.broadbandPaidAmount;
-    final billAmt = c.totalDue.replaceAll('₹', '').trim();
+    final billAmt = money(widget.billAmount); // from mpay response (Android parity)
     final addr = c.address.replaceAll('\n', ' ');
 
     // Date mirrors Android's Date.toString() reorder: "EEE MMM dd yyyy HH:mm:ss".
@@ -223,7 +228,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     lines.add(fld(isBroadbandOnly ? 'Broadband Amt' : 'Paid Amount',
         money(isBroadbandOnly ? bbPaid : stbPaid)));
     lines.add(line);
-    if (billAmt.isNotEmpty) lines.add(fld('Bill Amount', billAmt));
+    lines.add(fld('Bill Amount', billAmt));
     lines.add(fld('Due Amount', money(widget.dueAmount)));
     lines.add(fld('Out Amount', money(widget.outAmount)));
     if (widget.discountAmount > 0) {
@@ -317,10 +322,10 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
 
   Future<void> _doPrint(String mac) async {
     try {
-      await _printerService.printReceipt(
-        mac: mac,
-        lines: _buildReceiptLines(),
-      );
+      // Timeout so a printer that dies mid-write can't hang the loading forever.
+      await _printerService
+          .printReceipt(mac: mac, lines: _buildReceiptLines())
+          .timeout(const Duration(seconds: 40));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -329,6 +334,13 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         ),
       );
       Navigator.pop(context); // close sheet
+    } on TimeoutException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Print timed out — check the printer and try again.'),
+            backgroundColor: Colors.red),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -398,9 +410,13 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
               _infoCard(
                 title: 'PAYMENT INFO',
                 rows: [
-                  ('Bill Amount',                          c.totalDue),
-                  ('Total Due(billamt+prev pending)',       c.pendingAmount),
-                  ('Out Amount',                           c.amountPayable),
+                  // Android parity: Bill Amount from the mpay response; Total Due
+                  // and Out Amount from the GPA-derived values (same as the printed
+                  // receipt). The customer-list totals are 0 for broadband, so they
+                  // must NOT be used here.
+                  ('Bill Amount',   '₹${widget.billAmount.toStringAsFixed(2)}'),
+                  ('Total Due',     '₹${widget.dueAmount.toStringAsFixed(2)}'),
+                  ('Out Amount',    '₹${widget.outAmount.toStringAsFixed(2)}'),
                   ('Discount Amount',                      '₹${widget.discountAmount.toStringAsFixed(2)}'),
                   // Broadband leg (broadband customers) — mirrors the existing
                   // app's payment-details layout: BB user id + BB paid, and for a
@@ -753,17 +769,55 @@ class _AutoScanPrinterSheetState extends State<_AutoScanPrinterSheet> {
       _devices    = [];
     });
     try {
-      final devices = await widget.printerService.getDevices();
+      // Permission + Bluetooth-on checks first, so failures aren't silent.
+      final granted = await widget.printerService.requestPermissions();
+      if (!granted) {
+        if (!mounted) return;
+        setState(() => _isScanning = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Bluetooth permission denied. Enable it in Settings.'),
+          backgroundColor: Colors.red,
+        ));
+        return;
+      }
+      final btOn = await PrintBluetoothThermal.bluetoothEnabled;
+      if (!btOn) {
+        if (!mounted) return;
+        setState(() => _isScanning = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Bluetooth is off. Turn it on and tap Rescan.'),
+          backgroundColor: Colors.red,
+        ));
+        return;
+      }
+      final devices =
+          List<BluetoothInfo>.from(await widget.printerService.getDevices());
+      // Saved default printer (Android-style): float it to the top and
+      // pre-select it so it is already highlighted. No auto-connect — the
+      // user still taps it (or any other device) to connect and print.
+      await SettingsStore.instance.load();
+      final savedMac = SettingsStore.instance.printerMac;
+      BluetoothInfo? preselect;
+      if (savedMac.isNotEmpty) {
+        final idx = devices.indexWhere((d) => d.macAdress == savedMac);
+        if (idx != -1) {
+          preselect = devices.removeAt(idx);
+          devices.insert(0, preselect);
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _devices    = devices;
+        _selected   = preselect; // pre-highlight saved printer (if present)
         _isScanning = false;
       });
     } catch (_) {
-      setState(() => _isScanning = false);
+      if (mounted) setState(() => _isScanning = false);
     }
   }
 
   Future<void> _connect(BluetoothInfo device) async {
+    if (_isConnecting || _isPrinting) return; // no concurrent connect attempts
     setState(() {
       _isConnecting = true;
       _selected     = device;
@@ -791,10 +845,13 @@ class _AutoScanPrinterSheetState extends State<_AutoScanPrinterSheet> {
   }
 
   Future<void> _print() async {
-    if (_selected == null) return;
+    if (_selected == null || _isPrinting) return; // guard against double-print
     setState(() => _isPrinting = true);
-    await widget.onPrint(_selected!.macAdress);
-    if (mounted) setState(() => _isPrinting = false);
+    try {
+      await widget.onPrint(_selected!.macAdress);
+    } finally {
+      if (mounted) setState(() => _isPrinting = false);
+    }
   }
 
   @override

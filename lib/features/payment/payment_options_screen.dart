@@ -81,6 +81,8 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       builder: (_) => PaymentConfirmationDialog(
         customer: widget.customer,
         amount: _ctrl.parsedAmount,
+        broadbandAmount:
+            _ctrl.isBroadbandCustomer ? _ctrl.parsedBroadbandAmount : 0.0,
         paymentMethod: '',
       ),
     ) ?? false;
@@ -108,6 +110,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       final dealerName = _ctrl.lastResult?.dealerBusinessName ?? '';
       final dueAmt = _ctrl.receiptDueAmount;
       final outAmt = _ctrl.receiptOutAmount;
+      // Receipt "Bill Amount" from the mpay response (Android parity) — the
+      // customer list total is 0 for broadband, so use the server's billAmount.
+      final billAmt = _ctrl.lastResult?.billAmount ?? 0.0;
 
       // Success popup before navigating
       await showPremiumDialog<void>(
@@ -137,6 +142,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             dealerBusinessName: dealerName,
             dueAmount: dueAmt,
             outAmount: outAmt,
+            billAmount: billAmt,
           ),
         ),
       );
@@ -520,6 +526,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             controller: _ctrl.discountCtrl,
             hint: 'Discount amount (₹)',
             t: t,
+            enabled: !_ctrl.isBroadbandOnly, // Android disables for BroadBand-only
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             onChanged: (_) => _ctrl.onDiscountChanged(),
@@ -528,11 +535,15 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           const SizedBox(height: 10),
         ],
 
-        // Amount
+        // Amount (STB / cable leg). Disabled for BroadBand-only customers
+        // (Android freezes et_amount when customerType == "BroadBand").
         _CompactField(
           controller: _ctrl.amountCtrl,
-          hint: 'Amount to collect (₹) *',
+          hint: _ctrl.isBroadbandCustomer
+              ? 'Amount to Collect (STB) (₹)'
+              : 'Amount to collect (₹) *',
           t: t,
+          enabled: !_ctrl.isBroadbandOnly,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           highlightColor: _ctrl.paymentMethod == 'bank' ? const Color(0xFFF59E0B) : null,
         ),
@@ -542,7 +553,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           const SizedBox(height: 10),
           _CompactField(
             controller: _ctrl.broadbandAmountCtrl,
-            hint: 'Broadband amount (₹)',
+            hint: 'Amount to Collect (Broadband) (₹)',
             t: t,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
@@ -638,22 +649,26 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: SizedBox(
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: _ctrl.isStoring ? null : _handlePayLater,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: t.backBtnBg,
-                    foregroundColor: t.appBarFg,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusM)),
+            // Pay Later is NOT offered to broadband / STB&BroadBand customers
+            // (Android: only the STB/cable leg can be scheduled).
+            if (!_ctrl.isBroadbandCustomer) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: _ctrl.isStoring ? null : _handlePayLater,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: t.backBtnBg,
+                      foregroundColor: t.appBarFg,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusM)),
+                    ),
+                    child: Text('PAY LATER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.accent)),
                   ),
-                  child: Text('PAY LATER', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.accent)),
                 ),
               ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: 16),
@@ -786,7 +801,7 @@ class _CustomerInfoCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: t.accent.withValues(alpha: 0.25)),
                 ),
-                child: Text(customer.customerType, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: t.accent)),
+                child: Text(customer.customerTypeLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: t.accent)),
               ),
             ],
           ),
@@ -806,7 +821,7 @@ class _CustomerInfoCard extends StatelessWidget {
       ('Payable (STB)', c.amountPayable),
       ('Last Paid', c.lastPaidDate),
       ('Bill Month', c.billMonth),
-      ('Type', c.customerType),
+      ('Type', c.customerTypeLabel),
     ];
     return Column(
       children: items
@@ -896,6 +911,7 @@ class _CompactField extends StatelessWidget {
   final Color? highlightColor;
   final ValueChanged<String>? onChanged;
   final String? errorText;
+  final bool enabled;
 
   const _CompactField({
     required this.controller,
@@ -906,6 +922,7 @@ class _CompactField extends StatelessWidget {
     this.highlightColor,
     this.onChanged,
     this.errorText,
+    this.enabled = true,
   });
 
   @override
@@ -913,6 +930,7 @@ class _CompactField extends StatelessWidget {
     final borderColor = highlightColor ?? t.accent;
     return TextField(
       controller: controller,
+      enabled: enabled,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       onChanged: onChanged,
@@ -922,7 +940,7 @@ class _CompactField extends StatelessWidget {
         errorText: errorText,
         hintStyle: TextStyle(color: t.inputHintColor, fontWeight: FontWeight.w400, fontSize: 12),
         filled: true,
-        fillColor: t.inputBg,
+        fillColor: enabled ? t.inputBg : t.inputBg.withValues(alpha: 0.5),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         border: OutlineInputBorder(

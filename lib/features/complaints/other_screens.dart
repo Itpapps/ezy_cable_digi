@@ -1,18 +1,46 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
+import '../customer/data/act_deact_repository.dart';
+import '../customer/data/onetime_charges_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACT-DEACT REPORT
+// ACT-DEACT REPORT — real `packageActDeactReport` (Android Act_Deact_Report).
+// Sends the system customer_id (lcoCustomerId). 6 fields per row.
 // ─────────────────────────────────────────────────────────────────────────────
-class ActDeactReportScreen extends StatelessWidget {
+class ActDeactReportScreen extends StatefulWidget {
   final Customer customer;
   const ActDeactReportScreen({super.key, required this.customer});
 
-  // Placeholder data
-  final _records = const <Map<String, String>>[];
+  @override
+  State<ActDeactReportScreen> createState() => _ActDeactReportScreenState();
+}
+
+class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
+  bool _loading = true;
+  String _message = '';
+  List<ActDeactItem> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r =
+        await ActDeactRepository.instance.fetch(widget.customer.lcoCustomerId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _items = r.items;
+      _message = r.statusCode == 0 ? '' : r.statusMessage;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final customer = widget.customer;
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _appBar(context, 'ACT-DEACT REPORT'),
@@ -33,17 +61,42 @@ class ActDeactReportScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(
-            child: _records.isEmpty
-                ? const Center(child: Text('No act/deact records found', style: TextStyle(color: Colors.white70)))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _records.length,
-                    itemBuilder: (_, i) => _SimpleCard(data: _records[i]),
-                  ),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _message.isEmpty ? 'No act/deact records found' : _message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _items.length,
+      itemBuilder: (_, i) {
+        final it = _items[i];
+        return _SimpleCard(data: {
+          'Package Name': it.packageName,
+          'Box Number': it.boxNumber,
+          'Operation Type': it.operationType,
+          'Created Date': it.createdDate,
+          'Error Message': it.errorMessage,
+          'Created By': it.createdBy,
+        });
+      },
     );
   }
 }
@@ -60,46 +113,113 @@ class OneTimeChargesScreen extends StatefulWidget {
 }
 
 class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
-  String _chargeType = 'Remote';
-  bool _paid = false;
+  // Dynamic charge types (Android chargeTypes API).
+  List<ChargeType> _chargeTypes = [];
+  ChargeType? _chargeType;
+  bool _loadingTypes = true;
+  bool _saving = false;
+  bool _instrument = false; // Android "Instrument Details" checkbox
   DateTime _createdDate = DateTime.now();
+  DateTime _instrumentDate = DateTime.now();
   final _amountCtrl = TextEditingController();
   final _remarksCtrl = TextEditingController();
+  final _chequeCtrl = TextEditingController();
+  final _bankCtrl = TextEditingController();
+  final _branchCtrl = TextEditingController();
 
-  final _chargeTypes = ['Remote', 'Installation Charges', 'Visit Charges', 'Others'];
+  @override
+  void initState() {
+    super.initState();
+    _loadChargeTypes();
+  }
+
+  Future<void> _loadChargeTypes() async {
+    final r = await OnetimeChargesRepository.instance
+        .fetchChargeTypes(widget.customer.lcoCustomerId);
+    if (!mounted) return;
+    setState(() {
+      _chargeTypes = r.types;
+      _chargeType = r.types.isNotEmpty ? r.types.first : null;
+      _loadingTypes = false;
+    });
+  }
 
   @override
   void dispose() {
     _amountCtrl.dispose();
     _remarksCtrl.dispose();
+    _chequeCtrl.dispose();
+    _bankCtrl.dispose();
+    _branchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
+  String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate({required bool instrument}) async {
+    final base = instrument ? _instrumentDate : _createdDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _createdDate,
+      initialDate: base,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      lastDate: DateTime.now(), // Android: must not be after today
     );
-    if (picked != null) setState(() => _createdDate = picked);
+    if (picked != null) {
+      setState(() {
+        if (instrument) {
+          _instrumentDate = picked;
+        } else {
+          _createdDate = picked;
+        }
+      });
+    }
   }
 
-  void _save() {
-    if (_amountCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter amount'), backgroundColor: Colors.red),
-      );
+  void _snack(String msg, {bool error = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? Colors.red : Colors.green,
+    ));
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (_chargeType == null) {
+      _snack('Charge type not loaded');
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Payment saved successfully'), backgroundColor: Colors.green),
+    if (_amountCtrl.text.trim().isEmpty ||
+        (double.tryParse(_amountCtrl.text.trim()) ?? 0) <= 0) {
+      _snack('Please enter a valid amount');
+      return;
+    }
+    // Android validates ONLY the amount — cheque/bank/branch are optional.
+    setState(() => _saving = true);
+    final r = await OnetimeChargesRepository.instance.save(
+      customerId: widget.customer.lcoCustomerId,
+      chargeType: _chargeType!.id,
+      amount: _amountCtrl.text.trim(),
+      chqDd: _instrument ? _chequeCtrl.text.trim() : '',
+      bank: _instrument ? _bankCtrl.text.trim() : '',
+      branch: _instrument ? _branchCtrl.text.trim() : '',
+      chqDdDate: _instrument ? _ymd(_instrumentDate) : '',
+      remarks: _remarksCtrl.text.trim(),
+      createdDate: _ymd(_createdDate),
+      checkPaidUnpaid: _instrument ? 1 : 2, // Android: 1 cheque · 2 cash
     );
-    Navigator.pop(context);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (r.isSuccess) {
+      _snack(r.statusMessage.isEmpty ? 'Saved Successfully' : r.statusMessage,
+          error: false);
+      Navigator.pop(context);
+    } else {
+      _snack(r.statusMessage.isEmpty ? 'Save failed' : r.statusMessage);
+    }
   }
 
-  String get _fmtDate =>
-      '${_createdDate.year}-${_createdDate.month.toString().padLeft(2, '0')}-${_createdDate.day.toString().padLeft(2, '0')}';
+  String get _fmtDate => _ymd(_createdDate);
 
   @override
   Widget build(BuildContext context) {
@@ -119,42 +239,94 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1)))),
               const SizedBox(height: 14),
 
-              // Charge Type
+              // Charge Type (dynamically loaded from chargeTypes API)
               _FormRow(
                 label: 'Charge Type',
-                child: DropdownButtonFormField<String>(
-                  value: _chargeType,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    isDense: true,
-                  ),
-                  icon: const Icon(Icons.keyboard_arrow_down),
-                  items: _chargeTypes
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _chargeType = v ?? _chargeType),
-                ),
+                child: _loadingTypes
+                    ? const SizedBox(
+                        height: 40,
+                        child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                    : DropdownButtonFormField<ChargeType>(
+                        initialValue: _chargeType,
+                        isExpanded: true,
+                        decoration: _otcField(),
+                        icon: const Icon(Icons.keyboard_arrow_down),
+                        items: _chargeTypes
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e.name)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _chargeType = v),
+                      ),
               ),
               const SizedBox(height: 14),
 
-              // Paid checkbox
+              // "Paid" checkbox (Android onetime_cb) → reveals optional cheque/
+              // bank/branch/instrument-date; sets check_paid_unpaid (1 / 2).
               _FormRow(
                 label: 'Paid',
                 child: Checkbox(
-                  value: _paid,
-                  onChanged: (v) => setState(() => _paid = v ?? false),
+                  value: _instrument,
+                  onChanged: (v) => setState(() => _instrument = v ?? false),
                   activeColor: const Color(0xFF0D47A1),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                 ),
               ),
               const SizedBox(height: 14),
+              if (_instrument) ...[
+                _FormRow(
+                  label: 'Instrument Date',
+                  child: GestureDetector(
+                    onTap: () => _pickDate(instrument: true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(_ymd(_instrumentDate),
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0D47A1))),
+                          ),
+                          const Icon(Icons.calendar_month, color: Colors.red, size: 22),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormRow(
+                  label: 'Cheque / DD No',
+                  child: TextField(
+                    controller: _chequeCtrl,
+                    decoration: _otcField(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormRow(
+                  label: 'Bank',
+                  child: TextField(
+                    controller: _bankCtrl,
+                    decoration: _otcField(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormRow(
+                  label: 'Branch',
+                  child: TextField(
+                    controller: _branchCtrl,
+                    decoration: _otcField(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // Created date
               _FormRow(
                 label: 'Created date',
                 child: GestureDetector(
-                  onTap: _pickDate,
+                  onTap: () => _pickDate(instrument: false),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
@@ -182,11 +354,7 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
                 child: TextField(
                   controller: _amountCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    isDense: true,
-                  ),
+                  decoration: _otcField(),
                 ),
               ),
               const SizedBox(height: 14),
@@ -196,11 +364,7 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
                 label: 'Remarks',
                 child: TextField(
                   controller: _remarksCtrl,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    isDense: true,
-                  ),
+                  decoration: _otcField(),
                 ),
               ),
               const SizedBox(height: 24),
@@ -235,42 +399,54 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 // ONE TIME HISTORY
 // ─────────────────────────────────────────────────────────────────────────────
-class OneTimeHistoryScreen extends StatelessWidget {
+class OneTimeHistoryScreen extends StatefulWidget {
   final Customer customer;
   const OneTimeHistoryScreen({super.key, required this.customer});
 
-  // Placeholder data matching photo
-  List<Map<String, dynamic>> get _records => [
-        {
-          'receiptNo': 'CR485/1635317561/462',
-          'billNo': '20211027122241',
-          'chargeType': 'REMOTE',
-          'amount': '100.00',
-          'createdDate': '2021-10-27 12:22:41',
-          'bank': 'NA',
-          'branch': 'NA',
-          'chequeNo': '0',
-          'chequeDate': 'NA',
-          'remarks': 'NA',
-          'paid': true,
-        },
-        {
-          'receiptNo': 'NA',
-          'billNo': 'ITP452026031695212',
-          'chargeType': 'INSTALLATION CHARGES',
-          'amount': '200.00',
-          'createdDate': '2026-03-16 09:51:12',
-          'bank': 'NA',
-          'branch': 'NA',
-          'chequeNo': '0',
-          'chequeDate': 'NA',
-          'remarks': 'NA',
-          'paid': false,
-        },
-      ];
+  @override
+  State<OneTimeHistoryScreen> createState() => _OneTimeHistoryScreenState();
+}
+
+class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
+  bool _loading = true;
+  String _message = '';
+  List<OnetimeChargeItem> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await OnetimeChargesRepository.instance
+        .fetchHistory(widget.customer.lcoCustomerId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _items = r.items;
+      _message = r.statusCode == 0 ? '' : r.statusMessage;
+    });
+  }
+
+  Map<String, dynamic> _toCard(OnetimeChargeItem it) => {
+        'receiptNo': it.receiptNo.isEmpty ? 'NA' : it.receiptNo,
+        'billNo': it.billNo.isEmpty ? 'NA' : it.billNo,
+        'chargeType': it.chargeTypeName,
+        'amount': it.amount,
+        'createdDate': it.date,
+        'bank': it.bankName.isEmpty ? 'NA' : it.bankName,
+        'branch': it.branchName.isEmpty ? 'NA' : it.branchName,
+        'chequeNo': it.chequeDdNo.isEmpty ? '0' : it.chequeDdNo,
+        'chequeDate': it.chequeDate.isEmpty ? 'NA' : it.chequeDate,
+        'remarks': it.remarks.isEmpty ? 'NA' : it.remarks,
+        'paid': it.paidUnpaid == '1' || it.paidUnpaid.toLowerCase() == 'paid',
+      };
 
   @override
   Widget build(BuildContext context) {
+    final cust = widget.customer;
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _appBar(context, 'ONE TIME CHARGES HISTORY'),
@@ -281,35 +457,51 @@ class OneTimeHistoryScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             color: const Color(0xFF0D47A1),
             child: Text(
-              'Total Count - ${_records.length}',
+              'Total Count - ${_items.length}',
               textAlign: TextAlign.right,
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
-          // Customer info
           Container(
             margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
             child: Column(
               children: [
-                _cRow('Customer Name', customer.name),
+                _cRow('Customer Name', cust.name),
                 const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                _cRow('Address', customer.address.isEmpty ? 'N/A' : customer.address),
+                _cRow('Address', cust.address.isEmpty ? 'N/A' : cust.address),
                 const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                _cRow('Mobile No.', customer.primaryMobileNumber.isEmpty ? 'N/A' : customer.primaryMobileNumber, isLast: true),
+                _cRow('Mobile No.', cust.primaryMobileNumber.isEmpty ? 'N/A' : cust.primaryMobileNumber, isLast: true),
               ],
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-              itemCount: _records.length,
-              itemBuilder: (_, i) => _OneTimeCard(record: _records[i]),
-            ),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _message.isEmpty ? 'No one time charges found' : _message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      itemCount: _items.length,
+      itemBuilder: (_, i) => _OneTimeCard(record: _toCard(_items[i])),
     );
   }
 }
@@ -440,157 +632,26 @@ class _OneTimeCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAY LATER
-// ─────────────────────────────────────────────────────────────────────────────
-class PayLaterScreen extends StatefulWidget {
-  final Customer customer;
-  const PayLaterScreen({super.key, required this.customer});
-
-  @override
-  State<PayLaterScreen> createState() => _PayLaterScreenState();
-}
-
-class _PayLaterScreenState extends State<PayLaterScreen> {
-  final _amountCtrl = TextEditingController();
-  final _remarksCtrl = TextEditingController();
-  DateTime _dueDate = DateTime.now().add(const Duration(days: 7));
-
-  @override
-  void dispose() {
-    _amountCtrl.dispose();
-    _remarksCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _dueDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) setState(() => _dueDate = picked);
-  }
-
-  String get _fmtDate =>
-      '${_dueDate.year}-${_dueDate.month.toString().padLeft(2, '0')}-${_dueDate.day.toString().padLeft(2, '0')}';
-
-  void _save() {
-    if (_amountCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter amount'), backgroundColor: Colors.red),
-      );
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pay Later saved successfully'), backgroundColor: Colors.green),
-    );
-    Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _appBar(context, 'PAY LATER'),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-          child: Column(
-            children: [
-              _FormRow(
-                label: 'Customer Name',
-                child: Text(widget.customer.name,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-              ),
-              const SizedBox(height: 14),
-              _FormRow(
-                label: 'Total Due',
-                child: Text(widget.customer.totalDue,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w800, color: Colors.red)),
-              ),
-              const SizedBox(height: 14),
-              _FormRow(
-                label: 'Amount *',
-                child: TextField(
-                  controller: _amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _FormRow(
-                label: 'Due Date',
-                child: GestureDetector(
-                  onTap: _pickDate,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(_fmtDate,
-                              style: const TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0D47A1))),
-                        ),
-                        const Icon(Icons.calendar_month, color: Colors.red, size: 22),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _FormRow(
-                label: 'Remarks',
-                child: TextField(
-                  controller: _remarksCtrl,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: _save,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0E0E0),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Center(
-                    child: Text('SAVE',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Form-field decoration with a clearly visible border (the default outline was
+/// too faint to see).
+InputDecoration _otcField() {
+  OutlineInputBorder b(Color c, double w) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: c, width: w),
+      );
+  return InputDecoration(
+    isDense: true,
+    filled: true,
+    fillColor: const Color(0xFFF6F8FC),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: b(Colors.grey.shade500, 1),
+    enabledBorder: b(Colors.grey.shade500, 1),
+    focusedBorder: b(const Color(0xFF0D47A1), 1.5),
+  );
+}
 
 PreferredSizeWidget _appBar(BuildContext context, String title) {
   return AppBar(

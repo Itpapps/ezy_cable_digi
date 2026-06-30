@@ -1,4 +1,7 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb, defaultTargetPlatform, TargetPlatform, debugPrint;
+import 'package:flutter/services.dart';
 
 enum Flavor { ezy, magik }
 
@@ -31,17 +34,57 @@ class AppConfig {
   // static const String namespace =
   //     'http://192.168.1.16/testing/ezycabledigi_v2_H8_cloud_live/app/index.php'; // LOCAL (active)
 
-  // Device id sent as `imei`. DEV-ONLY fallback — see server docs/DEV_SETUP.md.
+  // Device id sent as `imei`.
   // Resolution order:
-  //   1) --dart-define=DEVICE_IMEI=…  → used in ANY build (debug or release)
-  //   2) debug / profile builds       → a known-registered DEV device id (local login works)
-  //   3) release builds               → EMPTY — production MUST supply a real device id
-  //      (via --dart-define, or later device_info_plus ANDROID_ID). This prevents a
-  //      release APK from shipping one shared hardcoded imei to all users.
+  //   1) --dart-define=DEVICE_IMEI=…  → optional override for debugging or testing
+  //   2) Android native identifier     → API <= 28: TelephonyManager.getDeviceId()
+  //                                    API >= 29: Settings.Secure.ANDROID_ID
+  //   3) fallback                    → only if native retrieval fails
+  static const MethodChannel _deviceIdChannel = MethodChannel('ezy_cable_digi/device_id');
+  static String _cachedDeviceImei = '';
+
   static String get deviceImei {
-    const overridden = String.fromEnvironment('DEVICE_IMEI', defaultValue: '');
+    if (_cachedDeviceImei.isNotEmpty) return _cachedDeviceImei;
+    final overridden = const String.fromEnvironment('DEVICE_IMEI', defaultValue: '');
     if (overridden.isNotEmpty) return overridden;
-    return kReleaseMode ? '' : 'db569a6f4e066ede';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      debugPrint('AppConfig.deviceImei: native device id not initialized yet');
+    }
+    return overridden;
+  }
+
+  static Future<void> initDeviceImei() async {
+    if (_cachedDeviceImei.isNotEmpty) return;
+
+    final overridden = const String.fromEnvironment('DEVICE_IMEI', defaultValue: '');
+    if (overridden.isNotEmpty) {
+      _cachedDeviceImei = overridden;
+      return;
+    }
+
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      _log('Not running on Android; no native imei available.');
+      return;
+    }
+
+    try {
+      final String? value = await _deviceIdChannel.invokeMethod<String>('getDeviceIdentifier');
+      if (value != null && value.isNotEmpty) {
+        _cachedDeviceImei = value;
+        return;
+      }
+      _log('Android device identifier call returned empty.');
+    } on PlatformException catch (e) {
+      _log('Android device identifier lookup failed: ${e.message}');
+    } catch (e) {
+      _log('Android device identifier lookup failed: $e');
+    }
+  }
+
+  static void _log(String message) {
+    if (!kReleaseMode) {
+      debugPrint('AppConfig.deviceImei: $message');
+    }
   }
 
   AppConfig({

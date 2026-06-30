@@ -2,13 +2,10 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_sizes.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/server_url_resolver.dart';
 import '../../core/services/offline_mode_service.dart';
-import '../offline/offline_dashboard_screen.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -33,13 +30,13 @@ class _SplashScreenState extends State<SplashScreen> {
     final noNetwork = connectivity.contains(ConnectivityResult.none);
     if (!mounted) return;
 
+    // Android parity (SplashScreenActivity): with no network, go to the LOGIN
+    // screen — not straight to the offline dashboard. The login screen disables
+    // the fields, prefills remembered credentials, and applies the 2-day offline
+    // gate when the user presses Login.
     if (noNetwork) {
-      await OfflineModeService.instance.setOfflineMode(true);
-      if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => const OfflineDashboardScreen(),
-        ),
+        MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
       );
       return;
     }
@@ -68,43 +65,21 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMagik = AppConfig.instance.flavor == Flavor.magik;
+    final logoAsset = isMagik
+        ? 'assets/mainlogo.png'
+        : 'assets/ezy_digi_pics.png';
+    final w = MediaQuery.sizeOf(context).width;
+
+    // Android parity (splashscreen.xml): plain white background with the logo
+    // centered and large (match_parent width), no text.
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primary, AppColors.secondary],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Lottie.asset(
-                'assets/Animated Dashboards.json',
-                width: 220,
-                height: 220,
-              ),
-              const SizedBox(height: AppSizes.paddingL),
-              const Text(
-                'Ezy Cable Digi',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSizes.paddingS),
-              const Text(
-                'Smart field app for cable operators',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Image.asset(
+          logoAsset,
+          width: w * 0.6,
+          fit: BoxFit.contain,
         ),
       ),
     );

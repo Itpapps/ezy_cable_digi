@@ -7,11 +7,13 @@ import '../../../core/services/session_service.dart';
 class PendingAmountResult {
   final int statusCode; // 0 = ok
   final String statusMessage;
-  final double pendingAmount; // the live amount owed (= due_amount for mpay)
+  final double pendingAmount; // overall total due (cable + broadcaster) — display only
   final int billingId;        // bill to settle — passed to mpay (verified: from GPA)
+  final double cablePendingAmount;       // STB/cable leg — the STB amount + due_amount for mpay
   final double broadcasterPendingAmount; // broadband pending (0 for STB-only)
   const PendingAmountResult(this.statusCode, this.statusMessage,
-      this.pendingAmount, this.billingId, this.broadcasterPendingAmount);
+      this.pendingAmount, this.billingId, this.cablePendingAmount,
+      this.broadcasterPendingAmount);
 }
 
 /// Get Pending Amount (config key `gpa`).
@@ -45,11 +47,17 @@ class PendingAmountRepository {
         double.tryParse(SoapClient.readField(xml, 'pendingAmount') ?? '') ?? 0.0;
     final billingId =
         int.tryParse(SoapClient.readField(xml, 'billingId') ?? '') ?? 0;
+    // STB/cable leg (Android: cable_pending_amount) — the value Android prefills
+    // into the STB amount box and sends as due_amount. Defaults to the overall
+    // pending when absent so STB-only customers are unaffected.
+    final cablePending = double.tryParse(
+            SoapClient.readField(xml, 'cable_pending_amount') ?? '') ??
+        pending;
     // Broadband pending (Android: broadcaster_pending_amount). 0 for STB-only.
     final broadcasterPending = double.tryParse(
             SoapClient.readField(xml, 'broadcaster_pending_amount') ?? '') ??
         0.0;
     return PendingAmountResult(
-        status, message, pending, billingId, broadcasterPending);
+        status, message, pending, billingId, cablePending, broadcasterPending);
   }
 }

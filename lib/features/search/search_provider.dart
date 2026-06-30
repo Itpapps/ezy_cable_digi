@@ -4,6 +4,7 @@ import '../../core/data/offline_customer.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/offline_mode_service.dart';
+import '../../core/services/session_service.dart';
 import 'data/search_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,50 +21,55 @@ class SearchProvider extends ChangeNotifier {
   String? _error;
 
   // ── Getters ────────────────────────────────────────────────────────────────
-  String         get criteria    => _criteria;
+  // `criteria` is clamped to the available options so the dropdown value is
+  // always valid even when the dealer's allowed set changes.
+  String         get criteria    =>
+      criteriaItems.contains(_criteria) ? _criteria : criteriaItems.first;
   List<Customer> get results     => _results;
   bool           get isLoading   => _isLoading;
   bool           get hasSearched => _hasSearched;
   String?        get error       => _error;
 
-  static const criteriaItems = [
-    'Name',
-    'Alt Customer Id',
-    'Lco Customer Id',
-    'Primary Mobile Number',
-    'Secondary Mobile Number',
-    'CRF Number',
-    'Serial Number',
-    'VC Number',
-    'NickName',
+  // Canonical Android search options: searchType id → dropdown label, in Android's
+  // display order (SearchCustomer_Fragment_Newdesign:148-177).
+  static const List<MapEntry<String, String>> _searchOptions = [
+    MapEntry('1', 'Alt Customer Id'),
+    MapEntry('2', 'Name'),
+    MapEntry('3', 'Primary Mobile Number'),
+    MapEntry('4', 'Lco Customer Id'),
+    MapEntry('5', 'CRF Number'),
+    MapEntry('6', 'Serial Number'),
+    MapEntry('7', 'VC Number'),
+    MapEntry('8', 'NickName'),
+    MapEntry('9', 'Secondary Mobile Number'),
+    MapEntry('16', 'Broadband User Id'),
   ];
 
-  // Criteria → Android `searchType` (from SearchCustomer_Fragment_Newdesign hints).
-  // Confirmed: Name=2, Alt Customer Id=1, Primary Mobile=3, Secondary Mobile=9,
-  // CRF=5, NickName=8. To verify on test: Lco/Serial/VC (the alphanumeric 4/6/7).
+  /// Dropdown options — Android parity: built from the dealer's allowed search
+  /// types (validateLogin `customerAppSearch`, e.g. "1,2,5,6,16"), in Android's
+  /// order. Falls back to all options if the flag is empty (never an empty list).
+  List<String> get criteriaItems {
+    final allowed = SessionService.instance.customerAppSearch
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    final items = _searchOptions
+        .where((o) => allowed.contains(o.key))
+        .map((o) => o.value)
+        .toList();
+    return items.isEmpty
+        ? _searchOptions.map((o) => o.value).toList()
+        : items;
+  }
+
+  /// Selected label → Android `searchType` id. Single source of truth ([_searchOptions]).
   int _searchType() {
-    switch (_criteria) {
-      case 'Alt Customer Id':
-        return 1;
-      case 'Name':
-        return 2;
-      case 'Primary Mobile Number':
-        return 3;
-      case 'Lco Customer Id':
-        return 4; // verify
-      case 'CRF Number':
-        return 5;
-      case 'Serial Number':
-        return 6; // verify
-      case 'VC Number':
-        return 7; // verify
-      case 'NickName':
-        return 8;
-      case 'Secondary Mobile Number':
-        return 9;
-      default:
-        return 2;
+    final sel = criteria; // clamped to the available options
+    for (final o in _searchOptions) {
+      if (o.value == sel) return int.parse(o.key);
     }
+    return 2; // default Name
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -131,7 +137,7 @@ class SearchProvider extends ChangeNotifier {
     final db = DatabaseHelper();
     try {
       List<OfflineCustomer> results;
-      switch (_criteria) {
+      switch (criteria) {
         case 'Name':
         case 'NickName':
           results = await db.searchOfflineByName(q);

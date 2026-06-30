@@ -122,6 +122,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
+      // ↓ Shrinks the body when the keyboard appears so nothing overflows.
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D47A1),
         elevation: 0,
@@ -138,91 +140,97 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
       ),
       body: Column(
         children: [
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  AppStrings.of(context, 'collection_schedule'),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+          // ↓ SingleChildScrollView lets the filter panel scroll up when the
+          //   keyboard opens, preventing the "bottom overflowed" error on any
+          //   screen size.
+          SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    AppStrings.of(context, 'collection_schedule'),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _dateField(AppStrings.of(context, 'start_date'),
-                          _fmt(_startDate), _pickStart),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _dateField(AppStrings.of(context, 'end_date'),
-                          _fmt(_endDate), _pickEnd),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: _employeeDropdown()),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _textField(
-                          AppStrings.of(context, 'customer_name'),
-                          _customerNameCtrl),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _textField(
-                          AppStrings.of(context, 'account_number'),
-                          _accountCtrl),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(child: _textField('CRF Number', _crfCtrl)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                _statusDropdown(),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : _search,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1565C0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(AppStrings.of(context, 'search'),
-                            style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _dateField(AppStrings.of(context, 'start_date'),
+                            _fmt(_startDate), _pickStart),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : _clear,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(AppStrings.of(context, 'clear'),
-                            style: const TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _dateField(AppStrings.of(context, 'end_date'),
+                            _fmt(_endDate), _pickEnd),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: _employeeDropdown()),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _textField(
+                            AppStrings.of(context, 'customer_name'),
+                            _customerNameCtrl),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _textField(
+                            AppStrings.of(context, 'account_number'),
+                            _accountCtrl),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: _textField('CRF Number', _crfCtrl)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _statusDropdown(),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _loading ? null : _search,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1565C0),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(AppStrings.of(context, 'search'),
+                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _loading ? null : _clear,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(AppStrings.of(context, 'clear'),
+                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           Container(

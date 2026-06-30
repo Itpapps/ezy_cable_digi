@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
 import '../../core/database/database_helper.dart';
 
 class PaymentConfirmationDialog extends StatefulWidget {
   final Customer customer;
-  final double amount;
+  final double amount;          // STB / cable leg
+  final double broadbandAmount; // broadband leg (0 = none)
   final String paymentMethod;
 
   const PaymentConfirmationDialog({
     super.key,
     required this.customer,
     required this.amount,
+    this.broadbandAmount = 0,
     required this.paymentMethod,
   });
 
@@ -88,9 +88,9 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               
               const SizedBox(height: 20),
 
-              // ── Confirmation Prompt ──
+              // ── Confirmation Prompt (Android showDialog :2823-2834) ──
               Text(
-                'Are you sure you want to continue Digital TV\nPayment ₹${widget.amount.toStringAsFixed(1)}?',
+                _confirmationMessage(),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
@@ -145,6 +145,23 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
         ),
       ),
     );
+  }
+
+  /// Mirrors Android `CustomerMgmt_MakePayment_Fragment.showDialog` :2823-2834.
+  String _confirmationMessage() {
+    final stb = widget.amount;
+    final bb = widget.broadbandAmount;
+    String money(double v) => '₹${v.toStringAsFixed(1)}';
+    if (bb > 0) {
+      // BroadBand-only (customer_type == '1') vs combined (STB & BroadBand).
+      if (widget.customer.customerType.trim() == '1') {
+        return 'Are you sure you want to continue BroadBand Payment ${money(bb)}?';
+      }
+      return 'Are you sure you want to continue Digital TV Payment ${money(stb)}\n'
+          'BroadBand Payment ${money(bb)}\n'
+          'Total Paid Amount ${money(stb + bb)}?';
+    }
+    return 'Are you sure you want to continue Digital TV\nPayment ${money(stb)}?';
   }
 
   Widget _infoRow(String label, String value) {

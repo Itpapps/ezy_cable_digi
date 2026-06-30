@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax/iconsax.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/real_bluetooth_service.dart';
+import '../../core/services/settings_store.dart';
 
 class BluetoothDevicesScreen extends StatefulWidget {
   const BluetoothDevicesScreen({super.key});
@@ -25,7 +25,22 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
   @override
   void initState() {
     super.initState();
+    // Load the saved default printer so the tiles show the current default.
+    SettingsStore.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadPairedDevices();
+  }
+
+  Future<void> _setDefault(BluetoothInfo d) async {
+    await SettingsStore.instance.savePrinter(d.macAdress, d.name);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+          'Saved "${d.name.isEmpty ? d.macAdress : d.name}" as default printer'),
+      backgroundColor: Colors.green,
+    ));
   }
 
   Future<void> _loadPairedDevices() async {
@@ -98,7 +113,9 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
           ..._pairedDevices.map(
             (d) => _DeviceTile(
               device: d,
-              service: _service, // ✅ ADDED
+              service: _service,
+              savedMac: SettingsStore.instance.printerMac,
+              onSetDefault: _setDefault,
             ),
           ),
 
@@ -112,7 +129,9 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
           ..._otherDevices.map(
             (d) => _DeviceTile(
               device: d,
-              service: _service, // ✅ ADDED
+              service: _service,
+              savedMac: SettingsStore.instance.printerMac,
+              onSetDefault: _setDefault,
             ),
           ),
         ],
@@ -146,10 +165,14 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
 class _DeviceTile extends StatelessWidget {
   final BluetoothInfo device;
   final RealBluetoothService service;
+  final String savedMac;
+  final ValueChanged<BluetoothInfo> onSetDefault;
 
   const _DeviceTile({
     required this.device,
     required this.service,
+    required this.savedMac,
+    required this.onSetDefault,
   });
 
   @override
@@ -158,9 +181,9 @@ class _DeviceTile extends StatelessWidget {
 
     return InkWell(
       onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
         final success = await service.connectPrinter(device.macAdress);
-
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               success ? "Connected to $name" : "Connection Failed",
@@ -207,6 +230,21 @@ class _DeviceTile extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+                // ── Set as default printer (Saved Printer feature) — additive ──
+                IconButton(
+                  tooltip: device.macAdress == savedMac
+                      ? 'Default printer'
+                      : 'Set as default',
+                  icon: Icon(
+                    device.macAdress == savedMac
+                        ? Icons.star
+                        : Icons.star_border,
+                    color: device.macAdress == savedMac
+                        ? Colors.amber.shade700
+                        : Colors.grey,
+                  ),
+                  onPressed: () => onSetDefault(device),
                 ),
               ],
             ),

@@ -37,6 +37,13 @@ class SessionService {
   int restrictPartialPayment = 0;
   // Server current_date for discount/penalty date range checks.
   String serverCurrentDate = '';
+  // use_crf flag from validateLogin (Android LoginActivity.use_caf). 1 = this
+  // dealer uses CRF, so the CRF row is shown in search results / customer details.
+  int useCaf = 0;
+  // customerAppSearch from validateLogin (Android LoginActivity.customerAppSearch):
+  // comma-separated allowed searchType ids (e.g. "1,2,5,6,16"). Drives which
+  // options appear in the Search Customer dropdown.
+  String customerAppSearch = '';
 
   // box_wise_service_extension from the validateLogin response ("1" = enabled,
   // default false). Gates the Package Hub's "Service Extension" tile (csews).
@@ -68,6 +75,8 @@ class SessionService {
     int offlineStatus = 0,
     int restrictPartialPayment = 0,
     String serverCurrentDate = '',
+    int useCaf = 0,
+    String customerAppSearch = '',
     String username = '',
     String employeeName = '',
     String lastLogin = '',
@@ -85,6 +94,8 @@ class SessionService {
     this.offlineStatus = offlineStatus;
     this.restrictPartialPayment = restrictPartialPayment;
     this.serverCurrentDate = serverCurrentDate;
+    this.useCaf = useCaf;
+    this.customerAppSearch = customerAppSearch;
     this.username = username;
     this.employeeName = employeeName;
     this.lastLogin = lastLogin;
@@ -122,6 +133,8 @@ class SessionService {
     offlineStatus = 0;
     restrictPartialPayment = 0;
     serverCurrentDate = '';
+    useCaf = 0;
+    customerAppSearch = '';
     username = '';
     employeeName = '';
     lastLogin = '';

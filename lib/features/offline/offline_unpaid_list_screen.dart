@@ -6,6 +6,7 @@ import '../../core/constants/app_sizes.dart';
 import '../../core/data/offline_customer.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_data_service.dart';
+import 'offline_payment_flow.dart';
 import 'widgets/offline_payment_dialog.dart';
 
 class OfflineUnpaidListScreen extends StatefulWidget {
@@ -19,8 +20,32 @@ class OfflineUnpaidListScreen extends StatefulWidget {
 class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   final _db = DatabaseHelper();
   bool _loading = true;
-  bool _onlyCurrentMonth = false;
+  // Android tri-state: null = all (initial), true = current month, false =
+  // non-current month (Offline_unPaidCustomer_Fragment :120 / :300-306).
+  bool? _monthFilter;
+  // Full unpaid set (flag=0), loaded ONCE — Android keeps `custList` in memory
+  // and filters it synchronously on the checkbox toggle (:294-344). [_filtered]
+  // is the in-memory month-filtered view shown in the list.
+  List<OfflineCustomer> _all = [];
   List<OfflineCustomer> _filtered = [];
+
+  // Client-side pagination — Android parity (Offline_unPaidCustomer_Fragment
+  // :312-343): 25 per page with Prev/Next; the page bar shows only when the
+  // filtered list exceeds one page. All rows are already in memory (offline).
+  static const int _pageSize = 25;
+  int _page = 0; // Android `page_position`
+
+  int get _totalPages =>
+      _filtered.isEmpty ? 1 : ((_filtered.length + _pageSize - 1) ~/ _pageSize);
+
+  List<OfflineCustomer> get _pageItems {
+    final start = _page * _pageSize;
+    if (start >= _filtered.length) return const [];
+    final end = (start + _pageSize) < _filtered.length
+        ? start + _pageSize
+        : _filtered.length;
+    return _filtered.sublist(start, end);
+  }
 
   @override
   void initState() {
@@ -30,18 +55,60 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await _db.getUnpaidOfflineCustomers(
-      currentMonthOnly: _onlyCurrentMonth,
-    );
+    // Load the FULL unpaid list once; the month filter is applied in memory.
+    final all = await _db.getUnpaidOfflineCustomers();
+    if (!mounted) return;
     setState(() {
-      _filtered = list;
+      _all = all;
+      _filtered = _computeFiltered();
+      _page = 0;
       _loading = false;
     });
   }
 
+  /// Android parity (onCheckedChanged :298-307): filter the in-memory list.
+  /// null → all · true → current month (payment_flag "000") · false → non-current.
+  List<OfflineCustomer> _computeFiltered() {
+    if (_monthFilter == true) {
+      return _all.where((c) => c.paymentFlag.trim() == '000').toList();
+    }
+    if (_monthFilter == false) {
+      return _all.where((c) => c.paymentFlag.trim() != '000').toList();
+    }
+    return List<OfflineCustomer>.from(_all);
+  }
+
+  /// Synchronous filter + count update from the SAME list, in one setState —
+  /// mirrors Android's onCheckedChanged. No DB round-trip, so count and list
+  /// can never desync and there is no async race.
   void _applyMonthFilter(bool v) {
-    setState(() => _onlyCurrentMonth = v);
-    _load();
+    setState(() {
+      _monthFilter = v;
+      _filtered = _computeFiltered();
+      _page = 0;
+    });
+  }
+
+  /// Prev page — Android prevBtn (:348-368): at page 1 it just notifies.
+  void _prevPage() {
+    if (_page == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Page-1, Press 'Next' ")),
+      );
+      return;
+    }
+    setState(() => _page--);
+  }
+
+  /// Next page — Android nextBtn (:370-393): at the last page it just notifies.
+  void _nextPage() {
+    if (_page >= _totalPages - 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No data available.')),
+      );
+      return;
+    }
+    setState(() => _page++);
   }
 
   Future<void> _onPayCustomer(OfflineCustomer customer) async {
@@ -67,7 +134,7 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
     if (result == null || !mounted) return;
 
     try {
-      await OfflineDataService.instance.commitPayment(
+      final updated = await OfflineDataService.instance.commitPayment(
         customer: customer,
         amount: result.amount,
         payMode: result.method == 'cash' ? 'R' : 'B',
@@ -79,13 +146,11 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
         discountPenaltyFlag: result.discountPenaltyFlag,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Payment of ₹${result.amount.toStringAsFixed(2)} recorded for ${customer.name}'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      // Android parity: after the offline payment, show the printable receipt
+      // (offline receipt number + bill/due/out), then refresh the list.
+      await showOfflineReceipt(context, updated,
+          paid: result.amount, sendSms: result.sendSms);
+      if (!mounted) return;
       await _load();
     } on OfflineDataException catch (e) {
       if (!mounted) return;
@@ -148,9 +213,9 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
               ),
               const Spacer(),
-              const Text(
-                'Page - 1/1',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+              Text(
+                'Page - ${_page + 1}/$_totalPages',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
           ),
@@ -161,7 +226,7 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Checkbox(
-                value: _onlyCurrentMonth,
+                value: _monthFilter ?? false,
                 onChanged: (v) => _applyMonthFilter(v ?? false),
                 activeColor: Colors.white,
                 checkColor: AppColors.primary,
@@ -176,9 +241,9 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(AppSizes.paddingM),
-            itemCount: _filtered.length,
+            itemCount: _pageItems.length,
             itemBuilder: (context, i) {
-              final c = _filtered[i];
+              final c = _pageItems[i];
               return _OfflineCustomerPayCard(
                 customer: c,
                 onProceedPayment: () => _onPayCustomer(c),
@@ -186,6 +251,36 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
             },
           ),
         ),
+        // Android parity (:312-343): Prev/Next page bar, shown only when the
+        // filtered list spans more than one page (25 rows).
+        if (_filtered.length > _pageSize)
+          Container(
+            color: AppColors.primary,
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: _prevPage,
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  icon: const Icon(Icons.chevron_left),
+                  label: const Text('Prev'),
+                ),
+                Text(
+                  'Page - ${_page + 1} / $_totalPages',
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+                TextButton(
+                  onPressed: _nextPage,
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [Text('Next'), Icon(Icons.chevron_right)],
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

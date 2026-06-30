@@ -5,6 +5,7 @@ import 'package:ezi_cable_digi/core/network/rest_client.dart';
 import 'package:ezi_cable_digi/core/network/server_url_resolver.dart';
 import 'package:ezi_cable_digi/core/network/soap_client.dart';
 import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
+import 'package:ezi_cable_digi/core/services/offline_mode_service.dart';
 import 'package:ezi_cable_digi/core/services/secure_storage_service.dart';
 import 'package:ezi_cable_digi/core/services/session_service.dart';
 
@@ -15,6 +16,11 @@ class AuthService {
 
   static const String _authTokenKey = 'auth_token';
   static const String _rememberMeKey = 'remember_me';
+  // Remember-Me credentials — Android stores these plaintext in SharedPreferences
+  // ("vidslogin": username/password). Flutter keeps the SAME behaviour (prefill
+  // on next launch) but in flutter_secure_storage (encrypted) — no plaintext.
+  static const String _rememberUserKey = 'remember_username';
+  static const String _rememberPassKey = 'remember_password';
 
   static String get _imei => AppConfig.deviceImei;
 
@@ -25,11 +31,20 @@ class AuthService {
   Future<LoginResult> login({
     required String username,
     required String password,
+    bool rememberMe = false,
   }) async {
     final url = ServerUrlResolver.instance.loginServerUrl; // NAMESPACE + "/wsController" (or BMS override)
     final ns = ServerUrlResolver.instance.namespace;
     if (url.isEmpty || ns.isEmpty) {
       return const LoginResult(false, 'Server not ready. Please restart the app.');
+    }
+
+    // Guard: never send an empty IMEI. If the native device id wasn't cached
+    // yet (race / earlier failure), (re)initialise it before login.
+    var imei = AppConfig.deviceImei;
+    if (imei.isEmpty) {
+      await AppConfig.initDeviceImei();
+      imei = AppConfig.deviceImei;
     }
 
     try {
@@ -43,7 +58,7 @@ class AuthService {
         fields: {
           'UserName': username,
           'PassWord': password,
-          'imei': _imei,
+          'imei': imei,
           // Android's `login` task leaves these at the int default 0
           // (LoginActivity.java:492-497) — production log confirms 0/0.
           'appTypeId': 0,
@@ -87,6 +102,14 @@ class AuthService {
           0;
       final serverDate =
           (SoapClient.readField(xml, 'current_date') ?? '').trim();
+      // use_crf (Android LoginActivity.use_caf): 1 = dealer uses CRF → the CRF
+      // row is shown in search results / customer details.
+      final useCaf =
+          int.tryParse(SoapClient.readField(xml, 'use_crf') ?? '') ?? 0;
+      // customerAppSearch (Android LoginActivity.customerAppSearch): comma-separated
+      // allowed searchType ids → drives the Search Customer dropdown options.
+      final customerAppSearch =
+          (SoapClient.readField(xml, 'customerAppSearch') ?? '').trim();
       final employeeName =
           (SoapClient.readField(xml, 'employeeName') ?? '').trim();
       final lastLogin =
@@ -107,6 +130,8 @@ class AuthService {
         offlineStatus: offlineStatus,
         restrictPartialPayment: restrictPartial,
         serverCurrentDate: serverDate,
+        useCaf: useCaf,
+        customerAppSearch: customerAppSearch,
         username: username,
         employeeName: employeeName,
         lastLogin: lastLogin,
@@ -116,6 +141,19 @@ class AuthService {
       // Role permissions (getRolePermissions) — needed for the Package Hub gating.
       // Loaded once here; failures keep safe (deny) defaults and never block login.
       await _fetchRolePermissions();
+
+      // Android parity (LoginActivity.java:791-798): on a successful ONLINE login,
+      // save credentials if Remember-Me is checked, else clear them. Stored in
+      // secure storage (not plaintext prefs) — same behaviour, no security downgrade.
+      await _persistRememberMe(
+        username: username,
+        password: password,
+        rememberMe: rememberMe,
+      );
+
+      // Android parity (LoginActivity.java:812): persist the server `current_date`
+      // for the offline-entry 2-day gate (survives process death).
+      await OfflineModeService.instance.saveLastOnlineLoginDate(serverDate);
 
       return LoginResult(true, message);
     } on SoapException catch (error, stackTrace) {
@@ -191,10 +229,38 @@ class AuthService {
     return value == 'true';
   }
 
+  /// Save (Remember-Me on) or clear (off) the stored credentials.
+  /// Mirrors Android: checked → save username+password; unchecked → clear both.
+  Future<void> _persistRememberMe({
+    required String username,
+    required String password,
+    required bool rememberMe,
+  }) async {
+    if (rememberMe) {
+      await SecureStorageService.instance.write(_rememberMeKey, 'true');
+      await SecureStorageService.instance.write(_rememberUserKey, username);
+      await SecureStorageService.instance.write(_rememberPassKey, password);
+    } else {
+      await SecureStorageService.instance.delete(_rememberMeKey);
+      await SecureStorageService.instance.delete(_rememberUserKey);
+      await SecureStorageService.instance.delete(_rememberPassKey);
+    }
+  }
+
+  /// Remembered credentials for prefilling the login fields (Android restores
+  /// these into the EditTexts on every LoginActivity open). Empty when none saved.
+  Future<({String username, String password})> loadRememberedCredentials() async {
+    final u = await SecureStorageService.instance.read(_rememberUserKey) ?? '';
+    final p = await SecureStorageService.instance.read(_rememberPassKey) ?? '';
+    return (username: u, password: p);
+  }
+
+  /// Logout — Android parity (MainActivity.java:238-240): clear only the active
+  /// session. Remembered credentials, the last-online-login date, and the offline
+  /// database are intentionally PRESERVED (Android does not clear them on logout).
   Future<void> logout() async {
     SessionService.instance.clear();
     await SecureStorageService.instance.delete(_authTokenKey);
-    await SecureStorageService.instance.delete(_rememberMeKey);
   }
 }
 

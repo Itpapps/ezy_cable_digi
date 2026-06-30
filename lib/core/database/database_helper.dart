@@ -318,186 +318,6 @@ class DatabaseHelper {
     return null;
   }
 
-  Future<void> insertDemoData() async {
-    final db = await database;
-    final existing = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM customers'),
-    );
-    if ((existing ?? 0) > 0) return;
-    
-    final List<Customer> demoCustomers = [
-      Customer(
-        altCustomerId: 'ALT001',
-        name: 'Hrithik',
-        primaryMobileNumber: '9876543210',
-        lcoCustomerId: 'Hrithik_23',
-        crfNumber: 'CRF001',
-        serialNumber: 'SN001',
-        vcNumber: 'DR12345705',
-        nickName: 'Hrithik',
-        secondaryMobileNumber: '9876543211',
-        pendingAmount: '₹0',
-        lastPaidDate: '18-02-2026',
-        customerType: 'STB',
-        address: 'Hyde',
-        groupName: 'DEFAULT',
-        areaName: 'NA',
-        totalDue: '₹24770',
-        amountPayable: '₹0',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345705',
-        latitude: 17.445155,
-        longitude: 78.383269,
-      ),
-      Customer(
-        altCustomerId: 'ALT002',
-        name: 'Bharathi',
-        primaryMobileNumber: '9876543220',
-        lcoCustomerId: 'Bharathi_22',
-        crfNumber: 'CRF002',
-        serialNumber: 'SN002',
-        vcNumber: 'DR12345706',
-        nickName: 'Bharu',
-        secondaryMobileNumber: '9876543221',
-        pendingAmount: '₹500',
-        lastPaidDate: '15-02-2026',
-        customerType: 'STB',
-        address: 'Chennai',
-        groupName: 'DEFAULT',
-        areaName: 'Area1',
-        totalDue: '₹15000',
-        amountPayable: '₹500',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345706',
-        latitude: 17.445420,
-        longitude: 78.383400,
-      ),
-      Customer(
-        altCustomerId: 'ALT002',
-        name: 'Bala Subramanyam',
-        primaryMobileNumber: '9876543220',
-        lcoCustomerId: 'Bala_09',
-        crfNumber: 'CRF002',
-        serialNumber: 'SN002',
-        vcNumber: 'DR12345706',
-        nickName: 'Bala_kalyan',
-        secondaryMobileNumber: '9876543221',
-        pendingAmount: '₹500',
-        lastPaidDate: '15-02-2026',
-        customerType: 'STB',
-        address: 'Hyderabad',
-        groupName: 'DEFAULT',
-        areaName: 'Silparaman',
-        totalDue: '₹15000',
-        amountPayable: '₹500',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345706',
-        latitude: 17.445420,
-        longitude: 78.383400,
-      ),
-      Customer(
-        altCustomerId: 'ALT002',
-        name: 'Kartik Ambati',
-        primaryMobileNumber: '9876543220',
-        lcoCustomerId: 'Kartik_cool_22',
-        crfNumber: 'CRF002',
-        serialNumber: 'SN002',
-        vcNumber: 'DR12345706',
-        nickName: 'Kartik',
-        secondaryMobileNumber: '9876543221',
-        pendingAmount: '₹500',
-        lastPaidDate: '15-02-2026',
-        customerType: 'STB',
-        address: 'Chennai',
-        groupName: 'DEFAULT',
-        areaName: 'Hi-Tech City',
-        totalDue: '₹15000',
-        amountPayable: '₹500',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345706',
-        latitude: 17.445420,
-        longitude: 78.383400,
-      ),
-      Customer(
-        altCustomerId: 'ALT003',
-        name: 'Chandru',
-        primaryMobileNumber: '9876543230',
-        lcoCustomerId: 'Chandru_23',
-        crfNumber: 'CRF003',
-        serialNumber: 'SN003',
-        vcNumber: 'DR12345707',
-        nickName: 'Chan',
-        secondaryMobileNumber: '9876543231',
-        pendingAmount: '₹1000',
-        lastPaidDate: '10-02-2026',
-        customerType: 'STB',
-        address: 'Bangalore',
-        groupName: 'DEFAULT',
-        areaName: 'Area2',
-        totalDue: '₹20000',
-        amountPayable: '₹1000',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345707',
-        latitude: 17.444950,
-        longitude: 78.382900,
-      ),
-      Customer(
-        altCustomerId: 'ALT004',
-        name: 'Deepak',
-        primaryMobileNumber: '9876543240',
-        lcoCustomerId: 'Deepak_24',
-        crfNumber: 'CRF004',
-        serialNumber: 'SN004',
-        vcNumber: 'DR12345708',
-        nickName: 'Deep',
-        secondaryMobileNumber: '9876543241',
-        pendingAmount: '₹0',
-        lastPaidDate: '20-02-2026',
-        customerType: 'STB',
-        address: 'Hyderabad',
-        groupName: 'DEFAULT',
-        areaName: 'Area3',
-        totalDue: '₹10000',
-        amountPayable: '₹0',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345708',
-        latitude: 17.445650,
-        longitude: 78.384000,
-      ),
-      Customer(
-        altCustomerId: 'ALT005',
-        name: 'Eswar',
-        primaryMobileNumber: '9876543250',
-        lcoCustomerId: 'Eswar_25',
-        crfNumber: 'CRF005',
-        serialNumber: 'SN005',
-        vcNumber: 'DR12345709',
-        nickName: 'Eswar',
-        secondaryMobileNumber: '9876543251',
-        pendingAmount: '₹750',
-        lastPaidDate: '12-02-2026',
-        customerType: 'STB',
-        address: 'Mumbai',
-        groupName: 'DEFAULT',
-        areaName: 'Area4',
-        totalDue: '₹30000',
-        amountPayable: '₹750',
-        billMonth: '01-07-2023',
-        boxNumber: 'DR12345709',
-        latitude: 17.444600,
-        longitude: 78.383700,
-      ),
-    ];
-
-    for (final customer in demoCustomers) {
-      await db.insert(
-        'customers',
-        customer.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-  }
-
   Future<Customer?> getCustomerByLcoId(String lcoCustomerId) async {
     final db = await database;
     final maps = await db.query(
@@ -911,13 +731,19 @@ Future<List<Customer>> getFilteredCustomersPaginated({
   }
 
   // ── GET unpaid offline customers (flag=0) ──
+  // Android `Offline_unPaidCustomer_Fragment` "Only Current Month" tri-state:
+  //   null  → all unpaid (initial load, :120-126)
+  //   true  → current month  (payment_flag == "000")        (checkbox checked)
+  //   false → non-current month (payment_flag != "000")     (checkbox unchecked, :300-306)
   Future<List<OfflineCustomer>> getUnpaidOfflineCustomers({
-    bool currentMonthOnly = false,
+    bool? currentMonthOnly,
   }) async {
     final db = await database;
     String where = 'flag = 0';
-    if (currentMonthOnly) {
+    if (currentMonthOnly == true) {
       where += " AND paymentFlag = '000'";
+    } else if (currentMonthOnly == false) {
+      where += " AND (paymentFlag IS NULL OR paymentFlag != '000')";
     }
     final maps = await db.query(_tblOfflineCustomers,
         where: where, orderBy: 'name ASC');

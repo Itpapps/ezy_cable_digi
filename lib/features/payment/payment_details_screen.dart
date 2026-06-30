@@ -115,7 +115,7 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
         ('Mobile Number',      widget.customer.primaryMobileNumber),
         ('Total Due',          widget.customer.totalDue),
         ('Amount Payable(STB)', widget.customer.amountPayable),
-        ('Customer Type',      widget.customer.customerType),
+        ('Customer Type',      widget.customer.customerTypeLabel),
         ('Last Paid Date',     widget.customer.lastPaidDate),
         ('Bill Month',         widget.customer.billMonth),
       ],

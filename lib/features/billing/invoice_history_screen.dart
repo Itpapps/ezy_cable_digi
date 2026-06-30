@@ -1,60 +1,41 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
+import 'data/invoice_history_repository.dart';
 
-// Placeholder invoice model
-class _Invoice {
-  final String invoiceNumber;
-  final String invoiceDate;
-  final String dueDate;
-  final String billNumber;
-  final String billAmount;
-  final String taxAmount;
-  final String pendingAmount;
-  final String packageName;
-  final String totalAmount;
-
-  const _Invoice({
-    required this.invoiceNumber,
-    required this.invoiceDate,
-    required this.dueDate,
-    required this.billNumber,
-    required this.billAmount,
-    required this.taxAmount,
-    required this.pendingAmount,
-    required this.packageName,
-    required this.totalAmount,
-  });
-}
-
-class InvoiceHistoryScreen extends StatelessWidget {
+/// Invoice History — real `InvoiceService` SOAP (Android `InvoiceHistory`).
+/// Sends the system customer id (`altCustomerId`, = Android `custId`/`altCustId`).
+class InvoiceHistoryScreen extends StatefulWidget {
   final Customer customer;
   const InvoiceHistoryScreen({super.key, required this.customer});
 
-  // Placeholder invoices
-  List<_Invoice> get _invoices => [
-        const _Invoice(
-          invoiceNumber: '6476563',
-          invoiceDate: '2023-07-01',
-          dueDate: '2023-07-02',
-          billNumber: '51F8B20230701116776',
-          billAmount: '₹15266',
-          taxAmount: '₹2765',
-          pendingAmount: '₹6740',
-          packageName: 'abcd - Addon ,Bill Generation34 - Addon ,laxmi cable - Addon',
-          totalAmount: '₹24770',
-        ),
-        const _Invoice(
-          invoiceNumber: '6391989',
-          invoiceDate: '2023-06-01',
-          dueDate: '2023-06-01',
-          billNumber: '5DAB920230601116776',
-          billAmount: '₹110355',
-          taxAmount: '₹34653',
-          pendingAmount: '₹75573',
-          packageName: 'abcd - Addon ,Bill Generation34 - Addon',
-          totalAmount: '₹110355',
-        ),
-      ];
+  @override
+  State<InvoiceHistoryScreen> createState() => _InvoiceHistoryScreenState();
+}
+
+class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
+  bool _loading = true;
+  String _message = '';
+  List<InvoiceRecord> _invoices = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    // System customer id = Android `custId`/`altCustId` = JSON `customer_id`
+    // (Flutter `lcoCustomerId`). `alt_cust_id` is only a display number.
+    final r = await InvoiceHistoryRepository.instance
+        .fetch(widget.customer.lcoCustomerId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _invoices = r.invoices;
+      _message = r.statusCode == 0 ? '' : r.statusMessage;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,15 +54,32 @@ class InvoiceHistoryScreen extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-              itemCount: _invoices.length,
-              itemBuilder: (_, i) => _InvoiceCard(invoice: _invoices[i]),
-            ),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_invoices.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _message.isEmpty ? 'No invoices found' : _message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      itemCount: _invoices.length,
+      itemBuilder: (_, i) => _InvoiceCard(invoice: _invoices[i]),
     );
   }
 
@@ -108,7 +106,7 @@ class InvoiceHistoryScreen extends StatelessWidget {
 }
 
 class _InvoiceCard extends StatelessWidget {
-  final _Invoice invoice;
+  final InvoiceRecord invoice;
   const _InvoiceCard({required this.invoice});
 
   @override
@@ -122,7 +120,7 @@ class _InvoiceCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Invoice number header row (grey background like photo)
+          // Invoice number header row (grey background)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: const BoxDecoration(
@@ -137,7 +135,7 @@ class _InvoiceCard extends StatelessWidget {
                 const Text('Invoice Number',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF0D47A1))),
                 const Spacer(),
-                Text(invoice.invoiceNumber,
+                Text(invoice.billingId,
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1B3A7A))),
               ],
             ),
@@ -146,42 +144,14 @@ class _InvoiceCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             child: Column(
               children: [
-                _row('Invoice Date', invoice.invoiceDate),
+                _row('Invoice Date', invoice.billDate),
                 _row('Due Date', invoice.dueDate),
-                _row('Bill Number', invoice.billNumber),
-                _row('Bill Amount', invoice.billAmount),
-                _row('Tax Amount', invoice.taxAmount),
-                _row('Pending Amount', invoice.pendingAmount),
+                _row('Bill Number', invoice.billNo),
+                _row('Bill Amount', '₹${invoice.billAmount}'),
+                _row('Tax Amount', '₹${invoice.taxAmount}'),
+                _row('Pending Amount', '₹${invoice.pendingAmount}'),
                 _row('Package Name', invoice.packageName),
-                // Total amount row with print + share icons
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 120,
-                        child: Text('Total Amount',
-                            style: TextStyle(fontSize: 13, color: Color(0xFF5B7BAE))),
-                      ),
-                      Expanded(
-                        child: Text(invoice.totalAmount,
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0D47A1))),
-                      ),
-                      const Icon(Icons.print, color: Colors.red, size: 22),
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1565C0),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.share, color: Colors.white, size: 16),
-                      ),
-                    ],
-                  ),
-                ),
+                _row('Total Amount', '₹${invoice.totalAmount}', isTotal: true),
               ],
             ),
           ),
@@ -190,7 +160,7 @@ class _InvoiceCard extends StatelessWidget {
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {bool isTotal = false}) {
     return Column(
       children: [
         Padding(
@@ -201,7 +171,10 @@ class _InvoiceCard extends StatelessWidget {
               SizedBox(
                 width: 120,
                 child: Text(label,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF5B7BAE))),
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: isTotal ? const Color(0xFF0D47A1) : const Color(0xFF5B7BAE),
+                        fontWeight: isTotal ? FontWeight.w800 : FontWeight.w400)),
               ),
               Expanded(
                 child: Text(value,

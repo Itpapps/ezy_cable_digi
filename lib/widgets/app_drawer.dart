@@ -3,9 +3,9 @@ import 'package:ezi_cable_digi/core/services/theme_service.dart';
 import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
-import 'package:ezi_cable_digi/features/reports/search_collections_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
+import '../core/services/auth_service.dart';
 import '../core/services/session_service.dart';
 import '../core/constants/app_colors.dart';
 import '../core/services/offline_mode_service.dart';
@@ -14,11 +14,13 @@ import '../core/widgets/premium_dialog.dart';
 import '../features/auth/login_screen.dart';
 import '../features/profile/user_profile_screen.dart';
 import '../features/settings/printer_settings_screen.dart';
+import '../core/config/app_config.dart';
 import '../features/search/search_customer_screen.dart';
 import '../features/customers/nearest_customers_screen.dart';
 import '../features/customers/customer_list_screen.dart';
 import '../features/collections/collection_schedule_screen.dart';
 import '../features/employee_track/employee_track_screen.dart';
+import '../features/reports/pay_later_report_screen.dart';
 import '../features/offline/download_records_screen.dart';
 import '../features/offline/static_content_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -347,8 +349,12 @@ class AppDrawer extends StatelessWidget {
           children: [
             // ── Premium Header ────────────────────────────────────────────
             _PremiumDrawerHeader(
-              onLogout: () {
-                OfflineModeService.instance.setOfflineMode(false);
+              onLogout: () async {
+                // Android parity: clear only the active session. Remembered
+                // credentials and the offline database are preserved.
+                await AuthService.instance.logout();
+                await OfflineModeService.instance.setOfflineMode(false);
+                if (!context.mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
                   (route) => false,
@@ -768,7 +774,9 @@ class _PremiumDrawerHeader extends StatelessWidget {
                           ),
                         ),
                         child: Image.asset(
-                          'assets/ezy_digi_pics.png',
+                          AppConfig.instance.flavor == Flavor.magik
+                              ? 'assets/mainlogo.png'
+                              : 'assets/ezy_digi_pics.png',
                           height: 28,
                           fit: BoxFit.contain,
                         ),
@@ -992,7 +1000,7 @@ class _DrawerItem extends StatelessWidget {
                         Navigator.push(
                           navCtx,
                           MaterialPageRoute(
-                            builder: (_) => const SearchCollectionsScreen(),
+                            builder: (_) => const EmployeeTrackScreen(),
                           ),
                         );
                       },
@@ -1016,7 +1024,19 @@ class _DrawerItem extends StatelessWidget {
                         Navigator.push(
                           navCtx,
                           MaterialPageRoute(
-                            builder: (_) => const SearchCollectionsScreen(),
+                            builder: (_) => const EmployeeTrackScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Pay Later'),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          navCtx,
+                          MaterialPageRoute(
+                            builder: (_) => const PayLaterReportScreen(),
                           ),
                         );
                       },

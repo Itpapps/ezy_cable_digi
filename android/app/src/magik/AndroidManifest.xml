@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Magik flavor: use the full-bleed mainlogo as the launcher icon, exactly like
+     the Android app (android:icon="@drawable/mainlogo") so it fills the tile
+     (no white squircle). Only overrides the icon — the rest comes from the main
+     manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:icon="@drawable/mainlogo"
+        android:roundIcon="@drawable/mainlogo"
+        tools:replace="android:icon" />
+</manifest>

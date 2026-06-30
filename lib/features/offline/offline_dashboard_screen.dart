@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
+import '../../core/services/session_service.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../search/search_customer_screen.dart';
-import 'download_records_screen.dart';
 import 'offline_reports_screen.dart';
 import 'offline_unpaid_list_screen.dart';
 
@@ -60,6 +61,23 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
           icon: const Icon(Icons.wifi_off),
           tooltip: 'Back to online',
             onPressed: () async {
+              // Android parity (Offline_Activity.java:101-114): how we exit offline
+              // depends on whether there is an active online session.
+              //  • No session (entered offline via the login gate, offlin="0") →
+              //    the online dashboard has no authToken/dealerId, so Android sends
+              //    the user back to LoginActivity to re-authenticate. We do the same
+              //    — and we do NOT sync (no machine id/session to sync with).
+              //  • Valid session (entered from the online dashboard, offlin="1") →
+              //    sync pending payments, then return to the online dashboard.
+              if (!SessionService.instance.isLoggedIn) {
+                await OfflineModeService.instance.setOfflineMode(false);
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (_) => false,
+                );
+                return;
+              }
               final n =
                   await OfflineSyncService.instance.syncPendingToServer();
               await OfflineModeService.instance.setOfflineMode(false);
@@ -94,7 +112,12 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
           child: Column(
             children: [
               Center(
-                child: Image.asset('assets/ezy_digi_pics.png', height: 52),
+                child: Image.asset(
+                  AppConfig.instance.flavor == Flavor.magik
+                      ? 'assets/mainlogo.png'
+                      : 'assets/ezy_digi_pics.png',
+                  height: 52,
+                ),
               ),
               const SizedBox(height: 12),
               // Summary card
@@ -174,25 +197,10 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              // Download Records is reached from the drawer (Android parity:
+              // the offline dashboard only views/syncs/deletes queued payments).
               Row(
                 children: [
-                  Expanded(
-                    child: _DashCard(
-                      icon: Iconsax.document_download,
-                      iconColor: Colors.teal,
-                      label: 'DOWNLOAD\nRECORDS',
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const DownloadRecordsScreen(),
-                          ),
-                        );
-                        _refresh();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: _DashCard(
                       icon: Iconsax.people,

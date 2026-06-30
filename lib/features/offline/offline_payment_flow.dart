@@ -65,6 +65,8 @@ Future<void> openOfflinePaymentFlow(
   );
 
   if (!context.mounted) return;
+  final legacyDue =
+      double.tryParse(customer.totalDue.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
   await Navigator.push<void>(
     context,
     MaterialPageRoute(
@@ -72,6 +74,10 @@ Future<void> openOfflinePaymentFlow(
         customer: customer,
         payment: saved,
         fromOfflineCollection: true,
+        billAmount: legacyDue,
+        dueAmount: legacyDue,
+        outAmount: legacyDue - result.amount,
+        stbPaidAmount: result.amount,
       ),
     ),
   );
@@ -102,7 +108,7 @@ Future<void> openOfflinePaymentFlowForOfflineCustomer(
   if (result == null || !context.mounted) return;
 
   try {
-    await OfflineDataService.instance.commitPayment(
+    final updated = await OfflineDataService.instance.commitPayment(
       customer: customer,
       amount: result.amount,
       payMode: result.method == 'cash' ? 'R' : 'B',
@@ -114,13 +120,9 @@ Future<void> openOfflinePaymentFlowForOfflineCustomer(
       discountPenaltyFlag: result.discountPenaltyFlag,
     );
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'Payment of ₹${result.amount.toStringAsFixed(2)} recorded for ${customer.name}'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    // Android parity: after an offline payment, show the (printable) receipt.
+    await showOfflineReceipt(context, updated,
+        paid: result.amount, sendSms: result.sendSms);
   } on OfflineDataException catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -128,3 +130,82 @@ Future<void> openOfflinePaymentFlowForOfflineCustomer(
     );
   }
 }
+
+/// Show the printable offline receipt after a committed offline payment.
+/// Shared by BOTH offline entry points (offline search + offline unpaid list)
+/// so the receipt + Bluetooth print behave identically (Android parity).
+Future<void> showOfflineReceipt(
+  BuildContext context,
+  OfflineCustomer updated, {
+  required double paid,
+  required bool sendSms,
+}) async {
+  final totalDue = _offlineTotalDue(updated);
+  final amountPaid = double.tryParse(updated.amount) ?? paid;
+  final payment = Payment(
+    customerId:
+        updated.lcoCustId.isEmpty ? updated.customerId : updated.lcoCustId,
+    customerName: updated.name,
+    customerMobile: updated.mobileNum,
+    amount: amountPaid,
+    paymentMethod: updated.payMode == 'B' ? 'bank' : 'cash',
+    paymentDate: DateTime.now(),
+    transactionId: updated.syncPaymentDate, // offline receipt no (tstamp+custId)
+    status: 'completed',
+    smsSent: sendSms,
+    chequeNo: updated.chequeNumber,
+    bankName: updated.bankName,
+    branch: updated.branchName,
+    instrumentDate: updated.insDate,
+    synced: false,
+  );
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ReceiptPreviewScreen(
+        customer: _customerFromOffline(updated),
+        payment: payment,
+        fromOfflineCollection: true,
+        billAmount: double.tryParse(updated.billAmount) ?? 0,
+        dueAmount: totalDue,
+        outAmount: totalDue - amountPaid,
+        stbPaidAmount: amountPaid,
+      ),
+    ),
+  );
+}
+
+/// Total due for an offline customer — mirrors `_calculateOutstanding`
+/// (after-discount / after-penalty / plain total), used for the receipt.
+double _offlineTotalDue(OfflineCustomer c) {
+  if (c.discountPenaltyFlag.contains('D')) {
+    return double.tryParse(c.totalAfterDiscount) ?? 0;
+  }
+  if (c.discountPenaltyFlag.contains('P')) {
+    return double.tryParse(c.totalAfterPenalty) ?? 0;
+  }
+  return double.tryParse(c.totalAmount) ?? 0;
+}
+
+/// Map an [OfflineCustomer] to the [Customer] the receipt screen expects.
+Customer _customerFromOffline(OfflineCustomer c) => Customer(
+      altCustomerId: c.accountNum,
+      name: c.name,
+      primaryMobileNumber: c.mobileNum,
+      lcoCustomerId: c.lcoCustId.isEmpty ? c.customerId : c.lcoCustId,
+      crfNumber: c.crfNumber,
+      serialNumber: '',
+      vcNumber: '',
+      nickName: '',
+      secondaryMobileNumber: '',
+      pendingAmount: c.pendingAmount,
+      lastPaidDate: c.lastPaidDate,
+      customerType: '', // offline = STB
+      address: c.address,
+      groupName: '',
+      areaName: '',
+      totalDue: c.totalAmount,
+      amountPayable: c.totalAmount,
+      billMonth: c.month,
+      boxNumber: '',
+    );

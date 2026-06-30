@@ -1,0 +1,42 @@
+# AWS CodeBuild — Flutter iOS compile check (no codesign)
+#
+# REQUIRES a CodeBuild *macOS* environment (reserved-capacity macOS fleet):
+#   - Environment type: ARM_MAC / "macOS ARM"
+#   - Curated image:    aws/codebuild/macos-arm-base:14 (Xcode preinstalled)
+#   - macOS fleets are region-limited (NOT ap-south-1 at time of writing) and
+#     bill with Apple's 24h-minimum dedicated-Mac pricing.
+# The curated macOS image ships Xcode + CocoaPods but NOT Flutter, so we install
+# Flutter here. `flutter build ios` generates the Podfile and runs pod install.
+
+version: 0.2
+
+env:
+  variables:
+    FLUTTER_CHANNEL: "stable"
+
+phases:
+  install:
+    commands:
+      - echo "Installing Flutter ($FLUTTER_CHANNEL)..."
+      - git clone https://github.com/flutter/flutter.git -b "$FLUTTER_CHANNEL" --depth 1 "$HOME/flutter"
+      - export PATH="$PATH:$HOME/flutter/bin"
+      - flutter --version
+      - flutter precache --ios
+
+  pre_build:
+    commands:
+      - export PATH="$PATH:$HOME/flutter/bin"
+      - flutter pub get
+
+  build:
+    commands:
+      - export PATH="$PATH:$HOME/flutter/bin"
+      # Generates the iOS Podfile (this project has none yet) + runs CocoaPods,
+      # then compiles the iOS app without code signing.
+      - flutter build ios --release --no-codesign
+
+artifacts:
+  # The unsigned .app (a .ipa needs signing, which --no-codesign skips).
+  base-directory: build/ios/iphoneos
+  files:
+    - "**/*"

@@ -4,7 +4,7 @@ import 'package:ezi_cable_digi/features/event/event_management_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/offline/download_records_screen.dart';
 import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
-import 'package:ezi_cable_digi/features/reports/search_collections_screen.dart';
+import 'package:ezi_cable_digi/features/employee_track/employee_track_screen.dart';
 import 'package:ezi_cable_digi/features/scan/scan_customer_screen.dart';
 import 'package:ezi_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +29,7 @@ import '../customers/customer_list_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
 import 'dashboard_controller.dart';
 import 'data/nearest_repository.dart';
+import '../../core/config/app_config.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
 
@@ -92,6 +93,47 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
 
   int _selectedTab = 0;
   _FeedType _feed = _FeedType.complaints;
+
+  // Client-side "Load more" — the APIs return the full list (no server paging,
+  // same as Android); we just cap how many cards are BUILT to keep the feed
+  // fast (shrinkWrap lists build every item). Resets to 30 on feed switch.
+  static const int _feedPage = 30;
+  int _feedShown = _feedPage;
+
+  /// Wraps a feed list with a display cap + a "Load more" footer.
+  Widget _pagedListView({
+    required int total,
+    required IndexedWidgetBuilder itemBuilder,
+  }) {
+    final shown = total <= _feedShown ? total : _feedShown;
+    final hasMore = total > shown;
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: shown + (hasMore ? 1 : 0),
+      itemBuilder: (ctx, i) {
+        if (hasMore && i == shown) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Center(
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _feedShown += _feedPage),
+                icon: const Icon(Icons.expand_more, size: 18),
+                label: Text('Load more (${total - shown} more)'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ),
+          );
+        }
+        return itemBuilder(ctx, i);
+      },
+    );
+  }
 
   // KPI cards (Section 1: dashBoardDetails). Defensive — never crashes the screen.
   final DashboardController _dash = DashboardController();
@@ -363,8 +405,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        const SearchCollectionsScreen(),
+                                    builder: (_) => const EmployeeTrackScreen(),
                                   ),
                                 );
                               },
@@ -417,8 +458,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                     label: AppStrings.of(context, 'complaints'),
                                     selected: _feed == _FeedType.complaints,
                                     onTap: () {
-                                      setState(
-                                          () => _feed = _FeedType.complaints);
+                                      setState(() {
+                                        _feed = _FeedType.complaints;
+                                        _feedShown = _feedPage;
+                                      });
                                       _dash.loadComplaints(force: true);
                                     },
                                   ),
@@ -427,7 +470,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                     label: AppStrings.of(context, 'unpaid'),
                                     selected: _feed == _FeedType.unpaid,
                                     onTap: () {
-                                      setState(() => _feed = _FeedType.unpaid);
+                                      setState(() {
+                                        _feed = _FeedType.unpaid;
+                                        _feedShown = _feedPage;
+                                      });
                                       // Lazy fetch (mirrors Android's tab-tap load).
                                       context
                                           .read<CustomerListProvider>()
@@ -439,8 +485,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                     label: AppStrings.of(context, 'nearest'),
                                     selected: _feed == _FeedType.nearest,
                                     onTap: () {
-                                      setState(
-                                          () => _feed = _FeedType.nearest);
+                                      setState(() {
+                                        _feed = _FeedType.nearest;
+                                        _feedShown = _feedPage;
+                                      });
                                       _dash.loadNearest(force: true);
                                     },
                                   ),
@@ -449,8 +497,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                     label: AppStrings.of(context, 'pay_later'),
                                     selected: _feed == _FeedType.payLater,
                                     onTap: () {
-                                      setState(
-                                          () => _feed = _FeedType.payLater);
+                                      setState(() {
+                                        _feed = _FeedType.payLater;
+                                        _feedShown = _feedPage;
+                                      });
                                       _dash.loadPayLater(force: true);
                                     },
                                   ),
@@ -466,13 +516,22 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-                            child: _feed == _FeedType.unpaid
-                                ? _buildUnpaidFeed()
-                                : _feed == _FeedType.complaints
-                                    ? _buildComplaintsFeed()
-                                    : _feed == _FeedType.payLater
-                                        ? _buildPayLaterFeed()
-                                        : _buildNearestFeed(),
+                            // Min-height keeps the white card filling the page
+                            // so an empty/errored feed doesn't leave a large
+                            // blue gap below (cosmetic only).
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight:
+                                    MediaQuery.sizeOf(context).height * 0.32,
+                              ),
+                              child: _feed == _FeedType.unpaid
+                                  ? _buildUnpaidFeed()
+                                  : _feed == _FeedType.complaints
+                                      ? _buildComplaintsFeed()
+                                      : _feed == _FeedType.payLater
+                                          ? _buildPayLaterFeed()
+                                          : _buildNearestFeed(),
+                            ),
                           ),
                         ],
                       ),
@@ -493,10 +552,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     return Consumer<CustomerListProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading && !provider.loaded) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 28),
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const _FeedSkeleton();
         }
         if (provider.hasError) {
           return _feedMessage(
@@ -504,16 +560,15 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
             provider.statusMessage.isEmpty
                 ? 'Could not load unpaid customers'
                 : provider.statusMessage,
+            onRetry: () => context.read<CustomerListProvider>().initialLoad(),
           );
         }
         final list = provider.customers;
         if (list.isEmpty) {
           return _feedMessage(Iconsax.tick_circle, 'No unpaid customers');
         }
-        return ListView.builder(
-          itemCount: list.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+        return _pagedListView(
+          total: list.length,
           itemBuilder: (_, i) => _UnpaidCard(
             customer: list[i],
             isLast: i == list.length - 1,
@@ -528,10 +583,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // which fits a complaint. Defensive: loading / error / empty; never crashes.
   Widget _buildComplaintsFeed() {
     if (_dash.complaintsLoading && !_dash.complaintsLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 28),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const _FeedSkeleton();
     }
     if (_dash.complaintsError) {
       return _feedMessage(
@@ -539,16 +591,15 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         _dash.complaintsMessage.isEmpty
             ? 'Could not load complaints'
             : _dash.complaintsMessage,
+        onRetry: () => _dash.loadComplaints(force: true),
       );
     }
     final list = _dash.complaints;
     if (list.isEmpty) {
       return _feedMessage(Iconsax.tick_circle, 'No complaints');
     }
-    return ListView.builder(
-      itemCount: list.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return _pagedListView(
+      total: list.length,
       itemBuilder: (_, i) {
         final c = list[i];
         final desc = c.description.isEmpty ? c.des : c.description;
@@ -585,10 +636,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // ── Pay Later feed (real scheduled_collection_data via DashboardController) ─
   Widget _buildPayLaterFeed() {
     if (_dash.payLaterLoading && !_dash.payLaterLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 28),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const _FeedSkeleton();
     }
     if (_dash.payLaterError) {
       return _feedMessage(
@@ -596,16 +644,15 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         _dash.payLaterMessage.isEmpty
             ? 'Could not load pay later'
             : _dash.payLaterMessage,
+        onRetry: () => _dash.loadPayLater(force: true),
       );
     }
     final list = _dash.payLaterItems;
     if (list.isEmpty) {
       return _feedMessage(Iconsax.tick_circle, 'No scheduled collections');
     }
-    return ListView.builder(
-      itemCount: list.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return _pagedListView(
+      total: list.length,
       itemBuilder: (_, i) {
         final s = list[i];
         final item = _TicketItem(
@@ -624,10 +671,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // ── Nearest feed (real NearestNextCustomer via DashboardController) ─────────
   Widget _buildNearestFeed() {
     if (_dash.nearestLoading && !_dash.nearestLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 28),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const _FeedSkeleton();
     }
     if (_dash.nearestError) {
       return _feedMessage(
@@ -635,16 +679,15 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         _dash.nearestMessage.isEmpty
             ? 'Could not load nearest customers'
             : _dash.nearestMessage,
+        onRetry: () => _dash.loadNearest(force: true),
       );
     }
     final list = _dash.nearestItems;
     if (list.isEmpty) {
       return _feedMessage(Iconsax.location, 'No nearby customers found');
     }
-    return ListView.builder(
-      itemCount: list.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return _pagedListView(
+      total: list.length,
       itemBuilder: (_, i) {
         final n = list[i];
         return _NearestCard(item: n, isLast: i == list.length - 1);
@@ -652,7 +695,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     );
   }
 
-  Widget _feedMessage(IconData icon, String text) {
+  Widget _feedMessage(IconData icon, String text, {VoidCallback? onRetry}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Center(
@@ -668,12 +711,68 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feed skeleton — lightweight placeholder cards while a feed's API is loading.
+// ─────────────────────────────────────────────────────────────────────────────
+class _FeedSkeleton extends StatelessWidget {
+  const _FeedSkeleton();
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(3, (_) {
+        return Container(
+          height: 78,
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF3FB),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F5)),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _bar(140, 12),
+              const SizedBox(height: 10),
+              _bar(90, 10),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _bar(double w, double h) => Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: const Color(0xFFD9E1F2),
+          borderRadius: BorderRadius.circular(6),
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1432,6 +1531,20 @@ class _NearestCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Premium AppBar
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Logo asset for the current flavor. Reads [AppConfig.instance] defensively:
+/// a hot reload can transiently reset the `late` static field, and we must not
+/// let the AppBar crash. Falls back to the Magik logo (the primary flavor).
+String _appBarLogoAsset() {
+  try {
+    return AppConfig.instance.flavor == Flavor.magik
+        ? 'assets/mainlogo.png'
+        : 'assets/ezy_digi_pics.png';
+  } catch (_) {
+    return 'assets/mainlogo.png';
+  }
+}
+
 class _PremiumAppBar extends StatelessWidget {
   const _PremiumAppBar();
   @override
@@ -1489,9 +1602,8 @@ class _PremiumAppBar extends StatelessWidget {
                 const SizedBox(width: 8.0),
                 const Spacer(),
                 Image.asset(
-                  'assets/ezy_digi_pics.png',
+                  _appBarLogoAsset(),
                   height: 42,
-                
                   fit: BoxFit.contain,
                 ),
                 const Spacer(),

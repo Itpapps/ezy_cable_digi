@@ -45,8 +45,11 @@ class DashboardController extends ChangeNotifier {
     hasError = false;
     errorMessage = null;
     notifyListeners();
+    debugPrint('[DASHDIAG] module=KPI api=getDashboardDetails state=START');
+    final sw = Stopwatch()..start();
     try {
       final r = await DashboardRepository.instance.fetchKpis();
+      debugPrint('[DASHDIAG] module=KPI api=getDashboardDetails success=${r.isSuccess} msg="${r.statusMessage}" ms=${sw.elapsedMilliseconds} result=${r.isSuccess ? 'OK' : 'ERROR'}');
       if (r.isSuccess) {
         dueAmount = r.outstandingAmount;
         monthBilling = r.billAmount;
@@ -61,6 +64,7 @@ class DashboardController extends ChangeNotifier {
       }
     } catch (e, s) {
       // Network / timeout / parse — never crash; keep zeros.
+      debugPrint('[DASHDIAG] module=KPI api=getDashboardDetails ms=${sw.elapsedMilliseconds} result=EXCEPTION err=$e');
       hasError = true;
       errorMessage = 'Could not load dashboard';
       ErrorHandlerService.recordError(e, s,
@@ -87,8 +91,11 @@ class DashboardController extends ChangeNotifier {
     complaintsLoading = true;
     complaintsError = false;
     notifyListeners();
+    debugPrint('[DASHDIAG] module=Complaints api=getopencomplaintslist state=START force=$force');
+    final sw = Stopwatch()..start();
     try {
       final r = await ComplaintsRepository.instance.fetchOpenComplaints();
+      debugPrint('[DASHDIAG] module=Complaints api=getopencomplaintslist status=${r.statusCode} count=${r.complaints.length} msg="${r.statusMessage}" ms=${sw.elapsedMilliseconds} result=${r.statusCode == 0 ? 'OK' : r.statusCode == 1 ? 'EMPTY' : 'ERROR'}');
       complaintsMessage = r.statusMessage;
       if (r.statusCode == 0) {
         complaints = r.complaints; // may be empty → empty-state
@@ -101,6 +108,7 @@ class DashboardController extends ChangeNotifier {
         complaintsError = true; // status 2/3 → error message
       }
     } catch (e, s) {
+      debugPrint('[DASHDIAG] module=Complaints api=getopencomplaintslist ms=${sw.elapsedMilliseconds} result=EXCEPTION err=$e');
       complaints = const [];
       complaintsError = true;
       complaintsMessage = 'Could not load complaints';
@@ -126,6 +134,8 @@ class DashboardController extends ChangeNotifier {
     payLaterLoading = true;
     payLaterError = false;
     notifyListeners();
+    debugPrint('[DASHDIAG] module=PayLater api=scheduled_collection_data state=START force=$force');
+    final sw = Stopwatch()..start();
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final r = await PayLaterRepository.instance.getPayLaterList(
@@ -133,6 +143,7 @@ class DashboardController extends ChangeNotifier {
         scheduledEndDate: today,
         fromDashboard: true,
       );
+      debugPrint('[DASHDIAG] module=PayLater api=scheduled_collection_data status=${r.statusCode} count=${r.schedules.length} msg="${r.statusMessage}" ms=${sw.elapsedMilliseconds} result=${r.statusCode == 0 ? 'OK' : r.statusCode == 1 ? 'EMPTY' : 'ERROR'}');
       payLaterMessage = r.statusMessage;
       if (r.statusCode == 0) {
         payLaterItems = r.schedules;
@@ -142,6 +153,7 @@ class DashboardController extends ChangeNotifier {
         payLaterError = r.statusCode > 1;
       }
     } catch (e, s) {
+      debugPrint('[DASHDIAG] module=PayLater api=scheduled_collection_data ms=${sw.elapsedMilliseconds} result=EXCEPTION err=$e');
       payLaterItems = const [];
       payLaterError = true;
       payLaterMessage = 'Could not load pay later';
@@ -167,6 +179,8 @@ class DashboardController extends ChangeNotifier {
     nearestLoading = true;
     nearestError = false;
     notifyListeners();
+    debugPrint('[DASHDIAG] module=Nearest api=NearestNextCustomer state=START force=$force');
+    final sw = Stopwatch()..start();
     try {
       double lat = 0;
       double lng = 0;
@@ -180,10 +194,12 @@ class DashboardController extends ChangeNotifier {
       } catch (_) {
         // GPS unavailable — send 0,0 as Android does
       }
+      debugPrint('[DASHDIAG] module=Nearest gps lat=$lat lng=$lng');
       final r = await NearestRepository.instance.fetchNearest(
         lat: lat,
         lng: lng,
       );
+      debugPrint('[DASHDIAG] module=Nearest api=NearestNextCustomer status=${r.statusCode} count=${r.customers.length} msg="${r.statusMessage}" ms=${sw.elapsedMilliseconds} result=${r.statusCode == 0 ? 'OK' : r.statusCode == 1 ? 'EMPTY' : 'ERROR'}');
       nearestMessage = r.statusMessage;
       if (r.statusCode == 0) {
         nearestItems = r.customers;
@@ -193,6 +209,7 @@ class DashboardController extends ChangeNotifier {
         nearestError = r.statusCode > 1;
       }
     } catch (e, s) {
+      debugPrint('[DASHDIAG] module=Nearest api=NearestNextCustomer ms=${sw.elapsedMilliseconds} result=EXCEPTION err=$e');
       nearestItems = const [];
       nearestError = true;
       nearestMessage = 'Could not load nearest customers';

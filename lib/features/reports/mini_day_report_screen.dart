@@ -2,9 +2,35 @@ import 'package:ezi_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/theme_constants.dart';
+import 'data/mini_day_report_repository.dart';
 
-class MiniDayReportScreen extends StatelessWidget {
+class MiniDayReportScreen extends StatefulWidget {
   const MiniDayReportScreen({super.key});
+
+  @override
+  State<MiniDayReportScreen> createState() => _MiniDayReportScreenState();
+}
+
+class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
+  bool _loading = true;
+  MiniDayReportResult _data =
+      const MiniDayReportResult(statusCode: 3, statusMessage: '');
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final r = await MiniDayReportRepository.instance.fetch();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _data = r;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,38 +121,58 @@ class MiniDayReportScreen extends StatelessWidget {
 
                   Divider(height: 20, color: t.dividerColor),
 
-                  // Cash row
-                  _ReportRow(
-                    label: AppStrings.of(context, 'cash_stb'),
-                    count: '0', amount: '0.0', t: t,
-                  ),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
+                    // Cash row (STB)
+                    _ReportRow(
+                      label: AppStrings.of(context, 'cash_stb'),
+                      count: _data.cashCount, amount: _data.cashAmount, t: t,
+                    ),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // Bank row
-                  _ReportRow(
-                    label: AppStrings.of(context, 'bank_stb'),
-                    count: '0', amount: '0.0', t: t,
-                  ),
+                    // Bank row (STB)
+                    _ReportRow(
+                      label: AppStrings.of(context, 'bank_stb'),
+                      count: _data.bankCount, amount: _data.bankAmount, t: t,
+                    ),
 
-                  Divider(height: 20, color: t.dividerColor),
-
-                  // Total row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        AppStrings.of(context, 'total_collection'),
-                        style: TextStyle(fontWeight: FontWeight.w800,
-                            fontSize: 14, color: t.accent),
+                    if (_data.hasBroadband) ...[
+                      const SizedBox(height: 10),
+                      _ReportRow(
+                        label: 'Cash (BB)',
+                        count: _data.bbCashCount, amount: _data.bbCashAmount, t: t,
                       ),
-                      Text(
-                        '₹0.0',
-                        style: TextStyle(fontWeight: FontWeight.w800,
-                            fontSize: 14, color: t.accent),
+                      const SizedBox(height: 10),
+                      _ReportRow(
+                        label: 'Bank (BB)',
+                        count: _data.bbBankCount, amount: _data.bbBankAmount, t: t,
                       ),
                     ],
-                  ),
+
+                    Divider(height: 20, color: t.dividerColor),
+
+                    // Total row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          AppStrings.of(context, 'total_collection'),
+                          style: TextStyle(fontWeight: FontWeight.w800,
+                              fontSize: 14, color: t.accent),
+                        ),
+                        Text(
+                          '₹${_data.totalAmount}',
+                          style: TextStyle(fontWeight: FontWeight.w800,
+                              fontSize: 14, color: t.accent),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

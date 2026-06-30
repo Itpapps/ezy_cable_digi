@@ -14,6 +14,9 @@ class OfflineModeService {
   static const _keyMachineId = 'machineNumber';
   static const _keyUserCode = 'usercode';
   static const _keyTotalLength = 'total_length';
+  // Android parity: SPF_NAME_LOGIN `current_dates_login` — the server date of the
+  // last successful ONLINE login. Drives the 2-day offline-entry gate.
+  static const _keyLastOnlineLogin = 'current_dates_login';
 
   Future<bool> get isOfflineMode async {
     final p = await SharedPreferences.getInstance();
@@ -58,6 +61,20 @@ class OfflineModeService {
   Future<String> get userCode async {
     final p = await SharedPreferences.getInstance();
     return p.getString(_keyUserCode) ?? '';
+  }
+
+  /// Android parity (`LoginActivity.java:812`): store the server `current_date`
+  /// at every successful online login. Read by the offline-entry 2-day gate.
+  Future<void> saveLastOnlineLoginDate(String serverDate) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keyLastOnlineLogin, serverDate);
+  }
+
+  /// The saved server date of the last online login ('' if never logged in).
+  /// Android keeps this across logout — it is NOT cleared here.
+  Future<String> get lastOnlineLoginDate async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_keyLastOnlineLogin) ?? '';
   }
 
   /// Clear all offline data prefs (after sync + clear data).

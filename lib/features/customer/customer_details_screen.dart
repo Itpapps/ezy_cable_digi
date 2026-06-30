@@ -24,6 +24,7 @@ import '../billing/invoice_history_screen.dart';
 import '../complaints/package_operations_screen.dart';
 import '../complaints/deactivate_stb_screen.dart';
 import '../complaints/other_screens.dart';
+import '../collections/pay_later_dialog.dart';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
@@ -148,6 +149,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           _infoRow('Amount Payable', _customer.amountPayable, t,
               valueColor: t.accent, valueBold: true),
           _infoRow('Customer Type', _customer.customerTypeLabel, t),
+          // Android parity (CustomerMgmt_MakePayment_Fragment:275): CRF shown only
+          // when the dealer uses CRF (use_caf == 1).
+          if (SessionService.instance.useCaf == 1)
+            _infoRow('CRF Number',
+                _customer.crfNumber.isEmpty ? 'NA' : _customer.crfNumber, t),
           _infoRow('Group Name',
               _customer.groupName.isEmpty ? 'N/A' : _customer.groupName, t),
           _infoRow('Area Name',
@@ -346,12 +352,19 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: valueColor ?? t.accent,
+            // Flexible + ellipsis so long values (VC/Box numbers, dates) never
+            // overflow the column on narrow screens — responsive on all sizes.
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor ?? t.accent,
+                ),
               ),
             ),
             if (hasEditIcon) ...[
@@ -469,7 +482,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         Navigator.push(context, MaterialPageRoute(builder: (_) => OneTimeHistoryScreen(customer: _customer)));
         break;
       case 'Pay Later':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => PayLaterScreen(customer: _customer)));
+        // Android parity: the per-customer Pay Later is a dialog (gethitapipaylater),
+        // not a screen. Shared with the payment screen; reuses PayLaterRepository.
+        showPayLaterScheduleDialog(context, _customer);
         break;
       default:
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label coming soon')));

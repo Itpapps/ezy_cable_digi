@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_colors.dart';
+import '../search/data/search_repository.dart';
+import '../customer/customer_details_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCAN CUSTOMER SCREEN — real MobileScanner with camera permission
@@ -69,27 +71,42 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
     _scanCtrl?.start();
   }
 
-  void _search() {
+  Future<void> _search() async {
     if (_scannedValue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No barcode scanned yet')),
       );
       return;
     }
+    // Android ScannerFrag: Serial Number → searchType 6, VC Number → 7,
+    // then searchCustomer(sc) → open the customer.
+    final searchType = _selectedType == 'VC Number' ? 7 : 6;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Search Result'),
-        content: Text('Customer found for:\n$_scannedValue'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    final result = await SearchRepository.instance
+        .search(searchType: searchType, value: _scannedValue);
+    if (!mounted) return;
+    Navigator.pop(context); // dismiss loading
+    if (result.statusCode == 0 && result.customers.isNotEmpty) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerDetailsScreen(customer: result.customers.first),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.statusMessage.isEmpty
+              ? 'No customer found for "$_scannedValue"'
+              : result.statusMessage),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override

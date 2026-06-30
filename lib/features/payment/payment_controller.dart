@@ -42,8 +42,9 @@ class PaymentController extends ChangeNotifier {
   bool    pendingLoading = false;
   String? pendingError;
   int     _billingId     = 0; // bill to settle (from gpa) — sent to mpay
-  double  _dueAmount     = 0; // due_amount (from gpa) — sent to mpay
+  double  _dueAmount     = 0; // due_amount (from gpa) — sent to mpay (= cable leg)
   String? discountError;      // set when discount > due (mirrors Android toast)
+  double  cablePending   = 0; // STB/cable leg (from gpa) — the STB amount + due
   double  broadcasterPending = 0; // broadband pending (from gpa; 0 for STB)
   MakePaymentResult? lastResult;  // last successful mpay response (for receipt)
 
@@ -89,11 +90,16 @@ class PaymentController extends ChangeNotifier {
       final id = int.tryParse(customer.lcoCustomerId) ?? 0;
       final result = await PendingAmountRepository.instance.fetch(id);
       if (result.statusCode == 0) {
+        // `pendingAmount` = overall total (cable + broadcaster) — display only.
         pendingAmount = result.pendingAmount;
-        _dueAmount = result.pendingAmount; // due_amount for mpay
-        _billingId = result.billingId;     // billingId for mpay (from gpa)
+        // STB/cable leg is what Android prefills into the amount box and sends as
+        // due_amount (CustomerMgmt_MakePayment_Fragment :1487/:1829). For STB-only
+        // customers cable == overall total, so this is a no-op for them.
+        cablePending = result.cablePendingAmount;
+        _dueAmount = cablePending;          // due_amount for mpay (STB leg)
+        _billingId = result.billingId;      // billingId for mpay (from gpa)
         broadcasterPending = result.broadcasterPendingAmount; // broadband pending
-        amountCtrl.text = pendingAmount.toStringAsFixed(2);
+        amountCtrl.text = cablePending.toStringAsFixed(2);
         // Android prefills the broadband field only when there is a broadband due.
         if (broadcasterPending > 0) {
           broadbandAmountCtrl.text = broadcasterPending.toStringAsFixed(2);
@@ -120,6 +126,11 @@ class PaymentController extends ChangeNotifier {
   /// non-empty" (set for customer_type 1 and 2). Empty → STB-only.
   bool get isBroadbandCustomer => customer.broadbandUserId.trim().isNotEmpty;
 
+  /// BroadBand-ONLY (customer_type == 1). Android disables the STB amount +
+  /// discount fields for these (CustomerMgmt_MakePayment_Fragment :303-310).
+  bool get isBroadbandOnly =>
+      isBroadbandCustomer && customer.customerType.trim() == '1';
+
   /// Mirrors Android's discount TextWatcher (CustomerMgmt_MakePayment_Fragment
   /// afterTextChanged :607–639): the collector types the DISCOUNT and the amount
   /// field auto-updates to `due − discount`.
@@ -127,7 +138,7 @@ class PaymentController extends ChangeNotifier {
   /// - Discount > (due × max% ÷ 100) → warn but still apply (Android :623–630):
   ///   the cap is a warning client-side; the server is the final authority.
   void onDiscountChanged() {
-    final due = pendingAmount;
+    final due = cablePending; // discount applies to the STB/cable leg (Android)
     final raw = discountCtrl.text.trim();
     final discount =
         (raw.isEmpty || raw == '.') ? 0.0 : (double.tryParse(raw) ?? 0.0);
@@ -278,8 +289,10 @@ class PaymentController extends ChangeNotifier {
   // Step 1: look up this customer's schedule record (Android gethitapipaylater) —
   // gives the server customer_id, current values, is_editable, and the status LOV.
   Future<PayLaterListResult> lookupPayLater() {
+    // System customer id = Android altCustId = JSON customer_id = lcoCustomerId
+    // (NOT alt_cust_id, which the server rejects as a non-integer id).
     return PayLaterRepository.instance.getPayLaterList(
-      customerId: customer.altCustomerId,
+      customerId: customer.lcoCustomerId,
       scheduledStartDate: '',
       scheduledEndDate: '',
     );

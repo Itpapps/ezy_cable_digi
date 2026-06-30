@@ -77,6 +77,8 @@ class CustomerListProvider extends ChangeNotifier {
     if (_isLoading || _loaded) return; // uc loads the full list once; no pagination
     _isLoading = true;
     notifyListeners();
+    debugPrint('[DASHDIAG] module=Unpaid api=unpaidCustomers state=START');
+    final sw = Stopwatch()..start();
     try {
       final result = await UnpaidCustomersRepository.instance.fetch(
         customerStatus: _customerStatus(),
@@ -85,10 +87,12 @@ class CustomerListProvider extends ChangeNotifier {
         groupId: selectedGroupId,
         billMonth: _billMonth(),
       );
+      debugPrint('[DASHDIAG] module=Unpaid api=unpaidCustomers status=${result.statusCode} count=${result.customers.length} msg="${result.statusMessage}" ms=${sw.elapsedMilliseconds} result=${result.statusCode == 0 ? 'OK' : result.statusCode == 1 ? 'EMPTY' : 'ERROR'}');
       _statusCode = result.statusCode;
       _statusMessage = result.statusMessage;
       _customers = result.customers;
     } catch (error, stackTrace) {
+      debugPrint('[DASHDIAG] module=Unpaid api=unpaidCustomers ms=${sw.elapsedMilliseconds} result=EXCEPTION err=$error');
       _statusCode = 3;
       _statusMessage = 'Server is busy or not reachable';
       _customers = [];

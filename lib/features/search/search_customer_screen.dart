@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/offline_customer.dart';
+import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../customer/customer_details_screen.dart';
 import '../customer/customer_map_screen.dart';
@@ -59,8 +60,8 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
       appBar: _appBar(t),
       body: FadeTransition(
         opacity: _fadeAnim,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 14, 12, 32),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -74,43 +75,64 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
               _searchField(t),
               const SizedBox(height: 14),
               // ── Results ──────────────────────────────────────────────────
-              Consumer<SearchProvider>(
-                builder: (context, p, _) {
-                  if (p.isLoading) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 40),
-                      child: Center(child: CircularProgressIndicator(color: t.accent)),
+              // Android parity: the search controls stay fixed and the results
+              // render in a lazy list (RecyclerView equivalent). Android does NOT
+              // paginate — the full result set is shown, lazily recycled.
+              Expanded(
+                child: Consumer<SearchProvider>(
+                  builder: (context, p, _) {
+                    if (p.isLoading) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Center(
+                            child: CircularProgressIndicator(color: t.accent)),
+                      );
+                    }
+                    if (p.error != null) {
+                      return _empty(p.error!, Iconsax.warning_2, t);
+                    }
+                    if (!p.hasSearched) return const SizedBox.shrink();
+                    // Offline results
+                    if (p.offlineResults.isNotEmpty) {
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 32),
+                        itemCount: p.offlineResults.length + 1,
+                        itemBuilder: (context, i) {
+                          if (i == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _offlineResultBanner(p, t),
+                            );
+                          }
+                          final c = p.offlineResults[i - 1];
+                          return _OfflineSearchCard(
+                            customer: c,
+                            t: t,
+                            onTap: () =>
+                                openOfflinePaymentFlowForOfflineCustomer(context, c),
+                          );
+                        },
+                      );
+                    }
+                    if (p.results.isEmpty) {
+                      return _empty('No customers found', Iconsax.user_search, t);
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 32),
+                      itemCount: p.results.length + 1,
+                      itemBuilder: (context, i) {
+                        if (i == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _resultBanner(p, t),
+                          );
+                        }
+                        return _CustomerCard(
+                            customer: p.results[i - 1], t: t);
+                      },
                     );
-                  }
-                  if (p.error != null) {
-                    return _empty(p.error!, Iconsax.warning_2, t);
-                  }
-                  if (!p.hasSearched) return const SizedBox.shrink();
-                  // Offline results
-                  if (p.offlineResults.isNotEmpty) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _offlineResultBanner(p, t),
-                        const SizedBox(height: 10),
-                        ...p.offlineResults.map((c) => _OfflineSearchCard(
-                              customer: c,
-                              t: t,
-                              onTap: () => openOfflinePaymentFlowForOfflineCustomer(context, c),
-                            )),
-                      ],
-                    );
-                  }
-                  if (p.results.isEmpty) return _empty('No customers found', Iconsax.user_search, t);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _resultBanner(p, t),
-                      const SizedBox(height: 10),
-                      ...p.results.map((c) => _CustomerCard(customer: c, t: t)),
-                    ],
-                  );
-                },
+                  },
+                ),
               ),
             ],
           ),
@@ -176,7 +198,7 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                 child: Icon(Icons.keyboard_arrow_down_rounded, size: 24, color: Colors.black54),
               ),
               style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF0D1B4B), fontSize: 15),
-              items: SearchProvider.criteriaItems
+              items: p.criteriaItems
                   .map((e) => DropdownMenuItem<String>(
                         value: e,
                         child: Padding(
@@ -405,7 +427,7 @@ class _CustomerCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: const Color(0xFFC5CAE9)), // Subtle border
                   ),
-                  child: Text(customer.customerType,
+                  child: Text(customer.customerTypeLabel,
                       style: const TextStyle(
                           fontSize: 11, fontWeight: FontWeight.w800,
                           color: Color(0xFF3F51B5))), // Indigo text
@@ -430,6 +452,25 @@ class _CustomerCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 _row(Iconsax.home, 'Address',
                     customer.address.isEmpty ? '—' : customer.address),
+                // Android parity (SearchCustomer_Rec_Adapter:134): the CRF row is
+                // shown only when the dealer uses CRF (use_caf == 1). "NA" mirrors
+                // Android's empty-CRF placeholder.
+                if (SessionService.instance.useCaf == 1) ...[
+                  const SizedBox(height: 8),
+                  _row(Iconsax.document_text, 'CRF Number',
+                      customer.crfNumber.isEmpty ? 'NA' : customer.crfNumber),
+                ],
+                // Android parity (SearchCustomer_Rec_Adapter:120-132): the
+                // Broadband User ID row is shown only for BroadBand (type 1) and
+                // STB & BroadBand (type 2) customers. Null-safe fallback.
+                if (customer.customerType.trim() == '1' ||
+                    customer.customerType.trim() == '2') ...[
+                  const SizedBox(height: 8),
+                  _row(Icons.wifi, 'Broadband User ID',
+                      customer.broadbandUserId.isEmpty
+                          ? 'N/A'
+                          : customer.broadbandUserId),
+                ],
 
                 const SizedBox(height: 14),
 

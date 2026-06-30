@@ -1,26 +1,42 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
-class PaymentHistoryScreen extends StatelessWidget {
+import 'data/payment_history_repository.dart';
+
+/// Payment History — real `getPaymentHistorylist` (Android `getpayhist()`).
+/// Sends the system customer id (`altCustomerId`, = Android `altCustId`).
+class PaymentHistoryScreen extends StatefulWidget {
   final Customer customer;
   const PaymentHistoryScreen({super.key, required this.customer});
 
-  // Placeholder payments for now
-  List<Map<String, String>> get _payments => [
-        {
-          'Receipt No.': 'RCPT/2025/0001',
-          'Payment Date': '2025-02-01',
-          'Amount Paid': '₹750',
-          'Mode': 'Cash',
-          'Collected By': 'Eswar',
-        },
-        {
-          'Receipt No.': 'RCPT/2025/0002',
-          'Payment Date': '2025-03-01',
-          'Amount Paid': '₹800',
-          'Mode': 'UPI',
-          'Collected By': 'Sagar',
-        },
-      ];
+  @override
+  State<PaymentHistoryScreen> createState() => _PaymentHistoryScreenState();
+}
+
+class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
+  bool _loading = true;
+  String _message = '';
+  List<PaymentRecord> _payments = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    // System customer id = Android `altCustId` = JSON `customer_id` (Flutter
+    // `lcoCustomerId`). `alt_cust_id` is only a display number — don't use it.
+    final r = await PaymentHistoryRepository.instance
+        .fetch(widget.customer.lcoCustomerId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _payments = r.payments;
+      // statusCode 1 (no records) / 3 (transport) → message for empty state.
+      _message = r.statusCode == 0 ? '' : r.statusMessage;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,42 +67,51 @@ class PaymentHistoryScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _row('Customer Name', customer.name),
+                _row('Customer Name', widget.customer.name),
                 const Divider(
-                    height: 1,
-                    thickness: 0.5,
-                    color: Color(0xFFE5E7EB)),
+                    height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
                 _row('Address',
-                    customer.address.isEmpty ? 'N/A' : customer.address),
+                    widget.customer.address.isEmpty ? 'N/A' : widget.customer.address),
                 const Divider(
-                    height: 1,
-                    thickness: 0.5,
-                    color: Color(0xFFE5E7EB)),
+                    height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
                 _row(
                     'Mobile No.',
-                    customer.primaryMobileNumber.isEmpty
+                    widget.customer.primaryMobileNumber.isEmpty
                         ? 'N/A'
-                        : customer.primaryMobileNumber),
+                        : widget.customer.primaryMobileNumber),
               ],
             ),
           ),
 
-          Expanded(
-            child: _payments.isEmpty
-                ? const Center(
-                    child: Text('No payments found',
-                        style:
-                            TextStyle(color: Colors.white70, fontSize: 15)),
-                  )
-                : ListView.builder(
-                    padding:
-                        const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                    itemCount: _payments.length,
-                    itemBuilder: (_, i) =>
-                        _PaymentCard(data: _payments[i]),
-                  ),
-          ),
+          Expanded(child: _buildBody()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_payments.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _message.isEmpty ? 'No payments found' : _message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 15),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      itemCount: _payments.length,
+      itemBuilder: (_, i) => _PaymentCard(
+        record: _payments[i],
+        index: i + 1,
+        total: _payments.length,
       ),
     );
   }
@@ -142,12 +167,23 @@ class PaymentHistoryScreen extends StatelessWidget {
 }
 
 class _PaymentCard extends StatelessWidget {
-  final Map<String, String> data;
-  const _PaymentCard({required this.data});
+  final PaymentRecord record;
+  final int index;
+  final int total;
+  const _PaymentCard({
+    required this.record,
+    required this.index,
+    required this.total,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final entries = data.entries.toList();
+    // Fields mirror Android's `paymenthistory_items` row.
+    final rows = <MapEntry<String, String>>[
+      MapEntry('Payment Date', record.paidDateDisplay),
+      MapEntry('Amount Paid', '₹${record.amount}'),
+      MapEntry('Payment Type', record.paymentTypeLabel),
+    ];
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
@@ -158,38 +194,46 @@ class _PaymentCard extends StatelessWidget {
             color: const Color(0xFF0D47A1).withValues(alpha: 0.15)),
       ),
       child: Column(
-        children: List.generate(entries.length, (i) {
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 130,
-                      child: Text(entries[i].key,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF5B7BAE))),
-                    ),
-                    Expanded(
-                      child: Text(entries[i].value,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0D47A1))),
-                    ),
-                  ],
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text('$index / $total',
+                style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF5B7BAE),
+                    fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 4),
+          ...List.generate(rows.length, (i) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 130,
+                        child: Text(rows[i].key,
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF5B7BAE))),
+                      ),
+                      Expanded(
+                        child: Text(rows[i].value,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0D47A1))),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (i < entries.length - 1)
-                const Divider(
-                    height: 1,
-                    thickness: 0.5,
-                    color: Color(0xFFE5E7EB)),
-            ],
-          );
-        }),
+                if (i < rows.length - 1)
+                  const Divider(
+                      height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
+              ],
+            );
+          }),
+        ],
       ),
     );
   }

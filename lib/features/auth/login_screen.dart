@@ -3,6 +3,8 @@ import 'package:ezi_cable_digi/core/services/auth_service.dart';
 import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
 import 'package:ezi_cable_digi/features/dashboard/dashboard_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -10,6 +12,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../core/services/offline_mode_service.dart';
+import '../../core/network/server_url_resolver.dart';
 import '../offline/offline_dashboard_screen.dart';
 import '../../widgets/primary_button.dart';
 import '../../core/config/app_config.dart';
@@ -28,12 +31,57 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
   bool _isLoading = false;
+  // Android disables the username/password EditTexts when offline
+  // (LoginActivity.java:248-251). Mirrored via the field `enabled` flag.
+  bool _isOffline = false;
 
   @override
   void initState() {
     super.initState();
     LocationSyncService.instance.onScreenOpened(TrackingScreen.login);
     _requestPermissions();
+    _resolveServerUrl();
+    _loadRememberedCredentials();
+    _refreshOfflineState();
+  }
+
+  /// Android parity (LoginActivity.java:226-227): prefill the fields with the
+  /// remembered credentials on every open. Empty when none were saved. The
+  /// Remember-Me checkbox itself stays unchecked by default (Android never
+  /// restores its checked state).
+  Future<void> _loadRememberedCredentials() async {
+    final creds = await AuthService.instance.loadRememberedCredentials();
+    if (!mounted) return;
+    if (creds.username.isNotEmpty || creds.password.isNotEmpty) {
+      setState(() {
+        _userController.text = creds.username;
+        _passwordController.text = creds.password;
+      });
+    }
+  }
+
+  /// Detect connectivity so the fields can be disabled offline (Android parity).
+  Future<void> _refreshOfflineState() async {
+    final connectivity = await Connectivity().checkConnectivity();
+    final offline = connectivity.contains(ConnectivityResult.none);
+    if (mounted && offline != _isOffline) {
+      setState(() => _isOffline = offline);
+    }
+  }
+
+  /// Resolves the data-server URL from BMS in the background.
+  /// This was previously done in SplashScreen; doing it here keeps
+  /// the app snappy (no artificial 3-second wait) while still ensuring
+  /// the URL is ready before the user taps SIGN IN.
+  Future<void> _resolveServerUrl() async {
+    try {
+      final resolved = await ServerUrlResolver.instance.resolve();
+      if (!resolved) {
+        await ServerUrlResolver.instance.loadCached();
+      }
+    } catch (_) {
+      await ServerUrlResolver.instance.loadCached();
+    }
   }
 
   /// Asks for Location + Nearby Devices (Bluetooth) as soon as login screen opens.
@@ -46,6 +94,21 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    // Re-check connectivity at press time (Android: isNetworkAvailable()).
+    final connectivity = await Connectivity().checkConnectivity();
+    final noNetwork = connectivity.contains(ConnectivityResult.none);
+    if (!mounted) return;
+    if (noNetwork != _isOffline) setState(() => _isOffline = noNetwork);
+
+    // OFFLINE: Android does NOT validate username/password — it applies the
+    // 2-day offline gate and either opens the offline dashboard or shows the
+    // "Sync Previous data" dialog (LoginActivity.java:270-305).
+    if (noNetwork) {
+      await _enterOfflineMode();
+      return;
+    }
+
+    // ONLINE: validate, then real login.
     final username = _userController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -62,6 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await AuthService.instance.login(
         username: username,
         password: password,
+        rememberMe: _rememberMe,
       );
 
       if (!mounted) return;
@@ -73,18 +137,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final connectivity = await Connectivity().checkConnectivity();
-      final noNetwork = connectivity.contains(ConnectivityResult.none);
-      if (!mounted) return;
-
-      await OfflineModeService.instance.setOfflineMode(noNetwork);
+      await OfflineModeService.instance.setOfflineMode(false);
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => noNetwork
-              ? const OfflineDashboardScreen()
-              : const DashboardScreen(),
+          builder: (_) => const DashboardScreen(),
         ),
       );
     } catch (error, stackTrace) {
@@ -98,6 +156,57 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Offline-entry gate — Android parity (LoginActivity.java:270-305).
+  /// Allows the offline dashboard only when the last ONLINE login was ≤ 2 days
+  /// ago. Reproduces Android's `datediff` exactly: a missing/unparseable saved
+  /// date leaves the difference at 0 (allow) — so a fresh install opens an empty
+  /// offline dashboard, matching production. A valid date > 2 days → block dialog.
+  Future<void> _enterOfflineMode() async {
+    final savedDate = await OfflineModeService.instance.lastOnlineLoginDate;
+    if (!mounted) return;
+
+    if (_dayDifference(savedDate) <= 2) {
+      await OfflineModeService.instance.setOfflineMode(true);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const OfflineDashboardScreen()),
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Sync Previous data'),
+          content: const Text(
+            'Please go online and sync previous offline collections data',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                SystemNavigator.pop(); // Android: finish() + System.exit(0)
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Whole-day gap between the saved server date and today, parsed with Android's
+  /// `dd-MM-yyyy` format. On any parse failure returns 0 (Android's `datediff`
+  /// swallows the exception and leaves the difference at its 0 default).
+  int _dayDifference(String savedDate) {
+    try {
+      final fmt = DateFormat('dd-MM-yyyy');
+      final saved = fmt.parse(savedDate);
+      final today = fmt.parse(fmt.format(DateTime.now()));
+      return today.difference(saved).inDays.abs();
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -234,6 +343,7 @@ DropdownButton<String>(
                                         _GlassTextField(
                                           controller: _userController,
                                           hint: 'Username',
+                                          enabled: !_isOffline,
                                           lottieAsset:
                                           'assets/Profile Icon.json',
                                         ),
@@ -242,6 +352,7 @@ DropdownButton<String>(
                                           controller: _passwordController,
                                           hint: 'Password',
                                           obscureText: true,
+                                          enabled: !_isOffline,
                                           lottieAsset: 'assets/Login.json',
                                         ),
                                         const SizedBox(height: AppSizes.paddingS),
@@ -284,10 +395,11 @@ DropdownButton<String>(
                           width: 78,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white,
+                            // Android-style: the logo fills the circle (no white
+                            // padding) inside a blue ring.
                             border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.45),
-                              width: 4,
+                              color: AppColors.primary,
+                              width: 3,
                             ),
                             boxShadow: [
                               BoxShadow(
@@ -297,9 +409,15 @@ DropdownButton<String>(
                               ),
                             ],
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: Image.asset('assets/ezy_digi_pics.png'),
+                          child: ClipOval(
+                            child: Image.asset(
+                              AppConfig.instance.flavor == Flavor.magik
+                                  ? 'assets/mainlogo.png'
+                                  : 'assets/ezy_digi_pics.png',
+                              width: 78,
+                              height: 78,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                       ],
@@ -331,12 +449,14 @@ class _GlassTextField extends StatelessWidget {
   final String hint;
   final bool obscureText;
   final String lottieAsset;
+  final bool enabled;
 
   const _GlassTextField({
     required this.controller,
     required this.hint,
     required this.lottieAsset,
     this.obscureText = false,
+    this.enabled = true,
   });
 
   @override
@@ -378,6 +498,7 @@ class _GlassTextField extends StatelessWidget {
             child: TextField(
               controller: controller,
               obscureText: obscureText,
+              enabled: enabled,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,

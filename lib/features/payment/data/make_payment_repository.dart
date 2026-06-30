@@ -26,6 +26,7 @@ class MakePaymentResult {
   final String billNumber;
   final String customerName;
   final double amount;
+  final double billAmount; // receipt "Bill Amount" (server response field)
   final String dealerBusinessName;
   final String billForMonth;
   const MakePaymentResult({
@@ -35,6 +36,7 @@ class MakePaymentResult {
     required this.billNumber,
     required this.customerName,
     required this.amount,
+    required this.billAmount,
     required this.dealerBusinessName,
     required this.billForMonth,
   });
@@ -123,6 +125,10 @@ class MakePaymentRepository {
       customerName: SoapClient.readField(xml, 'customerName') ?? '',
       amount:
           double.tryParse(SoapClient.readField(xml, 'amount') ?? '') ?? amount,
+      // Receipt "Bill Amount" — Android reads `billAmount` from this response
+      // (CustomerMgmt_MakePayment_Fragment :2076), not from the customer list.
+      billAmount:
+          double.tryParse(SoapClient.readField(xml, 'billAmount') ?? '') ?? 0.0,
       dealerBusinessName: SoapClient.readField(xml, 'dealerBusinessName') ?? '',
       billForMonth: SoapClient.readField(xml, 'bill_for_month') ?? '',
     );

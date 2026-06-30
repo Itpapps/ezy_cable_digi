@@ -11,7 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/splash_screen.dart';
+import 'features/auth/login_screen.dart';
 import 'core/services/notification_service.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
@@ -20,6 +20,7 @@ final RouteObserver<ModalRoute<void>> routeObserver =
 Future<void> mainEntry() async {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorHandlerService.init();
+  await AppConfig.initDeviceImei();
 
   await runZonedGuarded(() async {
     await NotificationService.init();
@@ -61,7 +62,7 @@ class EzyCableDigiApp extends StatelessWidget {
               themeMode: ThemeMode.light,
               theme: themeData,
               navigatorObservers: [routeObserver],
-              home: const SplashScreen(),
+              home: const LoginScreen(),
             );
           },
         ),

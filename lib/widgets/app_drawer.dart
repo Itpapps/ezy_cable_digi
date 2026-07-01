@@ -3,6 +3,7 @@ import 'package:ezi_cable_digi/core/services/theme_service.dart';
 import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
+import 'package:ezi_cable_digi/features/reports/monthly_report_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../core/services/auth_service.dart';
@@ -19,6 +20,7 @@ import '../features/search/search_customer_screen.dart';
 import '../features/customers/nearest_customers_screen.dart';
 import '../features/customers/customer_list_screen.dart';
 import '../features/collections/collection_schedule_screen.dart';
+import '../features/event/event_management_screen.dart';
 import '../features/employee_track/employee_track_screen.dart';
 import '../features/reports/pay_later_report_screen.dart';
 import '../features/offline/download_records_screen.dart';
@@ -974,6 +976,13 @@ class _DrawerItem extends StatelessWidget {
               ),
             );
             break;
+          case 'calendar_event_list':
+            Navigator.of(navCtx).push(
+              MaterialPageRoute(
+                builder: (_) => const EventManagementScreen(),
+              ),
+            );
+            break;
           case 'employee_track':
             Navigator.of(navCtx).push(
               MaterialPageRoute(builder: (_) => const EmployeeTrackScreen()),
@@ -1024,7 +1033,7 @@ class _DrawerItem extends StatelessWidget {
                         Navigator.push(
                           navCtx,
                           MaterialPageRoute(
-                            builder: (_) => const EmployeeTrackScreen(),
+                            builder: (_) => const MonthlyReportScreen(),
                           ),
                         );
                       },

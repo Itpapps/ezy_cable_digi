@@ -1,12 +1,11 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_sync_service.dart';
+import '../../core/services/real_bluetooth_service.dart';
+import '../payment/printer_launcher.dart';
 
 class MinidayReportScreen extends StatefulWidget {
   const MinidayReportScreen({super.key});
@@ -17,6 +16,7 @@ class MinidayReportScreen extends StatefulWidget {
 
 class _MinidayReportScreenState extends State<MinidayReportScreen> {
   final _db = DatabaseHelper();
+  final _printerService = RealBluetoothService();
   Map<String, dynamic>? _summary;
   bool _loading = true;
   int _pendingToSync = 0;
@@ -25,6 +25,12 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _printerService.disconnectPrinter();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -40,43 +46,46 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
     });
   }
 
-  Future<Uint8List> _buildPdf() async {
+  /// Thermal lines for the Mini Day report — Android parity
+  /// (BluetoothChatService.write_mini_reports_off): MINI REPORT layout with
+  /// Cash/Bank count+amount and TOTAL COLLECTION.
+  List<String> _buildMinidayLines(ReceiptFormat fmt) {
     final s = _summary!;
-    final cashC = s['cashCount'] as int;
-    final bankC = s['bankCount'] as int;
-    final cashA = s['cashAmount'] as double;
-    final bankA = s['bankAmount'] as double;
-    final total = s['totalAmount'] as double;
+    final cashC = '${s['cashCount']}';
+    final bankC = '${s['bankCount']}';
+    final cashA = (s['cashAmount'] as double).toStringAsFixed(2);
+    final bankA = (s['bankAmount'] as double).toStringAsFixed(2);
+    final total = (s['totalAmount'] as double).toStringAsFixed(2);
+    final date = DateFormat('dd-MM-yyyy').format(DateTime.now());
+    final w = fmt.is97bt; // 97BT (40-col) branch — Android write_mini_reports.
+    final ind = w ? '  ' : '';
 
-    final doc = pw.Document();
-    doc.addPage(
-      pw.Page(
-        build: (ctx) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text('MINI DAY REPORT',
-                style:
-                    pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-            pw.SizedBox(height: 20),
-            pw.Text('MODE          COUNT    AMOUNT'),
-            pw.SizedBox(height: 8),
-            pw.Text(
-                'CASH(STB)     $cashC    ₹${cashA.toStringAsFixed(1)}'),
-            pw.Text(
-                'BANK(STB)     $bankC    ₹${bankA.toStringAsFixed(1)}'),
-            pw.Divider(),
-            pw.Text('TOTAL COLLECTION    ${total.toStringAsFixed(1)}'),
-          ],
-        ),
-      ),
-    );
-    return doc.save();
+    return [
+      fmt.sep,
+      fitCenter('MINI REPORT', fmt.width),
+      fmt.sep,
+      fitCenter(date, fmt.width),
+      fmt.sep,
+      w ? '    MODE          COUNT       AMOUNT' : 'MODE      COUNT        AMOUNT',
+      fmt.sep,
+      '${ind}Cash${fitLeft(cashC, 10)}    ${fitLeft(cashA, 10)}',
+      '${ind}Bank${fitLeft(bankC, 10)}    ${fitLeft(bankA, 10)}',
+      fmt.sep,
+      w
+          ? 'TOTAL COLLECTION -   ${fitLeft('Rs.$total', 14)}'
+          : 'TOTAL COLLECTION -  ${fitLeft(total, 10)}',
+      fmt.sep,
+    ];
   }
 
+  // Shared thermal-printer pipeline (same as the payment receipt).
   Future<void> _printReport() async {
     if (_summary == null) return;
-    final bytes = await _buildPdf();
-    await Printing.layoutPdf(onLayout: (format) async => bytes);
+    await launchThermalPrint(
+      context: context,
+      printerService: _printerService,
+      buildLines: _buildMinidayLines,
+    );
   }
 
   Future<void> _sync() async {

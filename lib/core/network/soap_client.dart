@@ -100,8 +100,17 @@ class SoapClient {
 
   /// Pull a single field value out of a SOAP/XML response.
   /// e.g. readField(xml, 'authToken') → the token string.
+  ///
+  /// The opening tag is matched WITH OR WITHOUT XML attributes — some SOAP
+  /// servers add a type attribute to typed/numeric fields (e.g.
+  /// `<Amt i:type="d:double">123.0</Amt>`), which a plain `<Amt>` match would
+  /// miss and return null. The attribute group is optional, so every tag that
+  /// matched before still matches identically (safe superset); `<$field ...>`
+  /// still cannot match a different tag like `<${field}Code>` because the char
+  /// after the name must be whitespace or `>`.
   static String? readField(String xml, String field) {
-    final m = RegExp('<$field>(.*?)</$field>', dotAll: true).firstMatch(xml);
+    final m = RegExp('<$field(?:\\s[^>]*)?>(.*?)</$field>', dotAll: true)
+        .firstMatch(xml);
     return m?.group(1)?.trim();
   }
 

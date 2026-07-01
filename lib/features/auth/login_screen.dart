@@ -90,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Permission.locationWhenInUse,  // shows Location dialog
       Permission.bluetoothScan,      // shows "Nearby devices" dialog on Android 12+
       Permission.bluetoothConnect,
+      Permission.notification,       // ask at login, not after the first payment
     ].request();
   }
 

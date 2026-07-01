@@ -776,14 +776,17 @@ Future<List<Customer>> getFilteredCustomersPaginated({
     return maps.map(OfflineCustomer.fromMap).toList();
   }
 
-  // ── GET payments between dates ──
+  // ── GET payments between dates (offline Collections report) ──
+  // Android parity: DB_Helper.getAllBetweenDates queries the pay-queue table by
+  // `last_paid_date BETWEEN start AND end` (dates as "dd-MM-yyyy"). Mirrors that
+  // exactly — lastPaidDate is stored as "dd-MM-yyyy" at commit.
   Future<List<OfflineCustomer>> getOfflinePaymentsBetweenDates(
       String startDate, String endDate) async {
     final db = await database;
     final maps = await db.query(_tblOfflinePayments,
-        where: "paymentDate >= ? AND paymentDate <= ?",
+        where: "lastPaidDate BETWEEN ? AND ?",
         whereArgs: [startDate, endDate],
-        orderBy: 'paymentDate DESC');
+        orderBy: 'id DESC');
     return maps.map(OfflineCustomer.fromMap).toList();
   }
 

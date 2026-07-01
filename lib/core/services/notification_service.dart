@@ -23,18 +23,21 @@ class NotificationService {
       },
     );
 
-    // Create channel on Android
+    // Create channel on Android.
     final androidPlugin =
     _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
+    // Android locks vibration/sound into the channel at creation time, so a new
+    // channel id is required to drop vibration. Remove the old vibrating channel.
+    await androidPlugin?.deleteNotificationChannel('payment_channel_v4');
     await androidPlugin?.createNotificationChannel(
       const AndroidNotificationChannel(
-        'payment_channel_v4',
+        'payment_channel_v5',
         'Payment Notifications',
         description: 'Payment success alerts',
         importance: Importance.max,
-        playSound: true,
-        enableVibration: true,
+        playSound: false, // fully silent — no sound
+        enableVibration: false, // and no vibration
       ),
     );
 
@@ -98,20 +101,20 @@ class NotificationService {
         body,
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'payment_channel_v4',
+            'payment_channel_v5',
             'Payment Notifications',
             channelDescription: 'Payment success alerts',
             importance: Importance.max,
             priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
+            playSound: false, // fully silent — no sound
+            enableVibration: false, // and no vibration
             visibility: NotificationVisibility.public,
             icon: '@mipmap/ic_launcher',
           ),
           iOS: DarwinNotificationDetails(
             presentAlert: true,
             presentBadge: true,
-            presentSound: true,
+            presentSound: false,
           ),
         ),
       );

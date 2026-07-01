@@ -1,31 +1,40 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'data/calendar_event.dart';
+import 'data/calendar_repository.dart';
+
+/// View-model for the calendar UI (parsed dates). Backed by [CalendarEvent]
+/// from the real `calender_data` / `calender_event` APIs (Android parity).
 class Event {
-  String title;
-  DateTime startDate;
-  DateTime endDate;
+  final String id;
+  final String title;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String status;
 
-  Event({
+  const Event({
+    this.id = '',
     required this.title,
     required this.startDate,
     required this.endDate,
+    this.status = '',
   });
 
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'startDate': startDate.toIso8601String(),
-        'endDate': endDate.toIso8601String(),
-      };
-
-  factory Event.fromJson(Map<String, dynamic> json) => Event(
-        title: json['title'],
-        startDate: DateTime.parse(json['startDate']),
-        endDate: DateTime.parse(json['endDate']),
-      );
+  /// Map a backend [CalendarEvent] to the view-model. Dates may be "yyyy-MM-dd"
+  /// or "yyyy-MM-dd HH:mm:ss" — parsed leniently.
+  factory Event.fromBackend(CalendarEvent c) {
+    DateTime parse(String s) =>
+        DateTime.tryParse(s.trim().replaceFirst(' ', 'T')) ?? DateTime.now();
+    return Event(
+      id: c.id,
+      title: c.title,
+      startDate: parse(c.startDate),
+      endDate: parse(c.endDate),
+      status: c.status,
+    );
+  }
 }
 
 class EventManagementScreen extends StatefulWidget {
@@ -36,14 +45,19 @@ class EventManagementScreen extends StatefulWidget {
 }
 
 class _EventManagementScreenState extends State<EventManagementScreen> {
-  // Local storage array
   List<Event> events = [];
   bool _isLoading = true;
+  String? _error;
+  bool _loadInFlight = false; // guards concurrent refreshes
+  bool _deleteInFlight = false; // guards double-delete
 
   // ── colours (matching app palette) ──────────────────────────────────────
   static const Color _primary = Color(0xFF0D47A1);
   static const Color _bg = Color(0xFFEFF3FF);
   static const Color _cardBg = Colors.white;
+
+  // API date format (Android calender_data / calender_event).
+  final _api = DateFormat('yyyy-MM-dd');
 
   @override
   void initState() {
@@ -51,33 +65,33 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
     _loadEvents();
   }
 
+  /// Load events from the real calendar API over a wide window so past/ongoing/
+  /// upcoming all show (same `calender_data` endpoint Android uses).
   Future<void> _loadEvents() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? eventsJson = prefs.getString('events');
-    if (eventsJson != null) {
-      try {
-        final List<dynamic> decoded = jsonDecode(eventsJson);
-        setState(() {
-          events = decoded.map((e) => Event.fromJson(e)).toList();
-          _isLoading = false;
-        });
-      } catch (e) {
-        setState(() {
-          _isLoading = false;
-          events = [];
-        });
+    if (_loadInFlight) return; // no overlapping refreshes (race-safe)
+    _loadInFlight = true;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    final now = DateTime.now();
+    final r = await CalendarRepository.instance.list(
+      startDate: _api.format(DateTime(now.year - 1, now.month, now.day)),
+      endDate: _api.format(DateTime(now.year + 1, now.month, now.day)),
+    );
+    _loadInFlight = false;
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      if (r.isSuccess) {
+        events = r.events.map(Event.fromBackend).toList();
+      } else {
+        events = [];
+        _error = r.statusMessage.isEmpty
+            ? 'Could not load events'
+            : r.statusMessage;
       }
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _saveEvents() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(events.map((e) => e.toJson()).toList());
-    await prefs.setString('events', encoded);
+    });
   }
 
   // ── helpers ─────────────────────────────────────────────────────────────
@@ -103,7 +117,7 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
 
   // ── dialog ───────────────────────────────────────────────────────────────
 
-  void _openEventDialog({Event? event, int? index}) {
+  void _openEventDialog({Event? event}) {
     final titleCtrl = TextEditingController(text: event?.title ?? '');
     DateTime? startDate = event?.startDate;
     DateTime? endDate = event?.endDate;
@@ -113,6 +127,7 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
       barrierColor: Colors.black45,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setDlg) {
+          bool saving = false; // disables Save/Delete while a request runs
           Future<void> pickStartDateTime() async {
             final date = await showDatePicker(
               context: ctx,
@@ -179,7 +194,8 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
             });
           }
 
-          void onSave() {
+          Future<void> onSave() async {
+            if (saving) return; // guard double-submit
             if (titleCtrl.text.trim().isEmpty ||
                 startDate == null ||
                 endDate == null) {
@@ -201,24 +217,30 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
               return;
             }
 
-            setState(() {
-              if (event == null) {
-                events.add(Event(
-                  title: titleCtrl.text.trim(),
-                  startDate: startDate!,
-                  endDate: endDate!,
-                ));
-              } else {
-                events[index!] = Event(
-                  title: titleCtrl.text.trim(),
-                  startDate: startDate!,
-                  endDate: endDate!,
-                );
+            setDlg(() => saving = true);
+            // Add (no id) or Update (existing id) via the real calender_event API.
+            final r = await CalendarRepository.instance.save(
+              title: titleCtrl.text.trim(),
+              startDate: _api.format(startDate!),
+              endDate: _api.format(endDate!),
+              eventId: event?.id ?? '',
+            );
+            if (!ctx.mounted) return;
+            if (r.isSuccess) {
+              Navigator.pop(ctx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content:
+                        Text(r.statusMessage.isEmpty ? 'Saved' : r.statusMessage)));
               }
-            });
-            _saveEvents();
-
-            if (ctx.mounted) Navigator.pop(ctx);
+              await _loadEvents(); // Android refreshes the list after add/update
+            } else {
+              setDlg(() => saving = false);
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                  content: Text(r.statusMessage.isEmpty
+                      ? 'Please try again'
+                      : r.statusMessage)));
+            }
           }
 
           // ─────────── the dialog itself ───────────────────────────────────
@@ -319,11 +341,12 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
                             icon: const Icon(Icons.delete_outline_rounded,
                                 size: 18),
                             label: const Text('Delete'),
-                            onPressed: () {
-                              setState(() => events.removeAt(index!));
-                              _saveEvents();
-                              if (ctx.mounted) Navigator.pop(ctx);
-                            },
+                            onPressed: saving
+                                ? null
+                                : () {
+                                    Navigator.pop(ctx); // close the edit dialog
+                                    _deleteEvent(event);
+                                  },
                           ),
                         ),
                       if (event != null) const SizedBox(width: 10),
@@ -337,14 +360,23 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
                                 borderRadius: BorderRadius.circular(12)),
                             padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
-                          icon: Icon(
-                            event == null
-                                ? Icons.add_rounded
-                                : Icons.save_rounded,
-                            size: 18,
-                          ),
-                          label: Text(event == null ? 'Create Event' : 'Save'),
-                          onPressed: onSave,
+                          icon: saving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5, color: Colors.white),
+                                )
+                              : Icon(
+                                  event == null
+                                      ? Icons.add_rounded
+                                      : Icons.save_rounded,
+                                  size: 18,
+                                ),
+                          label: Text(saving
+                              ? 'Saving...'
+                              : (event == null ? 'Create Event' : 'Save')),
+                          onPressed: saving ? null : onSave,
                         ),
                       ),
                     ],
@@ -356,6 +388,59 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
         },
       ),
     );
+  }
+
+  /// Delete with a confirmation dialog + optional remarks (Android
+  /// event_delete_remarks), then refresh the list.
+  Future<void> _deleteEvent(Event event) async {
+    final remarksCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Delete "${event.title}"?'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: remarksCtrl,
+              decoration: const InputDecoration(labelText: 'Remarks (optional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (_deleteInFlight) return; // guard double-delete
+    _deleteInFlight = true;
+    final r = await CalendarRepository.instance.delete(
+      eventId: event.id,
+      title: event.title,
+      startDate: _api.format(event.startDate),
+      endDate: _api.format(event.endDate),
+      remarks: remarksCtrl.text.trim(),
+    );
+    _deleteInFlight = false;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(r.isSuccess
+          ? (r.statusMessage.isEmpty ? 'Deleted' : r.statusMessage)
+          : (r.statusMessage.isEmpty ? 'Delete failed' : r.statusMessage)),
+    ));
+    if (r.isSuccess) await _loadEvents();
   }
 
   // ── build ────────────────────────────────────────────────────────────────
@@ -384,8 +469,22 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
       ),
 
       // ── body ─────────────────────────────────────────────────────────────
-      body: _isLoading 
-          ? const Center(child: CircularProgressIndicator()) 
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, style: GoogleFonts.poppins(color: _primary)),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _loadEvents,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
           : events.isEmpty
           ? _EmptyState(onAdd: () => _openEventDialog())
           : CustomScrollView(
@@ -405,7 +504,7 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
                           statusLabel: _statusLabel(e),
                           formatDate: _formatDate,
                           formatTime: _formatTime,
-                          onTap: () => _openEventDialog(event: e, index: i),
+                          onTap: () => _openEventDialog(event: e),
                         );
                       },
                       childCount: events.length,

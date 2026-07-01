@@ -4,7 +4,7 @@ import 'package:ezi_cable_digi/features/event/event_management_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/offline/download_records_screen.dart';
 import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
-import 'package:ezi_cable_digi/features/employee_track/employee_track_screen.dart';
+import 'package:ezi_cable_digi/features/reports/monthly_report_screen.dart';
 import 'package:ezi_cable_digi/features/scan/scan_customer_screen.dart';
 import 'package:ezi_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +28,7 @@ import '../../widgets/bottom_nav_bar.dart';
 import '../customers/customer_list_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
 import 'dashboard_controller.dart';
+import 'dashboard_refresh_signal.dart';
 import 'data/nearest_repository.dart';
 import '../../core/config/app_config.dart';
 
@@ -172,8 +173,15 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
       LocationSyncService.instance.onScreenOpened(TrackingScreen.other);
 
   @override
-  void didPopNext() =>
-      LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
+  void didPopNext() {
+    LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
+    // Force a one-shot KPI refresh if a collection action (e.g. a payment)
+    // changed the totals while we were away — Android parity. Nothing reloads
+    // when the flag is unset (returning from read-only screens).
+    if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
+      _dash.loadKpis();
+    }
+  }
 
   // ── Build ──────
   @override
@@ -405,7 +413,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const EmployeeTrackScreen(),
+                                    builder: (_) => const MonthlyReportScreen(),
                                   ),
                                 );
                               },
@@ -944,16 +952,16 @@ class _LottieHighlightCardState extends State<_LottieHighlightCard>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      widget.amount,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  // Android parity: fixed box, truncate large amounts with "…"
+                  // (ellipsis) instead of shrinking the text so it stays legible.
+                  Text(
+                    widget.amount,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                   const SizedBox(height: 2),

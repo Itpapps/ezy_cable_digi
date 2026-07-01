@@ -1,7 +1,10 @@
 import 'package:ezi_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
+import '../../core/services/real_bluetooth_service.dart';
 import '../../core/theme/theme_constants.dart';
+import '../payment/printer_launcher.dart';
 import 'data/mini_day_report_repository.dart';
 
 class MiniDayReportScreen extends StatefulWidget {
@@ -13,6 +16,7 @@ class MiniDayReportScreen extends StatefulWidget {
 
 class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
   bool _loading = true;
+  final _printerService = RealBluetoothService();
   MiniDayReportResult _data =
       const MiniDayReportResult(statusCode: 3, statusMessage: '');
 
@@ -20,6 +24,12 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _printerService.disconnectPrinter();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -30,6 +40,64 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
       _loading = false;
       _data = r;
     });
+  }
+
+  /// Thermal lines — Android parity (BluetoothChatService.write_mini_reports):
+  /// MINI REPORT with Cash(STB)/Bank(STB) and, when broadband data exists,
+  /// Cash(BB)/Bank(BB), then TOTAL COLLECTION. No dealer/employee/footer
+  /// (Android's mini-day printout does not include them).
+  List<String> _buildMinidayLines(ReceiptFormat fmt) {
+    final date = DateFormat('dd-MM-yyyy').format(DateTime.now());
+    final w = fmt.is97bt; // 97BT (40-col) branch — Android write_mini_reports:2452
+    // Android widens the amount column (8→10), indents rows 2 spaces, widens the
+    // MODE header and prefixes the total with "Rs." on 97BT; 32-col is unchanged.
+    final amtW = w ? 10 : 8;
+    final modeHdr =
+        w ? '    MODE          COUNT       AMOUNT' : 'MODE      COUNT        AMOUNT';
+    final ind = w ? '  ' : '';
+    final lines = <String>[
+      fmt.sep,
+      fitCenter('MINI REPORT', fmt.width),
+      fmt.sep,
+      fitCenter(date, fmt.width), // Android centers the date
+      fmt.sep,
+      modeHdr,
+      fmt.sep,
+      '${ind}Cash(STB)${fitLeft(_data.cashCount, 10)}   ${fitLeft(_data.cashAmount, amtW)}',
+      '${ind}Bank(STB)${fitLeft(_data.bankCount, 10)}   ${fitLeft(_data.bankAmount, amtW)}',
+    ];
+    if (_data.hasBroadband) {
+      lines.add(
+          '${ind}Cash(BB)${w ? ' ' : ''}${fitLeft(_data.bbCashCount, 10)}   ${fitLeft(_data.bbCashAmount, amtW)}');
+      lines.add(
+          '${ind}Bank(BB)${w ? ' ' : ''}${fitLeft(_data.bbBankCount, 10)}   ${fitLeft(_data.bbBankAmount, amtW)}');
+    }
+    lines.add(fmt.sep);
+    lines.add(w
+        ? 'TOTAL COLLECTION -   ${fitLeft('Rs.${_data.totalAmount}', 14)}'
+        : 'TOTAL COLLECTION -  ${fitLeft(_data.totalAmount, 10)}');
+    lines.add(fmt.sep);
+    return lines;
+  }
+
+  /// Print via the shared thermal-printer pipeline (same as receipts/offline).
+  /// Guards empty / failed report so there is no silent failure.
+  Future<void> _printReport() async {
+    if (_loading) return;
+    if (_data.statusCode != 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(_data.statusMessage.isEmpty
+                ? 'No records to print.'
+                : _data.statusMessage)),
+      );
+      return;
+    }
+    await launchThermalPrint(
+      context: context,
+      printerService: _printerService,
+      buildLines: _buildMinidayLines,
+    );
   }
 
   @override
@@ -64,28 +132,36 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
         child: Column(
           children: [
             // ── Print button row ──────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: t.sectionBg,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _printReport,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: t.dividerColor),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.print, color: Colors.red, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    AppStrings.of(context, 'print'),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: t.bodyText,
-                    ),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: t.sectionBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: t.dividerColor),
                   ),
-                ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      const Icon(Icons.print, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppStrings.of(context, 'print'),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: t.bodyText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
 

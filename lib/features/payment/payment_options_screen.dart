@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
@@ -7,6 +9,7 @@ import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
+import '../dashboard/dashboard_refresh_signal.dart';
 import 'payment_confirmation_dialog.dart';
 import 'payment_controller.dart';
 import 'receipt_preview_screen.dart';
@@ -68,6 +71,10 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
 
   // ── Pay Now ──────────────────────────────────────────────────────────────────
   Future<void> _handlePay() async {
+    // Dismiss the keyboard before the confirmation/loading/success overlays so it
+    // can't pop back up (focus restoration) on each overlay dismissal.
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final error = _ctrl.validate();
     if (error != null) {
       showPremiumSnackBar(context, error, isError: true);
@@ -101,6 +108,11 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         showPremiumSnackBar(context, 'Payment could not be saved', isError: true);
         return;
       }
+
+      // A successful payment changes the dashboard totals — flag KPIs stale so
+      // the Dashboard force-refreshes them on return (Android parity, where the
+      // post-payment fragment rebuild reloads the summary).
+      DashboardRefreshSignal.instance.markKpiDirty();
 
       // Receipt values captured now, before pushReplacement disposes the controller.
       final bbPaid =
@@ -680,7 +692,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // Payment Success Content
 // ─────────────────────────────────────────────────────────────────────────────
-class _PaymentSuccessContent extends StatelessWidget {
+class _PaymentSuccessContent extends StatefulWidget {
   final double amount;
   final String customerName;
   final String txnId;
@@ -694,59 +706,50 @@ class _PaymentSuccessContent extends StatelessWidget {
   });
 
   @override
+  State<_PaymentSuccessContent> createState() => _PaymentSuccessContentState();
+}
+
+class _PaymentSuccessContentState extends State<_PaymentSuccessContent> {
+  Timer? _autoClose;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-close the success popup, then proceed to the receipt — no manual
+    // "VIEW RECEIPT" tap needed. Cancelled if the dialog is dismissed earlier.
+    _autoClose = Timer(const Duration(milliseconds: 1500), widget.onContinue);
+  }
+
+  @override
+  void dispose() {
+    _autoClose?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Simple, light success popup (Android-style): flat check + title + amount.
+    // Auto-closes (timer in initState) and continues to the receipt.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64, height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(color: Colors.green.withValues(alpha: 0.30), blurRadius: 14, offset: const Offset(0, 6)),
-              ],
-            ),
-            child: const Icon(Icons.check_rounded, color: Colors.white, size: 34),
-          ),
-          const SizedBox(height: 16),
-          const Text('Payment Successful!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A3C6E))),
+          const Icon(Icons.check_circle_rounded,
+              color: Color(0xFF1AA95A), size: 46),
+          const SizedBox(height: 12),
+          const Text('Payment Successful',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A3C6E))),
           const SizedBox(height: 6),
           Text(
-            '₹${amount.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF0277BD)),
-          ),
-          const SizedBox(height: 4),
-          Text(customerName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F4FF),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(txnId, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary)),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onContinue,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('VIEW RECEIPT', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-            ),
+            '₹${widget.amount.toStringAsFixed(2)}',
+            style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0277BD)),
           ),
         ],
       ),

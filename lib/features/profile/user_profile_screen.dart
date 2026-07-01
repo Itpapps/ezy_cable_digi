@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/session_service.dart';
+import 'change_password_screen.dart';
 
 class UserProfileScreen extends StatelessWidget {
   const UserProfileScreen({super.key});
@@ -66,7 +67,11 @@ class UserProfileScreen extends StatelessWidget {
               const SizedBox(height: AppSizes.paddingL),
               GestureDetector(
                 onTap: () {
-                  // navigate to change password later
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ChangePasswordScreen(),
+                    ),
+                  );
                 },
                 child: const Text(
                   'click here  to change your password.',

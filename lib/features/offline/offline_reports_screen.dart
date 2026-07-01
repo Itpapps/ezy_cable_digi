@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import 'miniday_report_screen.dart';
+import 'offline_collections_report_screen.dart';
 
 class OfflineReportsScreen extends StatelessWidget {
   const OfflineReportsScreen({super.key});
@@ -30,9 +31,11 @@ class OfflineReportsScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Employee Collections (coming with API)'),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const OfflineCollectionsReportScreen(),
                       ),
                     );
                   },
@@ -42,7 +45,7 @@ class OfflineReportsScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: const Text(
-                    'Employee Collections',
+                    'Collections',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),

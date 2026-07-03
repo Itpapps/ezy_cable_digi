@@ -8,7 +8,9 @@ import '../../core/data/customer.dart';
 import '../../core/data/offline_customer.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../customer/customer_details_screen.dart';
+import 'data/search_repository.dart';
 import '../customer/customer_map_screen.dart';
 import '../offline/offline_payment_flow.dart';
 import 'search_provider.dart';
@@ -49,6 +51,13 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
 
   Future<void> _performSearch() async {
     _focusNode.unfocus();
+    // Android parity (SearchCustomer_Fragment_Newdesign:615-617): empty field →
+    // "Please enter any value in the fields" instead of silently doing nothing.
+    if (_searchController.text.trim().isEmpty) {
+      showPremiumSnackBar(context, 'Please enter any value in the fields',
+          isError: true);
+      return;
+    }
     await context.read<SearchProvider>().search(_searchController.text);
   }
 
@@ -480,8 +489,7 @@ class _CustomerCard extends StatelessWidget {
                     // Dark navy "View Details" button
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(
-                            builder: (_) => CustomerDetailsScreen(customer: customer))),
+                        onTap: () => _openDetail(context, customer),
                         child: Container(
                           height: 44,
                           decoration: BoxDecoration(
@@ -554,6 +562,24 @@ class _CustomerCard extends StatelessWidget {
               )),
         ),
       ],
+    );
+  }
+
+  /// Android two-step (SearchCustomer_Fragment_Newdesign:644-647): on selecting a
+  /// customer, fetch the enriched detail (is_list=1) so is_show / tmp_activation
+  /// are populated for the operations grid. Falls back to the list customer if
+  /// the detail fetch yields nothing — never blocks navigation.
+  Future<void> _openDetail(BuildContext context, Customer c) async {
+    showPremiumLoading(context);
+    final enriched =
+        await SearchRepository.instance.fetchCustomerDetail(c.lcoCustomerId);
+    if (!context.mounted) return;
+    Navigator.of(context).pop(); // dismiss loading
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerDetailsScreen(customer: enriched ?? c),
+      ),
     );
   }
 }

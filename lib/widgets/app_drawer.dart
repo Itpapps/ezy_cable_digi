@@ -1,16 +1,16 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:ezi_cable_digi/core/services/localization_service.dart';
 import 'package:ezi_cable_digi/core/services/theme_service.dart';
 import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
-import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
-import 'package:ezi_cable_digi/features/reports/monthly_report_screen.dart';
+import 'package:ezi_cable_digi/features/offline/sync_clear_screen.dart';
+import 'package:ezi_cable_digi/features/reports/reports_home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../core/services/auth_service.dart';
 import '../core/services/session_service.dart';
 import '../core/constants/app_colors.dart';
 import '../core/services/offline_mode_service.dart';
-import '../core/services/offline_sync_service.dart';
 import '../core/widgets/premium_dialog.dart';
 import '../features/auth/login_screen.dart';
 import '../features/profile/user_profile_screen.dart';
@@ -19,10 +19,10 @@ import '../core/config/app_config.dart';
 import '../features/search/search_customer_screen.dart';
 import '../features/customers/nearest_customers_screen.dart';
 import '../features/customers/customer_list_screen.dart';
+import '../features/customers/paid_customers_screen.dart';
 import '../features/collections/collection_schedule_screen.dart';
 import '../features/event/event_management_screen.dart';
 import '../features/employee_track/employee_track_screen.dart';
-import '../features/reports/pay_later_report_screen.dart';
 import '../features/offline/download_records_screen.dart';
 import '../features/offline/static_content_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -38,6 +38,32 @@ void _closeDrawerThen(
       action(navigator.context);
     }
   });
+}
+
+/// Android parity (MainActivity `nav_switchtoofflinemode` / `nav_syncdata`):
+/// offline data must belong to THIS dealer — the machineNumber stored at
+/// download must match the current login's machineNumber. If not, Android shows
+/// an "ID Mismatch!" dialog and blocks entry (also covers "no data downloaded").
+Future<bool> _offlineDataMatchesDealer() async {
+  final stored = (await OfflineModeService.instance.machineId).trim();
+  final current = SessionService.instance.machineNumber.trim();
+  return stored.isNotEmpty &&
+      current.isNotEmpty &&
+      stored.toLowerCase() == current.toLowerCase();
+}
+
+/// Android "ID Mismatch!" dialog (MainActivity:697-710 / :722-731).
+Future<void> _showIdMismatch(BuildContext ctx) async {
+  final usercode = await OfflineModeService.instance.userCode;
+  if (!ctx.mounted) return;
+  await showPremiumConfirm(
+    context: ctx,
+    title: 'ID Mismatch!',
+    body:
+        'You have not downloaded the data or Data already present for $usercode',
+    confirmLabel: 'OK',
+    cancelLabel: 'Close',
+  );
 }
 
 // ── Language Picker bottom-sheet (theme-aware) ────────────────────────────────
@@ -389,6 +415,7 @@ class AppDrawer extends StatelessWidget {
             _DrawerItem(icon: Iconsax.setting_2, labelKey: 'settings'),
             _DrawerItem(icon: Iconsax.sun_1, labelKey: 'select_theme'),
             _DrawerItem(icon: Iconsax.user_tag, labelKey: 'customer_list'),
+            _DrawerItem(icon: Iconsax.money_recive, labelKey: 'paid_customers'),
             _DrawerItem(
               icon: Iconsax.location_tick,
               labelKey: 'nearest_customer',
@@ -463,13 +490,34 @@ class AppDrawer extends StatelessWidget {
                 ),
               ),
               onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const OfflineDashboardScreen(),
-                  ),
-                );
+                _closeDrawerThen(context, (navCtx) async {
+                  // Android: block if this dealer's data isn't downloaded.
+                  if (!await _offlineDataMatchesDealer()) {
+                    if (navCtx.mounted) await _showIdMismatch(navCtx);
+                    return;
+                  }
+                  final conn = await Connectivity().checkConnectivity();
+                  final online = !conn.contains(ConnectivityResult.none);
+                  if (!navCtx.mounted) return;
+                  if (online) {
+                    // Android "Internet Connected" info dialog before entering.
+                    final ok = await showPremiumConfirm(
+                      context: navCtx,
+                      title: 'Internet Connected',
+                      body:
+                          'You are connected to internet. You can turn off internet connection in OFFLINE MODE.',
+                      confirmLabel: 'OK',
+                      cancelLabel: 'Cancel',
+                    );
+                    if (!ok || !navCtx.mounted) return;
+                  }
+                  Navigator.push(
+                    navCtx,
+                    MaterialPageRoute(
+                      builder: (_) => const OfflineDashboardScreen(),
+                    ),
+                  );
+                });
               },
             ),
             ListTile(
@@ -523,27 +571,18 @@ class AppDrawer extends StatelessWidget {
                 ),
               ),
               onTap: () {
+                // Android nav_syncdata: machineNumber guard → SyncData_Fragment
+                // (a screen with Sync + Clear + counts). No one-shot dialog.
                 _closeDrawerThen(context, (navCtx) async {
-                  final ok = await showPremiumConfirm(
-                    context: navCtx,
-                    title: _s('sync_confirm_title'),
-                    body: _s('sync_confirm_body'),
-                    confirmLabel: _s('ok'),
-                    cancelLabel: _s('cancel'),
-                  );
-                  if (ok && navCtx.mounted) {
-                    final n = await OfflineSyncService.instance
-                        .syncPendingToServer();
-                    if (navCtx.mounted) {
-                      showPremiumSnackBar(
-                        navCtx,
-                        n > 0
-                            ? _s('synced_records').replaceAll('{n}', '$n')
-                            : _s('no_pending_records'),
-                        isSuccess: n > 0,
-                      );
-                    }
+                  if (!await _offlineDataMatchesDealer()) {
+                    if (navCtx.mounted) await _showIdMismatch(navCtx);
+                    return;
                   }
+                  if (!navCtx.mounted) return;
+                  Navigator.push(
+                    navCtx,
+                    MaterialPageRoute(builder: (_) => const SyncClearScreen()),
+                  );
                 });
               },
             ),
@@ -964,6 +1003,11 @@ class _DrawerItem extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const CustomerListScreen()),
             );
             break;
+          case 'paid_customers':
+            Navigator.of(navCtx).push(
+              MaterialPageRoute(builder: (_) => const PaidCustomersScreen()),
+            );
+            break;
           case 'list_expenses':
             Navigator.of(navCtx).push(
               MaterialPageRoute(builder: (_) => const ListExpensesScreen()),
@@ -992,67 +1036,10 @@ class _DrawerItem extends StatelessWidget {
             showThemePicker(navCtx);
             break;
           case 'reports':
-            showModalBottomSheet<void>(
-              context: navCtx,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              builder: (ctx) => Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      title: Text(AppStrings.get('employee_collections')),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(
-                          navCtx,
-                          MaterialPageRoute(
-                            builder: (_) => const EmployeeTrackScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    ListTile(
-                      title: Text(AppStrings.get('miniday_report')),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(
-                          navCtx,
-                          MaterialPageRoute(
-                            builder: (_) => const MiniDayReportScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    ListTile(
-                      title: Text(AppStrings.get('monthly_report')),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(
-                          navCtx,
-                          MaterialPageRoute(
-                            builder: (_) => const MonthlyReportScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    ListTile(
-                      title: const Text('Pay Later'),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        Navigator.push(
-                          navCtx,
-                          MaterialPageRoute(
-                            builder: (_) => const PayLaterReportScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            // Android parity: drawer → Reports opens the Reports Home screen
+            // (ReportsHome_Fragment), not a bottom sheet.
+            Navigator.of(navCtx).push(
+              MaterialPageRoute(builder: (_) => const ReportsHomeScreen()),
             );
             break;
           default:

@@ -100,6 +100,15 @@ class AuthService {
               SoapClient.readField(xml, 'lovvalue_restrict_partial_payment') ??
                   '') ??
           0;
+      // useLcoDeposit (Android LoginActivity.userLcoDeposit): 1 = LCO-deposit dealer
+      // → lock STB amount to full + show wallet card. Default 0 (feature off).
+      final useLcoDeposit =
+          int.tryParse(SoapClient.readField(xml, 'useLcoDeposit') ?? '') ?? 0;
+      // show_custom_packages (Android LoginActivity, int 0/1) → Custom Packages
+      // tile in Customer Operations. Default 0 (hidden).
+      final showCustomPackages =
+          (SoapClient.readField(xml, 'show_custom_packages') ?? '0').trim() ==
+              '1';
       final serverDate =
           (SoapClient.readField(xml, 'current_date') ?? '').trim();
       // use_crf (Android LoginActivity.use_caf): 1 = dealer uses CRF → the CRF
@@ -129,9 +138,11 @@ class AuthService {
         offlineUserCode: offlineUserCode,
         offlineStatus: offlineStatus,
         restrictPartialPayment: restrictPartial,
+        useLcoDeposit: useLcoDeposit,
         serverCurrentDate: serverDate,
         useCaf: useCaf,
         customerAppSearch: customerAppSearch,
+        showCustomPackages: showCustomPackages,
         username: username,
         employeeName: employeeName,
         lastLogin: lastLogin,
@@ -188,11 +199,23 @@ class AuthService {
         return node is Map && '${node['permission']}' == '1';
       }
 
+      // Android blocks Make Payment only on an explicit make_payment=="0"
+      // (default allow). Distinct from the deny-default perms above.
+      final mpNode = rp['make_payment'];
+      final makePaymentAllowed =
+          !(mpNode is Map && '${mpNode['permission']}' == '0');
+
       SessionService.instance.setRolePermissions(
         packageActivation: perm('package_activation'),
         packageDeactivation: perm('package_deactivation'),
         scheduleService: perm('schedule_service'),
         serviceExtension: perm('service_extension'),
+        // Customer Operations grid flags (Android reads these same keys).
+        renew: perm('renew'),
+        onetimeCharges: perm('onetime_charges'),
+        unpaidCustomerDeactivation: perm('unpaid_customer_deactivation'),
+        unpaidCustomerActivation: perm('unpaid_customer_activation'),
+        makePaymentAllowed: makePaymentAllowed,
       );
     } catch (_) {
       // keep safe deny defaults (all false)

@@ -69,6 +69,11 @@ class MakePaymentRepository {
     String broadbandUserId = '',
     String broadbandDue = '',
     String isForRenewal = '',
+    // Payment GPS — Android sends last-known coords with a 0.0 fallback
+    // (CustomerMgmt_MakePayment_Fragment :339-348 / :1837-1838). Audit metadata
+    // only; the server never blocks payment on it, so 0.0 is the safe default.
+    String latitude = '0.0',
+    String longitude = '0.0',
   }) async {
     final ns = ServerUrlResolver.instance.namespace;
     // Full 28-field makePaymentsInfo in Android's EXACT index order (parity with
@@ -100,8 +105,8 @@ class MakePaymentRepository {
         'sendsms': sendSms ? 1 : 0,                     // 15
         'payment_flag': 4,                              // 16 mobile-app online payment
         'discount_penalty_flag': '0000',               // 17 verified 4-char string
-        'latitude': '0.0',                              // 18 TODO: real GPS
-        'longitude': '0.0',                             // 19 TODO: real GPS
+        'latitude': latitude,                           // 18 last-known GPS (Android parity; 0.0 fallback)
+        'longitude': longitude,                         // 19 last-known GPS (Android parity; 0.0 fallback)
         'discount_applied': discountApplied,            // 20 float STB discount
         'transaction_number': '',                       // 21 empty for fresh online
         'broadband_payment_amount': broadbandAmount,    // 22 (0.0 for STB-only)

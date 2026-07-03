@@ -13,6 +13,7 @@ import '../../core/network/server_url_resolver.dart';
 import '../../core/network/soap_client.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
+import 'customer_operations.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../payment/payment_options_screen.dart';
 import 'customer_map_screen.dart';
@@ -24,7 +25,13 @@ import '../billing/invoice_history_screen.dart';
 import '../complaints/package_operations_screen.dart';
 import '../complaints/deactivate_stb_screen.dart';
 import '../complaints/other_screens.dart';
+import '../packages/broadband_list_screen.dart';
+import '../packages/custom_packages_home_screen.dart';
+import '../packages/ott_screen.dart';
+import '../packages/data/customer_box.dart';
+import '../packages/data/package_operations_repository.dart';
 import '../collections/pay_later_dialog.dart';
+import '../search/data/search_repository.dart';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
@@ -41,14 +48,35 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
 
+  // OTT boxes (Android: getCustomerBoxes `ott_boxes_list`, fetched on load for
+  // non-broadband customers). Drives the OTT tile; empty = tile hidden.
+  List<CustomerBox> _ottBoxes = const [];
+
   @override
   void initState() {
     super.initState();
     _customer = widget.customer;
+    _loadOttBoxes();
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
+  }
+
+  /// Android parity: `CustomerOperations` calls `packageoperations(0)` →
+  /// `getCustomerBoxes` on load for non-broadband customers, which supplies
+  /// `ott_boxes_list` → the OTT tile. Fire-and-forget; the grid rebuilds when it
+  /// returns. Broadband customers use the Renew BroadBand branch instead.
+  Future<void> _loadOttBoxes() async {
+    if (_customer.broadbandUserId.trim().isNotEmpty) return;
+    try {
+      final r = await PackageOperationsRepository.instance
+          .getCustomerBoxes(_customer.lcoCustomerId);
+      if (!mounted || r.ottBoxes.isEmpty) return;
+      setState(() => _ottBoxes = r.ottBoxes);
+    } catch (_) {
+      // Non-fatal — the OTT tile simply won't show.
+    }
   }
 
   @override
@@ -89,16 +117,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
+      // Android CustomerOperations `prev_next_layout` band has NO back button —
+      // ◄ prev arrow sits at the far left (next_cust_search flag 2). OS back
+      // button/gesture still pops the screen, matching the Android fragment.
       leading: IconButton(
+        tooltip: 'Previous customer',
         icon: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: t.backBtnBg,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          child: Icon(Icons.chevron_left, size: 22, color: t.backBtnIcon),
         ),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => _prevNextCustomer(2),
       ),
       title: Text(
         'CUSTOMER DETAILS',
@@ -128,7 +160,83 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ),
           ),
         ),
+        // Next customer — Android CustomerOperations ► pinned at the far right
+        // (next_cust_search flag 1).
+        IconButton(
+          tooltip: 'Next customer',
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.backBtnBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.chevron_right, size: 22, color: t.backBtnIcon),
+          ),
+          onPressed: () => _prevNextCustomer(1),
+        ),
       ],
+    );
+  }
+
+  // ── Prev/Next customer navigation (Android CustomerOperations_Fragment) ──
+  // ◄ = prev (flag 2) · ► = next (flag 1) → SOAP `prenext` → reopen this screen
+  // for the returned customer. Parity: status 0 navigates · 1 = "No Data Found!"
+  // dialog · 2 = snackbar + "Contact Support" · 3/transport = "Server is busy…".
+  Future<void> _prevNextCustomer(int flag) async {
+    final id = int.tryParse(_customer.lcoCustomerId.trim());
+    if (id == null) {
+      showPremiumSnackBar(context, 'Error, Please try again later.',
+          isError: true);
+      return;
+    }
+    // Android ProgressDialog: "Searching...,   Please wait...".
+    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    final r = await SearchRepository.instance
+        .prevNextCustomer(customerId: id, flag: flag);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
+    if (r.statusCode == 0 && r.customer != null) {
+      // Android reopens CustomerOperations_Fragment for the adjacent customer.
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerDetailsScreen(customer: r.customer!),
+        ),
+      );
+    } else if (r.statusCode == 1) {
+      await _showInfoDialog('No Data Found!', r.statusMessage);
+    } else if (r.statusCode == 2) {
+      showPremiumSnackBar(
+        context,
+        r.statusMessage.isEmpty
+            ? 'Contact Support'
+            : '${r.statusMessage}: Contact Support',
+        isError: true,
+      );
+    } else {
+      // status 3 / transport failure.
+      await _showInfoDialog(
+        'Server is busy or Un reachable!',
+        r.statusMessage.isEmpty
+            ? 'Please try again after sometime'
+            : r.statusMessage,
+      );
+    }
+  }
+
+  Future<void> _showInfoDialog(String title, String body) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: body.isEmpty ? null : Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -271,7 +379,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               ),
               _locDivider(t),
               Expanded(
-                child: _locCell(_customer.billMonth, 'Bill Month', t: t),
+                child: _locCell(
+                  _customer.billMonth.trim().isEmpty ? 'NA' : _customer.billMonth,
+                  'Bill Month',
+                  t: t,
+                ),
               ),
               _locDivider(t),
               Expanded(
@@ -289,7 +401,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             children: [
               Expanded(
                 child: _locCell(
-                  _customer.boxNumber,
+                  _customer.boxNumber.trim().isEmpty ? 'NA' : _customer.boxNumber,
                   'Box Number',
                   t: t,
                   valueColor: Colors.green.shade600,
@@ -299,7 +411,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               _locDivider(t),
               Expanded(
                 child: _locCell(
-                  _customer.vcNumber,
+                  _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
                   'VC Number',
                   t: t,
                   valueColor: Colors.green.shade600,
@@ -397,20 +509,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
 
   // ── Operations Card ────────────────────────────────────────────────────
   Widget _buildOperationsCard(AppThemeConst t) {
-    final ops = [
-      _Op(Iconsax.money_send,      'Make Payments',      [const Color(0xFF7B5EA7), const Color(0xFF9C6FE4)]),
-      _Op(Iconsax.clock,           'Payment History',    [const Color(0xFFD4A017), const Color(0xFFF5C842)]),
-      _Op(Iconsax.message_question,'Create Complaints',  [const Color(0xFF607D8B), const Color(0xFF90A4AE)]),
-      _Op(Iconsax.location,        'Update Location',    [const Color(0xFF1976D2), const Color(0xFF42A5F5)]),
-      _Op(Iconsax.document,        'Invoice History',    [const Color(0xFF5C35B1), const Color(0xFF7E57C2)]),
-      _Op(Iconsax.message_text,    'Complaint History',  [const Color(0xFF7B1FA2), const Color(0xFFAB47BC)]),
-      _Op(Iconsax.box,             'Package Operations', [const Color(0xFFE65100), const Color(0xFFFF8C42)]),
-      _Op(Icons.tv,                'Deactivate STB',     [const Color(0xFFB71C1C), const Color(0xFFEF5350)]),
-      _Op(Iconsax.chart,           'Act-Deact Report',   [const Color(0xFFEF6C00), const Color(0xFFFFA726)]),
-      _Op(Iconsax.timer_1,         'One Time Charges',   [const Color(0xFF00796B), const Color(0xFF26A69A)]),
-      _Op(Iconsax.receipt_1,       'One Time History',   [const Color(0xFF1565C0), const Color(0xFF42A5F5)]),
-      _Op(Iconsax.clock,           'Pay Later',          [const Color(0xFF558B2F), const Color(0xFF9CCC65)]),
-    ];
+    // Android parity: computed once from the current customer + session flags
+    // (CustomerOperations_Fragment). Entry-driven — rebuilds on next open, not
+    // in place (Android navigates away after state-changing operations).
+    final ops = buildCustomerOperations(_customer, SessionService.instance,
+        hasOttBoxes: _ottBoxes.isNotEmpty);
 
     return _WhiteCard(
       t: t,
@@ -449,7 +552,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   void _handleOp(String label) {
     switch (label) {
       case 'Make Payments':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentOptionsScreen(customer: _customer)));
+        // Android payment-permission guard (CustomerOperations_Fragment:1707-1742):
+        // SERVICE user or make_payment=="0" → access denied. Centralized in
+        // SessionService.canMakePayment (reused at any future payment entry).
+        if (!SessionService.instance.canMakePayment) {
+          showPremiumConfirm(
+            context: context,
+            title: 'Access denied!',
+            body: 'You have no access to do payments.',
+            confirmLabel: 'OK',
+            cancelLabel: 'Close',
+          );
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentOptionsScreen(customer: _customer)));
+        }
         break;
       case 'Update Location':
         _showUpdateLocationDialog();
@@ -472,6 +588,36 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       case 'Deactivate STB':
         Navigator.push(context, MaterialPageRoute(builder: (_) => DeactivateStbScreen(customer: _customer)));
         break;
+      case 'Temporary Activation':
+        _handleTemporaryActivation();
+        break;
+      case 'Renew Services':
+        _handleRenewServices();
+        break;
+      case 'Unpaid Customer Activation':
+        _handleUnpaidActivation();
+        break;
+      case 'Renew BroadBand':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => BroadBandListScreen(customer: _customer)));
+        break;
+      case 'OTT':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => OttScreen(customer: _customer, ottBoxes: _ottBoxes)));
+        break;
+      case 'Custom Packages':
+        // Android guard (CustomerOperations_Fragment:886): SERVICE or BroadBand-only.
+        if (SessionService.instance.userType.toUpperCase() == 'SERVICE' ||
+            _customer.customerType.trim() == '1') {
+          showPremiumConfirm(
+            context: context,
+            title: 'Access denied!',
+            body: 'You have no access ',
+            confirmLabel: 'OK',
+            cancelLabel: 'Close',
+          );
+        } else {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => CustomPackagesHomeScreen(customer: _customer)));
+        }
+        break;
       case 'Act-Deact Report':
         Navigator.push(context, MaterialPageRoute(builder: (_) => ActDeactReportScreen(customer: _customer)));
         break;
@@ -489,6 +635,160 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       default:
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label coming soon')));
     }
+  }
+
+  /// Temporary Activation — Android parity (CustomerOperations_Fragment
+  /// :1210-1261 + TemporaryActivation_stb :3326-3427). Access guard → confirm →
+  /// POST stbTemporaryActivation → result dialog. Android popBackStacks on BOTH
+  /// success and a status_code==1 rejection; only a transport error stays (Toast).
+  Future<void> _handleTemporaryActivation() async {
+    final s = SessionService.instance;
+    // Guard (:1213): SERVICE user or BroadBand-only (customer_type == "1").
+    if (s.userType.toUpperCase() == 'SERVICE' ||
+        _customer.customerType.trim() == '1') {
+      await showPremiumConfirm(
+        context: context,
+        title: 'Access denied!',
+        body: 'You have no access .',
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
+      return;
+    }
+    // Confirm (:1232).
+    final ok = await showPremiumConfirm(
+      context: context,
+      title: 'Temporary Activation',
+      body: 'Are you sure you want to Activate?',
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    );
+    if (ok != true || !mounted) return;
+
+    final result = await PackageOperationsRepository.instance
+        .stbTemporaryActivation(customerId: _customer.lcoCustomerId);
+    if (!mounted) return;
+
+    // Transport failure → Android Toast "Failed.", stays on screen.
+    if (result.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+      return;
+    }
+    // status 0 (Success!) and status 1 (Temporary Activation Failed!) both show a
+    // dialog then popBackStack — mirror by popping the details screen after OK.
+    await showPremiumConfirm(
+      context: context,
+      title: result.isSuccess ? 'Success!' : 'Temporary Activation Failed!',
+      body: result.statusMessage.trim().isEmpty
+          ? (result.isSuccess ? 'Success' : 'Failed')
+          : result.statusMessage,
+      confirmLabel: 'OK',
+      cancelLabel: 'Close',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Renew Services (STB) — Android parity (CustomerOperations_Fragment
+  /// :1262-1312 + renewal() :2870-2968). Access guard → confirm → POST
+  /// packageRenew → result dialog. Android navigates to the Dashboard on BOTH
+  /// success and a status_code==1 rejection; only a transport error stays.
+  Future<void> _handleRenewServices() async {
+    final s = SessionService.instance;
+    // Guard (:1265): SERVICE user or BroadBand-only (customer_type == "1").
+    if (s.userType.toUpperCase() == 'SERVICE' ||
+        _customer.customerType.trim() == '1') {
+      await showPremiumConfirm(
+        context: context,
+        title: 'Access denied!',
+        body: 'You have no access .',
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
+      return;
+    }
+    // Confirm (:1284).
+    final ok = await showPremiumConfirm(
+      context: context,
+      title: 'Renew Packages',
+      body: 'Are you sure you want to renew your package?',
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    );
+    if (ok != true || !mounted) return;
+
+    final result = await PackageOperationsRepository.instance
+        .packageRenew(customerId: _customer.lcoCustomerId);
+    if (!mounted) return;
+
+    // Transport failure → Android Toast "Failed.", stays on screen.
+    if (result.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+      return;
+    }
+    // status 0 (Success!) and status 1 (Failed!) both show a dialog then
+    // startActivity(MainActivity) → Dashboard. Mirror by returning to the root
+    // (Dashboard is the root route — login pushReplaces it).
+    await showPremiumConfirm(
+      context: context,
+      title: result.isSuccess ? 'Success!' : 'Failed!',
+      body: result.statusMessage.trim().isEmpty
+          ? (result.isSuccess ? 'Success' : 'Failed')
+          : result.statusMessage,
+      confirmLabel: 'OK',
+      cancelLabel: 'Close',
+    );
+    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  /// Unpaid Customer Activation — Android parity (CustomerOperations_Fragment
+  /// :1159-1208 + UnpaidActivation_stb_CUstomer :3225-3320). Access guard →
+  /// confirm → POST unpaidCustomerActivation → result dialog → popBackStack on
+  /// BOTH success and status_code==1 ("No Details Found!"); transport error stays.
+  Future<void> _handleUnpaidActivation() async {
+    final s = SessionService.instance;
+    // Guard (:1162): SERVICE user or BroadBand-only (customer_type == "1").
+    if (s.userType.toUpperCase() == 'SERVICE' ||
+        _customer.customerType.trim() == '1') {
+      await showPremiumConfirm(
+        context: context,
+        title: 'Access denied!',
+        body: 'You have no access .',
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
+      return;
+    }
+    // Confirm (:1181).
+    final ok = await showPremiumConfirm(
+      context: context,
+      title: 'Unpaid Customer Activation',
+      body: 'Are you sure you want to activate?',
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    );
+    if (ok != true || !mounted) return;
+
+    final result = await PackageOperationsRepository.instance
+        .unpaidCustomerActivation(customerId: _customer.lcoCustomerId);
+    if (!mounted) return;
+
+    // Transport failure → Android Toast "Failed.", stays on screen.
+    if (result.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+      return;
+    }
+    // status 0 (Success!) and status 1 (No Details Found!) both show a dialog
+    // then popBackStack — mirror by popping the details screen after OK.
+    await showPremiumConfirm(
+      context: context,
+      title: result.isSuccess ? 'Success!' : 'No Details Found!',
+      body: result.statusMessage.trim().isEmpty
+          ? (result.isSuccess ? 'Success' : 'No Details Found')
+          : result.statusMessage,
+      confirmLabel: 'OK',
+      cancelLabel: 'Close',
+    );
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _showUpdateMobileDialog(String currentMobile) async {
@@ -856,13 +1156,6 @@ class _WhiteCard extends StatelessWidget {
         ),
         child: child,
       );
-}
-
-class _Op {
-  final IconData icon;
-  final String label;
-  final List<Color> gradientColors;
-  const _Op(this.icon, this.label, this.gradientColors);
 }
 
 class _OpItem extends StatelessWidget {

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
 import '../../../core/services/session_service.dart';
@@ -20,6 +22,14 @@ class EmployeeCustomerCollectionsResult {
   final List<EmployeeCustomerCollection> items;
   const EmployeeCustomerCollectionsResult(
       this.statusCode, this.statusMessage, this.items);
+}
+
+class EmployeeTrackInfoResult {
+  final int statusCode; // 0 ok · 1 no records · 3 transport
+  final String statusMessage;
+  final List<EmployeeTrackPoint> points;
+  const EmployeeTrackInfoResult(
+      this.statusCode, this.statusMessage, this.points);
 }
 
 /// Employee Track (collection report) — SOAP `empCollection` (Android
@@ -67,7 +77,12 @@ class EmployeeTrackRepository {
           name: SoapClient.readField(it, 'name') ?? '',
           dealerName: SoapClient.readField(it, 'dealer_name') ?? '',
           dealerId: SoapClient.readField(it, 'dealer_id') ?? '',
-          amount: SoapClient.readField(it, 'Amt') ?? '',
+          // Root cause: the response has NO bare <Amt>. It carries <CombinedAmt>
+          // (combined total, e.g. 2219.00) and <h8Amt> (1.00). Android reads it via
+          // String.indexOf("Amt="), which ACCIDENTALLY matches the "Amt=" inside
+          // "CombinedAmt=" and so binds the CombinedAmt value — Flutter's readField
+          // needs the real element name (CombinedAmt), not the non-existent Amt.
+          amount: SoapClient.readField(it, 'CombinedAmt') ?? '',
         ));
       }
       return EmployeeCollectionsResult(status, msg, items);
@@ -139,5 +154,65 @@ class EmployeeTrackRepository {
       return const EmployeeCustomerCollectionsResult(
           3, 'Could not connect to server.', []);
     }
+  }
+
+  /// Per-employee operation GPS track — Android parity (`getEmployeeTrackInfo`/
+  /// `geti`, `EmployeeTrackAdapter.getEmployeeTrackInfo`). Plain `/packagelist/`
+  /// REST POST; params exactly Android's (`employeeId, startDate, authtoken, imei,
+  /// op_name`). `employeeTrackInfoList` is a JSON-array string of GPS points.
+  /// status 0 = ok · 1 = "No Tracking Details Found" · 3 = transport. Never throws.
+  Future<EmployeeTrackInfoResult> getEmployeeTrackInfo({
+    required String employeeId,
+    required String startDate, // Android sends the From date only (dt_fromDt)
+    required String opName,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        '${ServerUrlResolver.instance.namespace}/packagelist/getEmployeeTrackInfo',
+        {
+          'employeeId': employeeId,
+          'startDate': startDate,
+          'authtoken': SessionService.instance.authToken,
+          'imei': _imei,
+          'op_name': opName,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final status = _statusOf(data);
+      final msg = '${data['status_msg'] ?? ''}';
+      final points = <EmployeeTrackPoint>[];
+      if (status == 0) {
+        final list = _decode(data['employeeTrackInfoList']);
+        if (list is List) {
+          for (final e in list) {
+            if (e is Map) {
+              points.add(
+                  EmployeeTrackPoint.fromJson(Map<String, dynamic>.from(e)));
+            }
+          }
+        }
+      }
+      return EmployeeTrackInfoResult(status, msg, points);
+    } on TimeoutException {
+      return const EmployeeTrackInfoResult(3, 'Request timed out.', []);
+    } catch (_) {
+      return const EmployeeTrackInfoResult(3, 'Failed.', []);
+    }
+  }
+
+  static int _statusOf(Map<String, dynamic> data) {
+    final v = data['status_code'];
+    return v is int ? v : (int.tryParse('$v') ?? 3);
+  }
+
+  static dynamic _decode(dynamic raw) {
+    if (raw is String) {
+      try {
+        return jsonDecode(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+    return raw;
   }
 }

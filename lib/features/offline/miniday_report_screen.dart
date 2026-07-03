@@ -68,12 +68,13 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
       fmt.sep,
       w ? '    MODE          COUNT       AMOUNT' : 'MODE      COUNT        AMOUNT',
       fmt.sep,
-      '${ind}Cash${fitLeft(cashC, 10)}    ${fitLeft(cashA, 10)}',
-      '${ind}Bank${fitLeft(bankC, 10)}    ${fitLeft(bankA, 10)}',
+      // Android right-aligns COUNT/AMOUNT (fixedLengthString) → use fitRight.
+      '${ind}Cash${fitRight(cashC, 10)}    ${fitRight(cashA, 10)}',
+      '${ind}Bank${fitRight(bankC, 10)}    ${fitRight(bankA, 10)}',
       fmt.sep,
       w
-          ? 'TOTAL COLLECTION -   ${fitLeft('Rs.$total', 14)}'
-          : 'TOTAL COLLECTION -  ${fitLeft(total, 10)}',
+          ? 'TOTAL COLLECTION -   ${fitRight('Rs.$total', 14)}'
+          : 'TOTAL COLLECTION -  ${fitRight(total, 10)}',
       fmt.sep,
     ];
   }

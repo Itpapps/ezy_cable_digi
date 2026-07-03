@@ -13,6 +13,12 @@ class Customer {
   final String lastPaidDate;
   final String customerType;
   final String broadbandUserId; // broadband account id (empty = STB-only)
+  // Android per-customer grid-state flags (searchCustomer response). Default 0.
+  // is_show → Renew visibility; tmp_activation → Temporary Activation state;
+  // unpaid_customer_activation → Unpaid Customer Activation state.
+  final int isShow;
+  final int tmpActivation;
+  final int unpaidAct;
   final String address;
   final String groupName;
   final String areaName;
@@ -38,6 +44,9 @@ class Customer {
     required this.lastPaidDate,
     required this.customerType,
     this.broadbandUserId = '',
+    this.isShow = 0,
+    this.tmpActivation = 0,
+    this.unpaidAct = 0,
     required this.address,
     required this.groupName,
     required this.areaName,
@@ -80,6 +89,9 @@ class Customer {
       'lastPaidDate': lastPaidDate,
       'customerType': customerType,
       'broadbandUserId': broadbandUserId,
+      'isShow': isShow,
+      'tmpActivation': tmpActivation,
+      'unpaidAct': unpaidAct,
       'address': address,
       'groupName': groupName,
       'areaName': areaName,
@@ -108,6 +120,9 @@ class Customer {
       lastPaidDate: map['lastPaidDate'] ?? '',
       customerType: map['customerType'] ?? '',
       broadbandUserId: map['broadbandUserId'] ?? '',
+      isShow: (map['isShow'] as num?)?.toInt() ?? 0,
+      tmpActivation: (map['tmpActivation'] as num?)?.toInt() ?? 0,
+      unpaidAct: (map['unpaidAct'] as num?)?.toInt() ?? 0,
       address: map['address'] ?? '',
       groupName: map['groupName'] ?? '',
       areaName: map['areaName'] ?? '',
@@ -142,6 +157,9 @@ class Customer {
       lastPaidDate: s('paid_on'),
       customerType: s('customer_type'),
       broadbandUserId: s('broadband_user_id'),
+      isShow: int.tryParse(s('is_show')) ?? 0,
+      tmpActivation: int.tryParse(s('tmp_activation')) ?? 0,
+      unpaidAct: int.tryParse(s('unpaid_customer_activation')) ?? 0,
       address: s('address1'),
       groupName: '',
       areaName: '',
@@ -167,6 +185,9 @@ class Customer {
     String? lastPaidDate,
     String? customerType,
     String? broadbandUserId,
+    int? isShow,
+    int? tmpActivation,
+    int? unpaidAct,
     String? address,
     String? groupName,
     String? areaName,
@@ -192,6 +213,9 @@ class Customer {
       lastPaidDate: lastPaidDate ?? this.lastPaidDate,
       customerType: customerType ?? this.customerType,
       broadbandUserId: broadbandUserId ?? this.broadbandUserId,
+      isShow: isShow ?? this.isShow,
+      tmpActivation: tmpActivation ?? this.tmpActivation,
+      unpaidAct: unpaidAct ?? this.unpaidAct,
       address: address ?? this.address,
       groupName: groupName ?? this.groupName,
       areaName: areaName ?? this.areaName,

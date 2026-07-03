@@ -17,6 +17,9 @@ import '../../core/data/customer.dart';
 import '../../core/data/payment.dart';
 import '../../core/theme/theme_constants.dart';
 import 'printer_launcher.dart';
+import '../search/data/search_repository.dart';
+import '../customer/customer_details_screen.dart';
+import '../../core/widgets/premium_dialog.dart';
 
 class ReceiptPreviewScreen extends StatefulWidget {
   final Customer customer;
@@ -312,15 +315,75 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         buildLines: _buildReceiptLines,
       );
 
+  // Offline receipt only. Android's offline PREV/NEXT (prevbtn2/nextbtn2) navigate
+  // saved offline records; Flutter returns to the offline collection list. The
+  // ONLINE receipt uses prenext prev/next customer instead (see _prevNextCustomer).
   void _finishToNextCustomer() {
     _printerService.disconnectPrinter().whenComplete(() {
       if (!mounted) return;
-      if (widget.fromOfflineCollection) {
-        Navigator.of(context).pop();
-      } else {
-        Navigator.of(context).popUntil((r) => r.isFirst);
-      }
+      Navigator.of(context).pop(); // back to the offline collection list
     });
+  }
+
+  // ── Prev/Next customer (Android DisplayPaymentDetails, offline_mode != 1) ─
+  // Online receipt: ◄ prevbtn1 = next_cust_search(2), ► nextbtn1 = (1) → SOAP
+  // `prenext` → status 0 reopens Customer Details for the adjacent customer.
+  // status 1 = "No Records Found!" · 2 = snackbar + "Contact Support" · 3 =
+  // "Server is busy or Un reachable!". Android does NOT disconnect the printer
+  // here; dispose() releases it when the receipt is finally popped.
+  Future<void> _prevNextCustomer(int flag) async {
+    final id = int.tryParse(widget.customer.lcoCustomerId.trim());
+    if (id == null) {
+      showPremiumSnackBar(context, 'Error, Please try again later.',
+          isError: true);
+      return;
+    }
+    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    final r = await SearchRepository.instance
+        .prevNextCustomer(customerId: id, flag: flag);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
+    if (r.statusCode == 0 && r.customer != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerDetailsScreen(customer: r.customer!),
+        ),
+      );
+    } else if (r.statusCode == 1) {
+      await _showInfoDialog('No Records Found!', r.statusMessage);
+    } else if (r.statusCode == 2) {
+      showPremiumSnackBar(
+        context,
+        r.statusMessage.isEmpty
+            ? 'Contact Support'
+            : '${r.statusMessage}: Contact Support',
+        isError: true,
+      );
+    } else {
+      await _showInfoDialog(
+        'Server is busy or Un reachable!',
+        r.statusMessage.isEmpty
+            ? 'Please try again after sometime'
+            : r.statusMessage,
+      );
+    }
+  }
+
+  Future<void> _showInfoDialog(String title, String body) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: body.isEmpty ? null : Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── UI ─────────────────────────────────────────────────────────────────────
@@ -635,10 +698,14 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () {
-                  _printerService.disconnectPrinter();
-                  Navigator.of(context).pop();
-                },
+                // Online: ◄ prev customer (prenext flag 2). Offline: disconnect +
+                // back to the offline list (Android's offline prevbtn2 nav).
+                onPressed: widget.fromOfflineCollection
+                    ? () {
+                        _printerService.disconnectPrinter();
+                        Navigator.of(context).pop();
+                      }
+                    : () => _prevNextCustomer(2),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: t.appBarFg,
                   side: BorderSide(color: t.appBarFg.withValues(alpha: 0.5), width: 1.5),
@@ -655,7 +722,10 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
-                onPressed: _finishToNextCustomer,
+                // Online: ► next customer (prenext flag 1). Offline: back to list.
+                onPressed: widget.fromOfflineCollection
+                    ? _finishToNextCustomer
+                    : () => _prevNextCustomer(1),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: t.backBtnBg,
                   foregroundColor: t.appBarFg,

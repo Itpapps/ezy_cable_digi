@@ -35,6 +35,10 @@ class SessionService {
   int offlineStatus = 0;
   // lovvalue_restrict_partial_payment: 1 = paid amount must be >= total_amount.
   int restrictPartialPayment = 0;
+  // useLcoDeposit (Android LoginActivity.userLcoDeposit): 1 = this dealer uses LCO
+  // deposit → the STB payment amount is locked to the full pending (no partial)
+  // and the dashboard LCO Wallet card is shown. Default 0 = feature off (safe).
+  int useLcoDeposit = 0;
   // Server current_date for discount/penalty date range checks.
   String serverCurrentDate = '';
   // use_crf flag from validateLogin (Android LoginActivity.use_caf). 1 = this
@@ -60,7 +64,29 @@ class SessionService {
   bool scheduleService = false;     // Schedule Services
   bool serviceExtension = false;    // Service Extension
 
+  // ── Customer Operations grid flags (Android LoginActivity statics) ──────────
+  // showCustomPackages ← validateLogin `show_custom_packages` (int 0/1).
+  // The rest ← getRolePermissions ("1" = allowed). Default false = feature off,
+  // so the grid behaves exactly as today until these are populated.
+  bool showCustomPackages = false;        // Custom Packages tile
+  bool renew = false;                      // Renew Services / Renew BroadBand
+  bool onetimeCharges = false;             // One Time Charges + One Time History
+  bool unpaidCustomerDeactivation = false; // Deactivate STB
+  bool unpaidCustomerActivation = false;   // Unpaid Customer Activation
+
+  // Payment permission (getRolePermissions `make_payment`). Android BLOCKS Make
+  // Payment only when `make_payment=="0"` (CustomerOperations:1724 /
+  // UnpaidNewAdapter:107 / UnpaidFrag_Adapter:134) — so this defaults **true**
+  // (allow) and is set false only on an explicit "0". Pay Later is NOT gated
+  // (Android commented it out).
+  bool makePaymentAllowed = true;
+
   bool get isLoggedIn => authToken.isNotEmpty;
+
+  /// Centralized Android payment-permission rule, reused at every payment entry:
+  /// blocked for SERVICE users or when `make_payment=="0"`.
+  bool get canMakePayment =>
+      userType.trim().toUpperCase() != 'SERVICE' && makePaymentAllowed;
 
   void setFromLogin({
     required String authToken,
@@ -74,9 +100,11 @@ class SessionService {
     String offlineUserCode = '',
     int offlineStatus = 0,
     int restrictPartialPayment = 0,
+    int useLcoDeposit = 0,
     String serverCurrentDate = '',
     int useCaf = 0,
     String customerAppSearch = '',
+    bool showCustomPackages = false,
     String username = '',
     String employeeName = '',
     String lastLogin = '',
@@ -93,9 +121,11 @@ class SessionService {
     this.offlineUserCode = offlineUserCode;
     this.offlineStatus = offlineStatus;
     this.restrictPartialPayment = restrictPartialPayment;
+    this.useLcoDeposit = useLcoDeposit;
     this.serverCurrentDate = serverCurrentDate;
     this.useCaf = useCaf;
     this.customerAppSearch = customerAppSearch;
+    this.showCustomPackages = showCustomPackages;
     this.username = username;
     this.employeeName = employeeName;
     this.lastLogin = lastLogin;
@@ -109,11 +139,21 @@ class SessionService {
     bool packageDeactivation = false,
     bool scheduleService = false,
     bool serviceExtension = false,
+    bool renew = false,
+    bool onetimeCharges = false,
+    bool unpaidCustomerDeactivation = false,
+    bool unpaidCustomerActivation = false,
+    bool makePaymentAllowed = true,
   }) {
     this.packageActivation = packageActivation;
     this.packageDeactivation = packageDeactivation;
     this.scheduleService = scheduleService;
     this.serviceExtension = serviceExtension;
+    this.renew = renew;
+    this.onetimeCharges = onetimeCharges;
+    this.unpaidCustomerDeactivation = unpaidCustomerDeactivation;
+    this.unpaidCustomerActivation = unpaidCustomerActivation;
+    this.makePaymentAllowed = makePaymentAllowed;
   }
 
   void clear() {
@@ -128,10 +168,17 @@ class SessionService {
     packageDeactivation = false;
     scheduleService = false;
     serviceExtension = false;
+    showCustomPackages = false;
+    renew = false;
+    onetimeCharges = false;
+    unpaidCustomerDeactivation = false;
+    unpaidCustomerActivation = false;
+    makePaymentAllowed = true;
     machineNumber = '';
     offlineUserCode = '';
     offlineStatus = 0;
     restrictPartialPayment = 0;
+    useLcoDeposit = 0;
     serverCurrentDate = '';
     useCaf = 0;
     customerAppSearch = '';

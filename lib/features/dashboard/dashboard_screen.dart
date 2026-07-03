@@ -8,6 +8,7 @@ import 'package:ezi_cable_digi/features/reports/monthly_report_screen.dart';
 import 'package:ezi_cable_digi/features/scan/scan_customer_screen.dart';
 import 'package:ezi_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,7 @@ import '../expenses/add_expenses_screen.dart';
 import '../offline/static_content_screen.dart';
 import '../../core/services/session_service.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../main.dart';
 import '../../widgets/app_drawer.dart';
@@ -150,6 +152,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
     _dash.addListener(_onDash);
     _dash.loadKpis();
+    _dash.loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
     _dash.loadComplaints(); // Complaints is the default feed tab.
   }
 
@@ -180,19 +183,35 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     // when the flag is unset (returning from read-only screens).
     if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
       _dash.loadKpis();
+      _dash.loadWallet(); // Android refreshes the wallet on every recreate too
     }
   }
 
   // ── Build ──────
   @override
   Widget build(BuildContext context) {
-    // Back on a sub-tab returns to the Dashboard tab instead of popping (and
-    // crashing) the dashboard route. On the Dashboard tab, back behaves normally.
+    // Back on a sub-tab returns to the Dashboard tab; back on the Dashboard tab
+    // shows Android's "Close Application?" confirm before exiting the app
+    // (DashboardHomeFragment OnBackPressedCallback:172-209 parity).
     return PopScope(
-      canPop: _selectedTab == 0,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _selectedTab != 0) {
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_selectedTab != 0) {
           setState(() => _selectedTab = 0);
+          return;
+        }
+        // Android parity: "Yes" → EXIT=true → the app closes (LoginActivity
+        // finishes the cleared task); "No" → stay.
+        final leave = await showPremiumConfirm(
+          context: context,
+          title: 'Close Application?',
+          body: 'Are you sure you want to logout? \n Click \'Yes\' to Logout!',
+          confirmLabel: 'Yes',
+          cancelLabel: 'No',
+        );
+        if (leave) {
+          await SystemNavigator.pop();
         }
       },
       child: Scaffold(
@@ -303,20 +322,25 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                     IntrinsicHeight(
                       child: Row(
                         children: [
-                          Expanded(
-                            child: _LottieHighlightCard(
-                              title: AppStrings.of(context, 'lco_wallet'),
-                              amount: '₹0.0',
-                              subtitle: AppStrings.of(context, 'available'),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF22C55E), Color(0xFF0EA5E9)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                          // LCO Wallet — Android shows this card only when
+                          // useLcoDeposit==1 (ll_lcowallet visibility); else hidden
+                          // and Collections spans full width.
+                          if (_dash.showLcoWallet) ...[
+                            Expanded(
+                              child: _LottieHighlightCard(
+                                title: AppStrings.of(context, 'lco_wallet'),
+                                amount: _dash.lcoWalletText,
+                                subtitle: AppStrings.of(context, 'available'),
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF22C55E), Color(0xFF0EA5E9)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                lottieAsset: 'assets/Wallet Animation.json',
                               ),
-                              lottieAsset: 'assets/Wallet Animation.json',
                             ),
-                          ),
-                          const SizedBox(width: 10),
+                            const SizedBox(width: 10),
+                          ],
                           Expanded(
                             child: _LottieHighlightCard(
                               title: AppStrings.of(context, 'collections'),
@@ -1609,10 +1633,19 @@ class _PremiumAppBar extends StatelessWidget {
                 // ── Logo centred ───────────────────────────────────────────
                 const SizedBox(width: 8.0),
                 const Spacer(),
-                Image.asset(
-                  _appBarLogoAsset(),
-                  height: 42,
-                  fit: BoxFit.contain,
+                // Android parity (MainActivity toolbar_logo:384-408): tapping the
+                // logo returns to the Dashboard home. Flutter's logo lives only on
+                // the dashboard scaffold, so from a sub-tab this jumps back to the
+                // Dashboard tab (deep screens use their own back button).
+                GestureDetector(
+                  onTap: () => context
+                      .findAncestorStateOfType<DashboardScreenState>()
+                      ?.setTab(0),
+                  child: Image.asset(
+                    _appBarLogoAsset(),
+                    height: 42,
+                    fit: BoxFit.contain,
+                  ),
                 ),
                 const Spacer(),
                 // ── Action icons with pill containers ────────────────────

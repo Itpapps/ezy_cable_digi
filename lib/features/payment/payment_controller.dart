@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../collections/data/pay_later_repository.dart';
 import '../../core/data/customer.dart';
@@ -36,6 +37,12 @@ class PaymentController extends ChangeNotifier {
   DateTime? _instrumentDate;
   bool      _isStoring        = false;
   bool      _isForRenewal     = false; // broadband renewal checkbox
+
+  // Payment GPS — Android parity (GPSTracker last-known + 0.0 fallback). Captured
+  // once at screen open, off the pay path; stays '0.0' unless a cached fix is
+  // safely obtained. Sent as audit metadata; never gates payment.
+  String    _latitude         = '0.0';
+  String    _longitude        = '0.0';
 
   // gpa — live pending amount fetched when the payment screen opens
   double  pendingAmount  = 0;
@@ -78,6 +85,31 @@ class PaymentController extends ChangeNotifier {
   void _setStoring(bool v) {
     _isStoring = v;
     notifyListeners();
+  }
+
+  /// Payment GPS — Android parity (GPSTracker.getLastKnownLocation + 0.0
+  /// fallback, CustomerMgmt_MakePayment_Fragment :339-348). Captured ONCE when
+  /// the payment screen opens, fire-and-forget, OFF the pay path. Uses
+  /// last-known location only (never waits for a fresh fix, so it cannot hang);
+  /// ANY failure/denial/null leaves the Android-default '0.0'/'0.0'. `pay()`
+  /// never awaits this → it cannot delay or fail a payment.
+  Future<void> captureLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return; // Android swallows the SecurityException → 0.0
+      }
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos != null) {
+        _latitude = pos.latitude.toString();
+        _longitude = pos.longitude.toString();
+      }
+    } catch (e, s) {
+      // Android: try/catch → printStackTrace → keeps 0.0. Never throws.
+      ErrorHandlerService.recordError(e, s,
+          reason: 'PaymentController.captureLocation');
+    }
   }
 
   /// gpa: fetch the live pending amount and prefill the amount field.
@@ -130,6 +162,11 @@ class PaymentController extends ChangeNotifier {
   /// discount fields for these (CustomerMgmt_MakePayment_Fragment :303-310).
   bool get isBroadbandOnly =>
       isBroadbandCustomer && customer.customerType.trim() == '1';
+
+  /// LCO-deposit dealer → Android freezes ONLY the STB `et_amount` to the full
+  /// pending (setEnabled(false), CustomerMgmt_MakePayment_Fragment :1633/1659/
+  /// 1704). It does NOT lock the broadband field and adds no submit validation.
+  bool get amountLocked => SessionService.instance.useLcoDeposit == 1;
 
   /// Mirrors Android's discount TextWatcher (CustomerMgmt_MakePayment_Fragment
   /// afterTextChanged :607–639): the collector types the DISCOUNT and the amount
@@ -240,6 +277,9 @@ class PaymentController extends ChangeNotifier {
         broadbandUserId: isBroadbandCustomer ? customer.broadbandUserId : '',
         broadbandDue:    isBroadbandCustomer ? broadcasterPending.toString() : '',
         isForRenewal:    isBroadbandCustomer ? (_isForRenewal ? '1' : '0') : '',
+        // Last-known GPS captured at screen open (Android parity; '0.0' fallback).
+        latitude:        _latitude,
+        longitude:       _longitude,
       );
 
       if (!result.isSuccess) {

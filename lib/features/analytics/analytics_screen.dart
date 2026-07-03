@@ -21,6 +21,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   bool _loading = true;
   bool _error = false;
 
+  // Segment colours (orange = Outstanding, purple = Collection).
+  static const Color _orange = Color(0xFFFF6A00);
+  static const Color _purple = Color(0xFF7C3AED);
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +65,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     final double outPct = total == 0 ? 0 : outstanding / total;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF4F7FF),
       appBar: AppBar(
         title: const Text(
           "Analytics",
@@ -76,87 +80,160 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           : _error && outstanding == 0 && collection == 0
               ? const Center(
                   child: Text('Could not load analytics data',
-                      style: TextStyle(color: Colors.black45,
-                          fontWeight: FontWeight.w600)))
-              : Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: AnimatedBuilder(
-                animation: _anim,
-                builder: (context, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 250,
-                        height: 250,
-                        child: CustomPaint(
-                          painter: _DoughnutChartPainter(
-                            progress: _anim.value,
-                            outstandingPct: outPct,
-                          ),
+                      style: TextStyle(
+                          color: Colors.black45, fontWeight: FontWeight.w600)))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 18,
+                            offset: const Offset(0, 6)),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Collections Overview',
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1A3C6E))),
                         ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            "₹${outstanding.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFFB52B4D),
-                            ),
-                          ),
-                          const Text(
-                            "Outstanding",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            "₹${collection.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFFFF8A65),
-                            ),
-                          ),
-                          const Text(
-                            "Collection",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 24.0, left: 24.0, right: 24.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _LegendItem(color: const Color(0xFFB52B4D), label: 'Outstanding'),
-                const SizedBox(width: 16),
-                _LegendItem(color: const Color(0xFFFF8A65), label: 'Collection'),
-                const SizedBox(width: 16),
-                const Text(
-                  'Collections Data',
-                  style: TextStyle(fontSize: 12, color: Colors.black87),
+                        const SizedBox(height: 20),
+                        // Big, responsive donut — fills the card width (capped),
+                        // so it reads large like the Android chart.
+                        LayoutBuilder(
+                          builder: (context, c) {
+                            final double s =
+                                c.maxWidth < 340 ? c.maxWidth : 340;
+                            final double stroke = s * 0.15;
+                            return AnimatedBuilder(
+                              animation: _anim,
+                              builder: (context, child) {
+                                return SizedBox(
+                                  width: s,
+                                  height: s,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: s,
+                                        height: s,
+                                        child: CustomPaint(
+                                          painter: _DoughnutChartPainter(
+                                            progress: _anim.value,
+                                            outstandingPct: outPct,
+                                            strokeWidth: stroke,
+                                            outColor: _orange,
+                                            colColor: _purple,
+                                          ),
+                                        ),
+                                      ),
+                                      // Center: Collection amount in purple
+                                      // (small, always fits — no "0%").
+                                      SizedBox(
+                                        width: s - stroke * 2 - 28,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(
+                                                '₹${collection.toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontSize: 30,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: _purple,
+                                                  height: 1.0,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            const Text(
+                                              'Collected',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 22),
+                        // Value badges — orange Outstanding, purple Collection
+                        // (full amounts, FittedBox keeps any value in width).
+                        Row(
+                          children: [
+                            Expanded(
+                                child: _valueBadge(
+                                    'Outstanding', outstanding, _orange)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                                child: _valueBadge(
+                                    'Collection', collection, _purple)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ],
-            ),
+    );
+  }
+
+  // Value badge — tinted pill matching a segment colour: dot + label + full
+  // amount. FittedBox keeps a very large amount within the badge width.
+  Widget _valueBadge(String label, double amount, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                    color: color, borderRadius: BorderRadius.circular(3)),
+              ),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: color)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('₹${amount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF1A3C6E))),
           ),
         ],
       ),
@@ -164,76 +241,77 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 }
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
-        ),
-      ],
-    );
-  }
-}
-
 class _DoughnutChartPainter extends CustomPainter {
   final double progress;
   final double outstandingPct;
+  final double strokeWidth;
+  final Color outColor;
+  final Color colColor;
 
-  _DoughnutChartPainter({required this.progress, required this.outstandingPct});
+  _DoughnutChartPainter({
+    required this.progress,
+    required this.outstandingPct,
+    required this.strokeWidth,
+    required this.outColor,
+    required this.colColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double sweepAngle = 2 * pi * progress;
     final double radius = size.width / 2;
     final center = Offset(size.width / 2, size.height / 2);
+    final rect =
+        Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
 
-    final strokeWidth = 50.0;
-    final rect = Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
+    // Subtle track behind the segments (fills the gaps on the white card).
+    final trackPaint = Paint()
+      ..color = const Color(0xFFEDEFF7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, 0, 2 * pi, false, trackPaint);
 
+    const double gap = 0.14; // radians — visual gap between the two segments
+    final double swept = 2 * pi * progress;
+    final double drawable = (swept - gap * 2).clamp(0.0, 2 * pi);
+    final double outSweep = drawable * outstandingPct;
+    final double colSweep = drawable * (1 - outstandingPct);
+    final double start = -pi / 2 + gap / 2;
+
+    // Outstanding = orange gradient.
     final outPaint = Paint()
-      ..color = const Color(0xFFB52B4D) // Maroon
+      ..shader = LinearGradient(
+        colors: [const Color(0xFFFFA23D), outColor],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(rect)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt;
+      ..strokeCap = StrokeCap.round;
 
+    // Collection = purple gradient.
     final colPaint = Paint()
-      ..color = const Color(0xFFFF8A65) // Orange
+      ..shader = LinearGradient(
+        colors: [const Color(0xFFA855F7), colColor],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(rect)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.butt;
+      ..strokeCap = StrokeCap.round;
 
-    // Start from top (-pi / 2)
-    final startAngle = -pi / 2;
-
-    // Draw outstanding portion
-    final outSweep = sweepAngle * outstandingPct;
-    canvas.drawArc(rect, startAngle, outSweep, false, outPaint);
-
-    // Draw collection portion
-    final colSweep = sweepAngle * (1 - outstandingPct);
-    canvas.drawArc(rect, startAngle + outSweep, colSweep, false, colPaint);
+    if (outSweep > 0.001) {
+      canvas.drawArc(rect, start, outSweep, false, outPaint);
+    }
+    if (colSweep > 0.001) {
+      canvas.drawArc(rect, start + outSweep + gap, colSweep, false, colPaint);
+    }
   }
 
   @override
   bool shouldRepaint(covariant _DoughnutChartPainter oldDelegate) {
     return oldDelegate.progress != progress ||
-        oldDelegate.outstandingPct != outstandingPct;
+        oldDelegate.outstandingPct != outstandingPct ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }

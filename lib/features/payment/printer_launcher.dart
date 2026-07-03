@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/settings_store.dart';
+import '../../core/widgets/premium_dialog.dart';
 
 /// 32-column thermal separator (Android uses a dotted rule on most printers).
 const String kReportSeparator = '................................';
@@ -66,7 +67,16 @@ Future<void> launchThermalPrint({
   required BuildContext context,
   required RealBluetoothService printerService,
   required List<String> Function(ReceiptFormat fmt) buildLines,
+  // Android print strategy by type: false = single write (receipts, Mini Day);
+  // true = batched (long Collection/Employee reports). See printReceipt.
+  bool batched = false,
 }) async {
+  // Android parity (DeviceListActivity auto-returns the saved device): if a
+  // printer is saved AND still paired, connect + print directly — no picker.
+  // Only fall back to the picker when nothing is saved, the saved printer is no
+  // longer paired, or the auto-print fails.
+  if (await _tryAutoPrint(context, printerService, buildLines, batched)) return;
+
   // Start from a clean connection (matches the receipt flow).
   try {
     await printerService.disconnectPrinter();
@@ -80,13 +90,75 @@ Future<void> launchThermalPrint({
     builder: (_) => AutoScanPrinterSheet(
       printerService: printerService,
       onPrint: (mac, fmt) =>
-          _doThermalPrint(context, printerService, buildLines, mac, fmt),
+          _doThermalPrint(context, printerService, buildLines, mac, fmt, batched),
     ),
   );
 
+  debugPrint('[DISCONNECT-MANUAL] disconnecting now (after sheet closed)');
   try {
     await printerService.disconnectPrinter();
   } catch (_) {}
+  debugPrint('[DISCONNECT-MANUAL] disconnect complete');
+}
+
+/// Android-parity auto-print: prints to the saved printer without showing the
+/// picker, but only when it is saved AND still in the paired list. Returns true
+/// only if it actually printed; any miss/failure returns false so the caller
+/// shows the picker (the user-chosen fallback). Never throws.
+Future<bool> _tryAutoPrint(
+  BuildContext context,
+  RealBluetoothService printerService,
+  List<String> Function(ReceiptFormat fmt) buildLines,
+  bool batched,
+) async {
+  await SettingsStore.instance.load();
+  final mac = SettingsStore.instance.printerMac;
+  final name = SettingsStore.instance.printerName;
+  debugPrint('[AUTO] _tryAutoPrint running — savedMac=${mac.isEmpty ? "(none)" : mac}');
+  if (mac.isEmpty) return false; // nothing saved → picker
+
+  // Android parity (ConnectThread): connect to the saved MAC directly — no
+  // paired-list scan first (it can transiently report empty and wrongly force
+  // the picker). `printReceipt` → `ensureConnected` handles the connect. On a
+  // genuine connect/print failure we return false so the caller shows the
+  // picker (the safety fallback).
+  // Android parity (Bluetooth_Fragment: STATE_CONNECTING → non-cancelable
+  // ProgressDialog "Connecting to Device..."): the saved-printer path connects
+  // silently for 1–3s, so show the same blocking loader instead of a frozen UI.
+  if (context.mounted) {
+    showPremiumLoading(context, message: 'Connecting to Device...');
+  }
+  try {
+    await printerService
+        .printReceipt(
+            mac: mac,
+            lines: buildLines(ReceiptFormat.forPrinter(name)),
+            batched: batched)
+        .timeout(const Duration(seconds: 40));
+    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Printed Successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+    return true;
+  } catch (_) {
+    // Connection/print/timeout failure → fall back to the picker.
+    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+    return false;
+  } finally {
+    // Android parity (write → sleep(3000) → cancel/close): disconnect after the
+    // print. printReceipt already settled ~2s post-write so the bytes finished
+    // transmitting before we close (closing mid-transmission = "success" but no
+    // paper). We no longer leave the socket open.
+    debugPrint('[DISCONNECT-AUTO] disconnecting after auto-print');
+    try {
+      await printerService.disconnectPrinter();
+    } catch (_) {}
+  }
 }
 
 Future<void> _doThermalPrint(
@@ -95,11 +167,12 @@ Future<void> _doThermalPrint(
   List<String> Function(ReceiptFormat fmt) buildLines,
   String mac,
   ReceiptFormat fmt,
+  bool batched,
 ) async {
   try {
     // Timeout so a printer that dies mid-write can't hang the loading forever.
     await printerService
-        .printReceipt(mac: mac, lines: buildLines(fmt))
+        .printReceipt(mac: mac, lines: buildLines(fmt), batched: batched)
         .timeout(const Duration(seconds: 40));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -215,24 +288,31 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
       _selected = device;
       _connected = false;
     });
+    // Android parity (Bluetooth_Fragment STATE_CONNECTING): blocking,
+    // non-cancelable "Connecting to Device..." dialog for the socket connect.
+    if (mounted) showPremiumLoading(context, message: 'Connecting to Device...');
+    // Single connect only — no second `ensureConnected` attempt (that reconnect
+    // closed the socket we just opened and caused the reconnect loop).
     final ok = await widget.printerService.connectPrinter(device.macAdress);
-    if (ok) {
-      final ensured =
-          await widget.printerService.ensureConnected(device.macAdress);
-      setState(() {
-        _connected = ensured;
-        _isConnecting = false;
-      });
-    } else {
-      setState(() => _isConnecting = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✗ Connection Failed'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    debugPrint('[PICKER 1] connectPrinter() returned = $ok (mac=${device.macAdress})');
+    bool statusAfter = false;
+    try {
+      statusAfter = await PrintBluetoothThermal.connectionStatus;
+    } catch (_) {}
+    debugPrint('[PICKER 2] connectionStatus after connect = $statusAfter');
+    debugPrint('[PICKER 3] selected="${device.name}" _connected=$ok');
+    if (mounted) Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
+    setState(() {
+      _connected = ok;
+      _isConnecting = false;
+    });
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✗ Connection Failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -290,15 +370,20 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
                     color: Colors.white, size: 18),
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Select Printer',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+              // Expanded (not fixed + Spacer) so the title yields space to the
+              // trailing Rescan/Connected chips instead of overflowing the row.
+              const Expanded(
+                child: Text(
+                  'Select Printer',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               // Rescan button
               GestureDetector(
                 onTap: _isScanning ? null : _scan,

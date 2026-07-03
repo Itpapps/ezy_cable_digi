@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
@@ -17,7 +19,9 @@ Future<T?> showPremiumDialog<T>({
     transitionDuration: const Duration(milliseconds: 260),
     transitionBuilder: (_, anim, __, w) {
       return ScaleTransition(
-        scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+        // easeOutCubic = smooth scale-in with NO overshoot (easeOutBack bounced
+        // past its size then snapped back, which read as a jump/lag).
+        scale: CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
         child: FadeTransition(opacity: anim, child: w),
       );
     },
@@ -105,107 +109,126 @@ Future<bool> showPremiumConfirm({
   Color confirmColor = AppColors.primary,
   bool isDanger = false,
 }) async {
+  // iOS 26 "liquid glass" confirm: frosted card, centred title/body, and two iOS
+  // pill buttons (Cancel = soft grey, Confirm = filled brand colour, or iOS red
+  // when destructive). API + return value unchanged: true only when Confirm tapped.
+  final confirmFill = isDanger ? const Color(0xFFFF3B30) : confirmColor;
   final result = await showPremiumDialog<bool>(
     context: context,
-    child: PremiumDialogShell(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icon + title
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: (isDanger ? Colors.red : confirmColor).withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isDanger ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-                    color: isDanger ? Colors.red : confirmColor,
-                    size: 22,
-                  ),
+    child: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 40,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              // Light blur (was 30) — cheap even on low-end GPUs; the higher card
+              // opacity keeps the frosted look and a near-solid fallback.
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.55), width: 1),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: isDanger ? Colors.red.shade700 : confirmColor,
-                      letterSpacing: 0.2,
+                padding: const EdgeInsets.fromLTRB(22, 26, 22, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                        letterSpacing: -0.3,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Text(
+                      body,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.black.withValues(alpha: 0.55),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _IosPillButton(
+                            label: cancelLabel,
+                            onTap: () => Navigator.of(context).pop(false),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _IosPillButton(
+                            label: confirmLabel,
+                            onTap: () => Navigator.of(context).pop(true),
+                            fillColor: confirmFill,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              body,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.black54,
-                height: 1.55,
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      cancelLabel,
-                      style: const TextStyle(
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isDanger ? Colors.red.shade600 : confirmColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      confirmLabel,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     ),
   );
   return result == true;
+}
+
+// iOS-style pill button used by showPremiumConfirm. filled (fillColor set) = solid
+// capsule + white text; otherwise a soft grey capsule with dark text (Cancel).
+class _IosPillButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final Color? fillColor;
+  const _IosPillButton({required this.label, required this.onTap, this.fillColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = fillColor != null;
+    return Material(
+      color: filled ? fillColor : Colors.black.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: filled ? Colors.white : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

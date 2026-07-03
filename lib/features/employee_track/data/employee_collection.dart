@@ -72,3 +72,39 @@ class EmployeeCustomerCollection {
     );
   }
 }
+
+/// One `employeeTrackInfoList` row — Android parity (`getEmployeeTrackInfo`/`geti`,
+/// `EmployeeTrackAdapter` → `MapsActivityEmp`): a GPS point where an employee
+/// performed a given operation. Defensive — missing fields stay ''.
+class EmployeeTrackPoint {
+  final String operationTypeId;
+  final String lat;
+  final String lang;
+  final String createdDate;
+  final String displayName;
+
+  const EmployeeTrackPoint({
+    this.operationTypeId = '',
+    this.lat = '',
+    this.lang = '',
+    this.createdDate = '',
+    this.displayName = '',
+  });
+
+  factory EmployeeTrackPoint.fromJson(Map<String, dynamic> j) {
+    String s(String k) => (j[k] ?? '').toString().trim();
+    return EmployeeTrackPoint(
+      operationTypeId: s('operation_type_id'),
+      lat: s('lat'),
+      lang: s('lang'),
+      createdDate: s('created_date'),
+      displayName: s('display_name'),
+    );
+  }
+
+  /// Parsed coordinate, or null when the point has no usable lat/lang.
+  double? get latitude => double.tryParse(lat);
+  double? get longitude => double.tryParse(lang);
+  bool get hasLocation =>
+      latitude != null && longitude != null && !(latitude == 0 && longitude == 0);
+}

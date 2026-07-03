@@ -29,7 +29,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _rememberMe = false;
+  // Android parity: cb_rememberMe defaults to android:checked="true"
+  // (activity_login_new.xml:103) — the box is ticked on every open and stays
+  // ticked (creds persist) until the user manually unticks and logs in.
+  bool _rememberMe = true;
   bool _isLoading = false;
   // Android disables the username/password EditTexts when offline
   // (LoginActivity.java:248-251). Mirrored via the field `enabled` flag.
@@ -47,8 +50,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Android parity (LoginActivity.java:226-227): prefill the fields with the
   /// remembered credentials on every open. Empty when none were saved. The
-  /// Remember-Me checkbox itself stays unchecked by default (Android never
-  /// restores its checked state).
+  /// checkbox defaults to CHECKED (activity_login_new.xml:103), so remembering
+  /// persists across logins unless the user unticks it.
   Future<void> _loadRememberedCredentials() async {
     final creds = await AuthService.instance.loadRememberedCredentials();
     if (!mounted) return;
@@ -264,21 +267,9 @@ DropdownButton<String>(
               padding: const EdgeInsets.symmetric(horizontal: AppSizes.paddingM),
               child: Column(
                 children: [
-                  const SizedBox(height: 28),
-                  const Text(
-                    'Welcome to',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                   Text(
-                    AppConfig.instance.appName,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  // "Welcome to <appName>" removed per request. Keep the same
+                  // vertical space so the blur login card does NOT move up.
+                  const SizedBox(height: 108),
                   Expanded(
                     child: Stack(
                       alignment: Alignment.topCenter,

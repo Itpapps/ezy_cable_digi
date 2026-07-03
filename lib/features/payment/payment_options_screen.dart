@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,8 @@ import '../dashboard/dashboard_refresh_signal.dart';
 import 'payment_confirmation_dialog.dart';
 import 'payment_controller.dart';
 import 'receipt_preview_screen.dart';
+import '../search/data/search_repository.dart';
+import '../customer/customer_details_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PaymentOptionsScreen — backed by PaymentController (ChangeNotifier)
@@ -36,6 +39,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     super.initState();
     _ctrl = PaymentController(customer: widget.customer);
     _ctrl.loadPendingAmount(); // gpa → prefill the amount with the live due amount
+    _ctrl.captureLocation();   // Android parity: last-known GPS at screen open (0.0 fallback)
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
@@ -126,18 +130,18 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       // customer list total is 0 for broadband, so use the server's billAmount.
       final billAmt = _ctrl.lastResult?.billAmount ?? 0.0;
 
-      // Success popup before navigating
+      // Success popup before navigating — iOS 26 "liquid glass" card (no ✕; an OK
+      // button instead). Self-contained, so it drops PremiumDialogShell. Timing is
+      // unchanged: auto-closes after 1.5s (timer in _PaymentSuccessContent) then
+      // continues to the receipt.
       await showPremiumDialog<void>(
         context: context,
         barrierDismissible: false,
-        child: PremiumDialogShell(
-          onClose: () => Navigator.of(context).pop(),
-          child: _PaymentSuccessContent(
-            amount: payment.amount,
-            customerName: widget.customer.name,
-            txnId: payment.transactionId,
-            onContinue: () => Navigator.of(context).pop(),
-          ),
+        child: _PaymentSuccessContent(
+          amount: payment.amount,
+          customerName: widget.customer.name,
+          txnId: payment.transactionId,
+          onContinue: () => Navigator.of(context).pop(),
         ),
       );
 
@@ -474,16 +478,19 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
+      // Android CustomerMgmt_MakePayment `prev_next_layout` band: ◄ prev at the
+      // far left (next_cust_search flag 2), no back button. OS back still pops.
       leading: IconButton(
+        tooltip: 'Previous customer',
         icon: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: t.backBtnBg,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          child: Icon(Icons.chevron_left, size: 22, color: t.backBtnIcon),
         ),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () => _prevNextCustomer(2),
       ),
       title: Text(
         'PAYMENT',
@@ -493,6 +500,83 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           letterSpacing: 1.2,
           color: t.appBarFg,
         ),
+      ),
+      actions: [
+        // ► next at the far right (next_cust_search flag 1). Android status 0 →
+        // reopens Customer Details (CustomerOperations) for the adjacent customer.
+        IconButton(
+          tooltip: 'Next customer',
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.backBtnBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.chevron_right, size: 22, color: t.backBtnIcon),
+          ),
+          onPressed: () => _prevNextCustomer(1),
+        ),
+      ],
+    );
+  }
+
+  // ── Prev/Next customer (Android CustomerMgmt_MakePayment_Fragment) ───────
+  // ◄ = prev (flag 2) · ► = next (flag 1) → SOAP `prenext`. Android status 0
+  // reopens Customer Details (CustomerOperations) for the adjacent customer —
+  // it does NOT return to make-payment. 1 = "No Data Found!" · 2 = snackbar +
+  // "Contact Support" · 3/transport = "Server is busy or Un reachable!".
+  Future<void> _prevNextCustomer(int flag) async {
+    final id = int.tryParse(widget.customer.lcoCustomerId.trim());
+    if (id == null) {
+      showPremiumSnackBar(context, 'Error, Please try again later.',
+          isError: true);
+      return;
+    }
+    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    final r = await SearchRepository.instance
+        .prevNextCustomer(customerId: id, flag: flag);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
+    if (r.statusCode == 0 && r.customer != null) {
+      // Android reopens CustomerOperations_Fragment for the adjacent customer.
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerDetailsScreen(customer: r.customer!),
+        ),
+      );
+    } else if (r.statusCode == 1) {
+      await _showInfoDialog('No Data Found!', r.statusMessage);
+    } else if (r.statusCode == 2) {
+      showPremiumSnackBar(
+        context,
+        r.statusMessage.isEmpty
+            ? 'Contact Support'
+            : '${r.statusMessage}: Contact Support',
+        isError: true,
+      );
+    } else {
+      await _showInfoDialog(
+        'Server is busy or Un reachable!',
+        r.statusMessage.isEmpty
+            ? 'Please try again after sometime'
+            : r.statusMessage,
+      );
+    }
+  }
+
+  Future<void> _showInfoDialog(String title, String body) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: body.isEmpty ? null : Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -555,7 +639,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
               ? 'Amount to Collect (STB) (₹)'
               : 'Amount to collect (₹) *',
           t: t,
-          enabled: !_ctrl.isBroadbandOnly,
+          // Android: STB et_amount is disabled for BroadBand-only customers AND
+          // for LCO-deposit dealers (useLcoDeposit==1) — pinned to full pending.
+          enabled: !_ctrl.isBroadbandOnly && !_ctrl.amountLocked,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           highlightColor: _ctrl.paymentMethod == 'bank' ? const Color(0xFFF59E0B) : null,
         ),
@@ -728,30 +814,105 @@ class _PaymentSuccessContentState extends State<_PaymentSuccessContent> {
 
   @override
   Widget build(BuildContext context) {
-    // Simple, light success popup (Android-style): flat check + title + amount.
-    // Auto-closes (timer in initState) and continues to the receipt.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.check_circle_rounded,
-              color: Color(0xFF1AA95A), size: 46),
-          const SizedBox(height: 12),
-          const Text('Payment Successful',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A3C6E))),
-          const SizedBox(height: 6),
-          Text(
-            '₹${widget.amount.toStringAsFixed(2)}',
-            style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0277BD)),
+    // iOS 26 "liquid glass" success popup: frosted translucent card, soft green
+    // check, amount, and a single iOS-style OK action (replaces the ✕). Stays
+    // light — the 1.5s auto-close (initState timer) and receipt flow are unchanged.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 290),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 40,
+                offset: const Offset(0, 18),
+              ),
+            ],
           ),
-        ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              // Light blur (was 30) — cheap even on low-end GPUs; the higher card
+              // opacity keeps the frosted look and a near-solid fallback.
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.55), width: 1),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 62,
+                            height: 62,
+                            decoration: const BoxDecoration(
+                              color: Color(0x2634C759), // iOS green @ 15%
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check_rounded,
+                                color: Color(0xFF34C759), size: 36),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Payment Successful',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '₹${widget.amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF007AFF), // iOS blue
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // iOS-style hairline + single OK action.
+                    Container(
+                      height: 0.5,
+                      color: Colors.black.withValues(alpha: 0.12),
+                    ),
+                    InkWell(
+                      onTap: widget.onContinue,
+                      borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(28)),
+                      child: const SizedBox(
+                        height: 50,
+                        child: Center(
+                          child: Text(
+                            'OK',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF007AFF),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

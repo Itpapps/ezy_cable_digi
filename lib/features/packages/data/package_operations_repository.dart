@@ -16,8 +16,10 @@ class CustomerBoxesResult {
   final String statusMessage;
   final List<CustomerBox> boxes;
   final String serviceExtension;
+  final List<CustomerBox> ottBoxes; // ott_boxes_list → OTT operation
   const CustomerBoxesResult(
-      this.statusCode, this.statusMessage, this.boxes, this.serviceExtension);
+      this.statusCode, this.statusMessage, this.boxes, this.serviceExtension,
+      [this.ottBoxes = const []]);
 }
 
 /// Result of `getCustomerPackages` (gcp) — base / add-on / ala-carte.
@@ -109,6 +111,7 @@ class PackageOperationsRepository {
       final msg = '${data['status_msg'] ?? ''}';
       final ext = '${data['service_extension'] ?? ''}';
       final boxes = <CustomerBox>[];
+      final ottBoxes = <CustomerBox>[];
       if (status == 0) {
         final list = _decode(data['customer_boxes']);
         if (list is List) {
@@ -118,8 +121,17 @@ class PackageOperationsRepository {
             }
           }
         }
+        // ott_boxes_list drives the OTT operation (Android CustomerOperations:2733).
+        final ott = _decode(data['ott_boxes_list']);
+        if (ott is List) {
+          for (final b in ott) {
+            if (b is Map) {
+              ottBoxes.add(CustomerBox.fromJson(Map<String, dynamic>.from(b)));
+            }
+          }
+        }
       }
-      return CustomerBoxesResult(status, msg, boxes, ext);
+      return CustomerBoxesResult(status, msg, boxes, ext, ottBoxes);
     } on TimeoutException {
       return const CustomerBoxesResult(3, 'Request timed out.', [], '');
     } catch (_) {
@@ -370,6 +382,70 @@ class PackageOperationsRepository {
       final data = await RestClient.instance.postForm(
         _url('reactivateBox'),
         {..._auth, 'customer_id': customerId, 'box_id': boxId},
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── stbTemporaryActivation (sta) — VERIFIED (CustomerOperations_Fragment:3333-3416)
+  // customer_id = the customer's customer_id (Flutter lcoCustomerId). Android reads
+  // ONLY status_code + status_msg from the response (no other business fields).
+  // status 0 = success · 1 = backend-rejected · 3 = transport.
+  Future<PackageWriteResult> stbTemporaryActivation({
+    required String customerId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('stbTemporaryActivation'),
+        {..._auth, 'customer_id': customerId},
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── unpaidCustomerActivation (uca) — VERIFIED (CustomerOperations_Fragment:3225-3320)
+  // customer_id = the customer's customer_id (== Flutter lcoCustomerId). Reads ONLY
+  // status_code + status_msg. 0 = success · 1 = "No Details Found" · 3 = transport.
+  Future<PackageWriteResult> unpaidCustomerActivation({
+    required String customerId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('unpaidCustomerActivation'),
+        {..._auth, 'customer_id': customerId},
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
+  // ── packageRenew (pr) — VERIFIED (CustomerOperations_Fragment:2870-2968) ─────
+  // STB "Renew Services". customer_id = the customer's customer_id (Android
+  // `customersidd`, populated on load via packageoperations(0); == Flutter
+  // lcoCustomerId). Reads ONLY status_code + status_msg. 0 = success · 1 =
+  // rejected · 3 = transport. (The "Renew BroadBand" variant is a separate
+  // feature — editcustomer → BroadBandList — and is NOT this call.)
+  Future<PackageWriteResult> packageRenew({
+    required String customerId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('packageRenew'),
+        {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
       return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');

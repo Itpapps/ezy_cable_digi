@@ -1,0 +1,216 @@
+import 'package:flutter/material.dart';
+
+import '../../core/constants/app_colors.dart';
+import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
+import 'data/customer_box.dart';
+import 'data/ott_repository.dart';
+
+/// OTT — Android parity (`OTTFragment` + `OTTAdapter`). Lists the customer's OTT
+/// boxes; tapping one opens a change-credentials dialog (UserName / Password)
+/// that calls `ott_change_username` / `ott_change_password`.
+class OttScreen extends StatefulWidget {
+  final Customer customer;
+  final List<CustomerBox> ottBoxes;
+  const OttScreen({super.key, required this.customer, required this.ottBoxes});
+
+  @override
+  State<OttScreen> createState() => _OttScreenState();
+}
+
+class _OttScreenState extends State<OttScreen> {
+  bool _busy = false;
+
+  Future<void> _showChangeDialog(CustomerBox box) async {
+    var mode = 'UserName'; // Android spinner: UserName | Password
+    final valueCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+
+    final submitted = await showPremiumDialog<bool>(
+      context: context,
+      child: PremiumDialogShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+          child: StatefulBuilder(
+            builder: (ctx, setDlg) {
+              final isUser = mode == 'UserName';
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('OTT · Box ${box.boxNumber}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 15)),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: mode,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      labelText: 'Change',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'UserName', child: Text('UserName')),
+                      DropdownMenuItem(value: 'Password', child: Text('Password')),
+                    ],
+                    onChanged: (v) => setDlg(() {
+                      mode = v ?? 'UserName';
+                      valueCtrl.clear();
+                      confirmCtrl.clear();
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: valueCtrl,
+                    obscureText: !isUser,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      labelText: isUser ? 'UserName' : 'Password',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: confirmCtrl,
+                    obscureText: !isUser,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      labelText: isUser ? 'Confirm UserName' : 'Confirm Password',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('CANCEL'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () {
+                            // Android validation: len >= 4 and value == confirm.
+                            final v = valueCtrl.text;
+                            final c = confirmCtrl.text;
+                            final noun = isUser ? 'UserName' : 'Password';
+                            if (v.length < 4) {
+                              showPremiumSnackBar(
+                                  ctx, 'Please enter valid $noun',
+                                  isError: true);
+                              return;
+                            }
+                            if (c.length < 4) {
+                              showPremiumSnackBar(
+                                  ctx, 'Please enter valid Confirm $noun',
+                                  isError: true);
+                              return;
+                            }
+                            if (v != c) {
+                              showPremiumSnackBar(ctx,
+                                  '$noun & Confirm $noun should be same',
+                                  isError: true);
+                              return;
+                            }
+                            Navigator.pop(ctx, true);
+                          },
+                          child: const Text('SUBMIT'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    final value = valueCtrl.text;
+    final isUser = mode == 'UserName';
+    valueCtrl.dispose();
+    confirmCtrl.dispose();
+    if (submitted != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final res = isUser
+        ? await OttRepository.instance
+            .changeUsername(boxId: box.boxId, username: value)
+        : await OttRepository.instance
+            .changePassword(boxId: box.boxId, password: value);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (res.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+      return;
+    }
+    await showPremiumConfirm(
+      context: context,
+      title: res.statusCode == 0 ? 'Success' : 'Fail!',
+      body: res.message.trim().isEmpty
+          ? (res.statusCode == 0 ? 'Success' : 'Failed')
+          : res.message,
+      confirmLabel: 'OK',
+      cancelLabel: 'Close',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(
+        title: const Text('OTT'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Text(widget.customer.name,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16)),
+          ),
+          Expanded(
+            child: widget.ottBoxes.isEmpty
+                ? const Center(
+                    child: Text('No OTT boxes.',
+                        style: TextStyle(color: Colors.white70)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    itemCount: widget.ottBoxes.length,
+                    itemBuilder: (context, i) {
+                      final b = widget.ottBoxes[i];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text('Box: ${b.boxNumber}'),
+                          subtitle: Text('VC: ${b.vcNumber}'),
+                          trailing: Text(b.stateLabel,
+                              style: TextStyle(
+                                  color: b.isActive
+                                      ? Colors.green
+                                      : Colors.red,
+                                  fontWeight: FontWeight.w700)),
+                          onTap: _busy ? null : () => _showChangeDialog(b),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

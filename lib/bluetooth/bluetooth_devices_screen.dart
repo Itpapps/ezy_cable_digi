@@ -113,7 +113,6 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
           ..._pairedDevices.map(
             (d) => _DeviceTile(
               device: d,
-              service: _service,
               savedMac: SettingsStore.instance.printerMac,
               onSetDefault: _setDefault,
             ),
@@ -129,7 +128,6 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
           ..._otherDevices.map(
             (d) => _DeviceTile(
               device: d,
-              service: _service,
               savedMac: SettingsStore.instance.printerMac,
               onSetDefault: _setDefault,
             ),
@@ -164,13 +162,11 @@ class _BluetoothDevicesScreenState extends State<BluetoothDevicesScreen> {
 
 class _DeviceTile extends StatelessWidget {
   final BluetoothInfo device;
-  final RealBluetoothService service;
   final String savedMac;
   final ValueChanged<BluetoothInfo> onSetDefault;
 
   const _DeviceTile({
     required this.device,
-    required this.service,
     required this.savedMac,
     required this.onSetDefault,
   });
@@ -180,18 +176,10 @@ class _DeviceTile extends StatelessWidget {
     final name = device.name.isEmpty ? 'Unknown Device' : device.name;
 
     return InkWell(
-      onTap: () async {
-        final messenger = ScaffoldMessenger.of(context);
-        final success = await service.connectPrinter(device.macAdress);
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              success ? "Connected to $name" : "Connection Failed",
-            ),
-            backgroundColor: success ? Colors.green : Colors.red,
-          ),
-        );
-      },
+      // Android parity (ActivityDevice): selecting a device SAVES it as the
+      // default printer — it never connects here. Connection happens only at
+      // print time.
+      onTap: () => onSetDefault(device),
       child: Column(
         children: [
           Padding(

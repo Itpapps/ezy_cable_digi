@@ -118,18 +118,31 @@ class SearchProvider extends ChangeNotifier {
         _results = result.customers;
       } else {
         _results = [];
-        _error = result.statusMessage.isEmpty
-            ? 'No records found'
-            : result.statusMessage;
+        _error = _searchError(result.statusCode, result.statusMessage);
       }
     } catch (error, stackTrace) {
-      _error = 'Search failed. Please try again.';
+      _error = _searchError(3, ''); // transport failure → Android status-3 path
       _results = [];
       ErrorHandlerService.recordError(
         error,
         stackTrace,
         reason: 'SearchProvider.search',
       );
+    }
+  }
+
+  // Android parity (SearchCustomer_Fragment_Newdesign) — searchCustomer status map:
+  //  1 = no records     → "No Records Found !" title / server message (:1336-1344)
+  //  2 = "<message>: Contact Support" (:1359)
+  //  3 = null/transport → "Large Count" dialog / "Please search using another filter" (:1178-1184)
+  String _searchError(int status, String msg) {
+    switch (status) {
+      case 1:
+        return msg.isEmpty ? 'No Records Found !' : msg;
+      case 2:
+        return msg.isEmpty ? 'Contact Support' : '$msg: Contact Support';
+      default:
+        return 'Please search using another filter';
     }
   }
 

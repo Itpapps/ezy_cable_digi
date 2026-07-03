@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/premium_dialog.dart';
 import 'data/employee_collection.dart';
 import 'data/employee_track_repository.dart';
+import 'employee_track_map_screen.dart';
 
 /// Employee Track (collection report) — Android parity (EmployeeTrackFragment,
 /// SOAP `empCollection`). Date-range filter → per-employee collections. This is a
@@ -73,6 +75,76 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
       t += double.tryParse(e.amount) ?? 0;
     }
     return t;
+  }
+
+  // Android parity (EmployeeTrackAdapter "Select Any Tracking value"): label → op_name.
+  static const List<(String, String)> _trackOps = [
+    ('Complaint Track', 'create_complaint'),
+    ('Deactivate Box Track', 'deactivate_box'),
+    ('Live Track', 'live_track'),
+    ('Make Payment Track', 'make_payments'),
+    ('Payment History Track', 'payment_history'),
+    ('Validate Login Track', 'validate_login'),
+    ('Update CustomerLocation Track', 'update_customer_location'),
+  ];
+
+  Future<void> _openTrackDialog(EmployeeCollection e) async {
+    final selected = await showDialog<(String, String)>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Select Any Tracking value'),
+        children: [
+          for (final op in _trackOps)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, op),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(op.$1),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await _fetchTrack(e, selected.$1, selected.$2);
+  }
+
+  /// Android parity (EmployeeTrackAdapter.getEmployeeTrackInfo): fetch the GPS
+  /// points for [opName] → map (status 0), "No Tracking Details Found!" (1), or
+  /// "Failed." (transport). Uses Android's "Loading...Please wait..." blocker.
+  Future<void> _fetchTrack(
+      EmployeeCollection e, String label, String opName) async {
+    showPremiumLoading(context, message: 'Loading...Please wait...');
+    final r = await EmployeeTrackRepository.instance.getEmployeeTrackInfo(
+      employeeId: e.employeeId,
+      startDate: _fmt(_from), // Android sends dt_fromDt (the From date)
+      opName: opName,
+    );
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
+    if (r.statusCode == 0) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              EmployeeTrackMapScreen(title: label, points: r.points),
+        ),
+      );
+    } else if (r.statusCode == 1) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Tracking Details'),
+          content: const Text('No Tracking Details Found!'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+          ],
+        ),
+      );
+    } else {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+    }
   }
 
   @override
@@ -220,6 +292,33 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF0D47A1))),
+              const SizedBox(width: 8),
+              // Android parity (row tv_track): per-employee operation GPS track.
+              InkWell(
+                onTap: () => _openTrackDialog(e),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D47A1).withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.location_on,
+                          size: 15, color: Color(0xFF0D47A1)),
+                      SizedBox(width: 4),
+                      Text('Track',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0D47A1))),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         );

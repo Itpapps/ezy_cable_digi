@@ -63,19 +63,21 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
       fmt.sep,
       modeHdr,
       fmt.sep,
-      '${ind}Cash(STB)${fitLeft(_data.cashCount, 10)}   ${fitLeft(_data.cashAmount, amtW)}',
-      '${ind}Bank(STB)${fitLeft(_data.bankCount, 10)}   ${fitLeft(_data.bankAmount, amtW)}',
+      // Android right-aligns COUNT/AMOUNT via fixedLengthString (%1$Ns), so the
+      // values line up under the headers — use fitRight, not fitLeft.
+      '${ind}Cash(STB)${fitRight(_data.cashCount, 10)}   ${fitRight(_data.cashAmount, amtW)}',
+      '${ind}Bank(STB)${fitRight(_data.bankCount, 10)}   ${fitRight(_data.bankAmount, amtW)}',
     ];
     if (_data.hasBroadband) {
       lines.add(
-          '${ind}Cash(BB)${w ? ' ' : ''}${fitLeft(_data.bbCashCount, 10)}   ${fitLeft(_data.bbCashAmount, amtW)}');
+          '${ind}Cash(BB)${w ? ' ' : ''}${fitRight(_data.bbCashCount, 10)}   ${fitRight(_data.bbCashAmount, amtW)}');
       lines.add(
-          '${ind}Bank(BB)${w ? ' ' : ''}${fitLeft(_data.bbBankCount, 10)}   ${fitLeft(_data.bbBankAmount, amtW)}');
+          '${ind}Bank(BB)${w ? ' ' : ''}${fitRight(_data.bbBankCount, 10)}   ${fitRight(_data.bbBankAmount, amtW)}');
     }
     lines.add(fmt.sep);
     lines.add(w
-        ? 'TOTAL COLLECTION -   ${fitLeft('Rs.${_data.totalAmount}', 14)}'
-        : 'TOTAL COLLECTION -  ${fitLeft(_data.totalAmount, 10)}');
+        ? 'TOTAL COLLECTION -   ${fitRight('Rs.${_data.totalAmount}', 14)}'
+        : 'TOTAL COLLECTION -  ${fitRight(_data.totalAmount, 10)}');
     lines.add(fmt.sep);
     return lines;
   }

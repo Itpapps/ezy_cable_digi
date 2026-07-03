@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../employee_track/data/employee_collection.dart';
@@ -132,6 +133,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
       context: context,
       printerService: _printerService,
       buildLines: _buildListLines,
+      batched: true, // long Collection Report → Android write_reports batching
     );
   }
 
@@ -153,76 +155,119 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('MONTHLY REPORT'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+                color: t.backBtnBg, borderRadius: BorderRadius.circular(10)),
+            child:
+                Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text('MONTHLY REPORT',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: t.appBarFg)),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: AppColors.primary,
+          // Filter card — date range + Search, in a themed white card.
+          Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: _dateButton('From', _start, true)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _dateButton('To', _end, false)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton.icon(
-                    onPressed: _loading ? null : _search,
-                    icon: const Icon(Icons.search),
-                    label: const Text('SEARCH',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: t.cardBg,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                      color: t.cardShadowColor,
+                      blurRadius: 14,
+                      offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _dateButton('From', _start, true, t)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _dateButton('To', _end, false, t)),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton.icon(
+                      onPressed: _loading ? null : _search,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: t.accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.search, size: 20),
+                      label: const Text('SEARCH',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          Expanded(child: _resultArea()),
+          Expanded(child: _resultArea(t)),
         ],
       ),
     );
   }
 
-  Widget _dateButton(String label, DateTime date, bool isStart) {
+  Widget _dateButton(
+      String label, DateTime date, bool isStart, AppThemeConst t) {
     return OutlinedButton(
       onPressed: () => _pickDate(isStart: isStart),
       style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white70),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        foregroundColor: t.cardHeadingText,
+        side: BorderSide(color: t.inputBorderColor),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Column(
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.white70)),
+              style: TextStyle(fontSize: 11, color: t.cardSubtitleText)),
           const SizedBox(height: 2),
           Text(_fmt.format(date),
-              style: const TextStyle(fontWeight: FontWeight.w800)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w800, color: t.cardHeadingText)),
         ],
       ),
     );
   }
 
-  Widget _resultArea() {
+  Widget _resultArea(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_employees == null) {
-      return const Center(
+      return Center(
         child: Text('Select a date range and tap Search.',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: t.subtitleText)),
       );
     }
     if (_message.isNotEmpty && _employees!.isEmpty) {
@@ -230,13 +275,13 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_message, style: const TextStyle(color: Colors.white)),
+            Text(_message, style: TextStyle(color: t.bodyText)),
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: _search,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white70),
+                foregroundColor: t.accent,
+                side: BorderSide(color: t.inputBorderColor),
               ),
               child: const Text('Retry'),
             ),
@@ -245,30 +290,46 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
       );
     }
     if (_employees!.isEmpty) {
-      return const Center(
+      return Center(
         child: Text('No collections found',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: t.subtitleText)),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          color: AppColors.primary,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: t.headerGradient,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Row(
             children: [
-              Text('Total — ₹${_total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800)),
-              const Spacer(),
+              Expanded(
+                child: Text('Total — ₹${_total.toStringAsFixed(2)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: _printList,
-                icon: const Icon(Icons.print, color: Colors.white),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                icon: const Icon(Icons.print, color: Colors.white, size: 18),
                 label: const Text('Print',
-                    style: TextStyle(color: Colors.white)),
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -280,18 +341,29 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
             itemBuilder: (context, i) {
               final e = _employees![i];
               return Card(
-                margin: const EdgeInsets.only(bottom: 8),
+                margin: const EdgeInsets.only(bottom: 10),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: ListTile(
-                  title: Text(e.name.isEmpty ? '-' : e.name),
-                  subtitle:
-                      e.dealerName.isEmpty ? null : Text(e.dealerName),
+                  title: Text(e.name.isEmpty ? '-' : e.name,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: t.cardHeadingText)),
+                  subtitle: e.dealerName.isEmpty
+                      ? null
+                      : Text(e.dealerName,
+                          style: TextStyle(color: t.cardSubtitleText)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('₹${e.amount.isEmpty ? '0' : e.amount}',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, color: t.accent)),
                       const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right, size: 18),
+                      Icon(Icons.chevron_right,
+                          size: 18, color: t.cardSubtitleText),
                     ],
                   ),
                   onTap: () => _openDetail(e),
@@ -405,17 +477,36 @@ class _MonthlyReportDetailScreenState
       context: context,
       printerService: widget.printerService,
       buildLines: _buildDetailLines,
+      batched: true, // long Employee Collection detail → Android write_reports batching
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('COLLECTION DETAILS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+                color: t.backBtnBg, borderRadius: BorderRadius.circular(10)),
+            child:
+                Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text('COLLECTION DETAILS',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: t.appBarFg)),
         actions: [
           if (_items != null && _items!.isNotEmpty)
             IconButton(
@@ -428,41 +519,58 @@ class _MonthlyReportDetailScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: AppColors.primary,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.employeeName,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                // Android parity (Employee_Collection_Details): the employee's
-                // total amount (reclf_amt) + the record count ("Total - N").
-                Text(
-                    'Total Amount — ₹${widget.employeeAmount.isEmpty ? '0' : widget.employeeAmount}',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700)),
-                if (_items != null) ...[
-                  const SizedBox(height: 2),
-                  Text('Total - ${_items!.length}',
-                      style: const TextStyle(color: Colors.white70)),
+          // Employee summary — themed white card.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: t.cardBg,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                      color: t.cardShadowColor,
+                      blurRadius: 14,
+                      offset: const Offset(0, 4)),
                 ],
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.employeeName,
+                      style: TextStyle(
+                          color: t.cardHeadingText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  // Android parity (Employee_Collection_Details): the employee's
+                  // total amount (reclf_amt) + the record count ("Total - N").
+                  Text(
+                      'Total Amount — ₹${widget.employeeAmount.isEmpty ? '0' : widget.employeeAmount}',
+                      style: TextStyle(
+                          color: t.accent,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14)),
+                  if (_items != null) ...[
+                    const SizedBox(height: 2),
+                    Text('Total - ${_items!.length}',
+                        style: TextStyle(
+                            color: t.cardSubtitleText, fontSize: 12)),
+                  ],
+                ],
+              ),
             ),
           ),
-          Expanded(child: _body()),
+          Expanded(child: _body(t)),
         ],
       ),
     );
   }
 
-  Widget _body() {
+  Widget _body(AppThemeConst t) {
     if (_items == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_items!.isEmpty) {
       return Center(
@@ -470,13 +578,13 @@ class _MonthlyReportDetailScreenState
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(_message.isEmpty ? 'No records found' : _message,
-                style: const TextStyle(color: Colors.white70)),
+                style: TextStyle(color: t.subtitleText)),
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: _load,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white70),
+                foregroundColor: t.accent,
+                side: BorderSide(color: t.inputBorderColor),
               ),
               child: const Text('Retry'),
             ),
@@ -484,16 +592,10 @@ class _MonthlyReportDetailScreenState
         ),
       );
     }
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF4F7FF),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _items!.length,
-        itemBuilder: (context, i) => _detailCard(_items![i]),
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _items!.length,
+      itemBuilder: (context, i) => _detailCard(_items![i]),
     );
   }
 
@@ -505,7 +607,10 @@ class _MonthlyReportDetailScreenState
         ? c.altCustId
         : '${c.altCustId} (${c.customNumber})';
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

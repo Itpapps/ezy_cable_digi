@@ -88,13 +88,21 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
     );
     final result = await SearchRepository.instance
         .search(searchType: searchType, value: _scannedValue);
+    // Android parity: on resolving the customer, fetch the enriched detail
+    // (is_list=1) so is_show / tmp_activation reach the operations grid. Falls
+    // back to the scan result if the detail fetch yields nothing.
+    final enriched = (result.statusCode == 0 && result.customers.isNotEmpty)
+        ? await SearchRepository.instance
+            .fetchCustomerDetail(result.customers.first.lcoCustomerId)
+        : null;
     if (!mounted) return;
     Navigator.pop(context); // dismiss loading
     if (result.statusCode == 0 && result.customers.isNotEmpty) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CustomerDetailsScreen(customer: result.customers.first),
+          builder: (_) => CustomerDetailsScreen(
+              customer: enriched ?? result.customers.first),
         ),
       );
     } else {

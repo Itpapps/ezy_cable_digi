@@ -141,6 +141,7 @@ class _OfflineCollectionsReportScreenState
       context: context,
       printerService: _printerService,
       buildLines: _buildCollectionsLines,
+      batched: true, // long Offline Collection Report → Android write_reports batching
     );
   }
 

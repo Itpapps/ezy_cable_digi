@@ -48,7 +48,14 @@ class ComplaintsRepository {
 
   static String get _imei => AppConfig.deviceImei;
 
-  Future<ComplaintsResult> fetchOpenComplaints() async {
+  /// [dealerId] / [fromDashboard] default to the dashboard-card values (0 / "1"),
+  /// so the dashboard feed call `fetchOpenComplaints()` stays byte-for-byte the
+  /// same. The Complaints tab passes the spinner's dealer_id + "0" — Android
+  /// parity (OpenComplaints_Fragment:389-390).
+  Future<ComplaintsResult> fetchOpenComplaints({
+    int dealerId = 0,
+    String fromDashboard = '1',
+  }) async {
     final ns = ServerUrlResolver.instance.namespace;
     final xml = await SoapClient.instance.call(
       url: ServerUrlResolver.instance.loginServerUrl,
@@ -60,8 +67,8 @@ class ComplaintsRepository {
       fields: {
         'authToken': SessionService.instance.authToken,
         'imei': _imei,
-        'dealer_id': 0,
-        'from_dashboard': '1',
+        'dealer_id': dealerId,
+        'from_dashboard': fromDashboard,
       },
       timeout: const Duration(seconds: 120),
     );
@@ -90,6 +97,49 @@ class ComplaintsRepository {
       // Malformed payload → empty list, never throws to the UI.
     }
     return ComplaintsResult(status, message, complaints);
+  }
+
+  /// Mapped dealers / businesses for the Complaints-tab dropdown — Android parity
+  /// (OpenComplaints_Fragment.Getmappeddealersru → SOAP `gmd` = `getMappeddealers`,
+  /// wrapper element + i:type `getMappedDealers`, request `authToken` + `imei`).
+  /// Response = repeated `dealerinfo{ dealer_id, business_name }`. Returns a list
+  /// led by "Choose" (id 0), exactly like Android's items[0]. Never throws.
+  Future<List<ComplaintOption>> fetchMappedDealers() async {
+    final list = <ComplaintOption>[const ComplaintOption(0, 'Choose')];
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        // Method name is lowercase-d `getMappeddealers` (config `gmd`), but the
+        // wrapper element + i:type are capital-D `getMappedDealers` (Android quirk).
+        soapAction: '$ns/getMappeddealers',
+        methodName: 'getMappeddealers',
+        wrapper: 'getMappedDealers',
+        wrapperType: 'getMappedDealers',
+        fields: {
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      if (status == 0) {
+        for (final block in SoapClient.readAll(xml, 'dealerinfo')) {
+          final id =
+              int.tryParse(SoapClient.readField(block, 'dealer_id') ?? '');
+          final name =
+              (SoapClient.readField(block, 'business_name') ?? '').trim();
+          if (id != null && name.isNotEmpty) {
+            list.add(ComplaintOption(id, name));
+          }
+        }
+      }
+    } catch (_) {
+      // Keep just [Choose] — the tab still loads complaints for dealer_id 0.
+    }
+    return list;
   }
 
   /// Fetch the status list-of-values (LOV) for the Update Status dropdown.

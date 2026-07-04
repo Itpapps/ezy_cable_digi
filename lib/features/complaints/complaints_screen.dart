@@ -3,6 +3,7 @@ import '../../core/theme/theme_constants.dart';
 import '../../features/dashboard/widgets/complaint_card.dart';
 import '../dashboard/data/complaints_repository.dart';
 import '../dashboard/data/open_complaint.dart';
+import 'data/complaint_option.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OPEN COMPLAINTS (bottom-nav Complaints tab)
@@ -24,15 +25,39 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   String _message = '';
   List<OpenComplaint> _complaints = const [];
 
+  // Dealer/business dropdown — Android parity (OpenComplaints_Fragment "Dealer"
+  // spinner from getMappedDealers). "Choose" (id 0) is the default, like Android.
+  List<ComplaintOption> _dealers = const [ComplaintOption(0, 'Choose')];
+  ComplaintOption _selectedDealer = const ComplaintOption(0, 'Choose');
+  bool _dealersLoading = true;
+
   @override
   void initState() {
     super.initState();
+    _loadDealers();
+  }
+
+  // Android: onCreateView runs getMappedDealers first; the spinner's default
+  // "Choose"(0) selection then triggers the complaint fetch (dealer_id 0).
+  Future<void> _loadDealers() async {
+    final dealers = await ComplaintsRepository.instance.fetchMappedDealers();
+    if (!mounted) return;
+    setState(() {
+      _dealers = dealers;
+      _selectedDealer = dealers.first; // "Choose" (id 0)
+      _dealersLoading = false;
+    });
     _load();
   }
 
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
-    final r = await ComplaintsRepository.instance.fetchOpenComplaints();
+    // Android Complaints tab sends the selected dealer_id + from_dashboard "0"
+    // (the dashboard card uses dealer_id 0 + "1", left unchanged).
+    final r = await ComplaintsRepository.instance.fetchOpenComplaints(
+      dealerId: _selectedDealer.id,
+      fromDashboard: '0',
+    );
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -90,9 +115,59 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
       ),
       body: Column(
         children: [
-          // ── Count badge (real) ───────────────────────────────────────────
+          // ── Dealer dropdown — Android parity (OpenComplaints "Dealer" spinner)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Dealer',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: t.subtitleText)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: t.inputBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: t.inputBorderColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<ComplaintOption>(
+                      value: _selectedDealer,
+                      isExpanded: true,
+                      menuMaxHeight: 360,
+                      icon: Icon(Icons.keyboard_arrow_down_rounded,
+                          color: t.subtitleText),
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: t.cardBodyText),
+                      items: _dealers
+                          .map((d) => DropdownMenuItem<ComplaintOption>(
+                                value: d,
+                                child: Text(d.name,
+                                    overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(),
+                      onChanged: (_dealersLoading || _loading)
+                          ? null
+                          : (d) {
+                              if (d == null || d == _selectedDealer) return;
+                              setState(() => _selectedDealer = d);
+                              _load();
+                            },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Count badge (real) ───────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -127,7 +202,7 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
 
   Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_error) {
       return _message_(
@@ -161,19 +236,31 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   }
 
   Widget _message_(IconData icon, String text) {
+    final t = AppThemeConst.of(context);
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.black26, size: 36),
-          const SizedBox(height: 8),
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.black45, fontWeight: FontWeight.w600),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: t.emptyStateBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: t.emptyStateIconColor, size: 38),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: t.bodyText, fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }

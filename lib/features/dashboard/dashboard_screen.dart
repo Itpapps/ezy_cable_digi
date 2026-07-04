@@ -14,7 +14,7 @@ import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import '../../core/data/customer.dart';
 import '../customers/customer_list_provider.dart';
-import '../customer/customer_details_screen.dart';
+import '../payment/payment_options_screen.dart';
 import '../complaints/complaints_screen.dart';
 import '../complaints/complaint_details_screen.dart';
 import '../analytics/analytics_screen.dart';
@@ -1378,12 +1378,30 @@ class _UnpaidCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CustomerDetailsScreen(customer: customer),
-            ),
-          ),
+          onTap: () {
+            // Android parity (UnpaidNewAdapter:103-179, hit_from==1): the
+            // dashboard Unpaid row is a collection shortcut — tap opens Make
+            // Payment directly, gated by the make_payment permission (SERVICE /
+            // make_payment=="0" → "Access denied!"). It does NOT open Customer
+            // Details. The Customer is the same object that already reached
+            // payment via Details, so it is payment-compatible.
+            if (!SessionService.instance.canMakePayment) {
+              showPremiumConfirm(
+                context: context,
+                title: 'Access denied!',
+                body: 'You have no access to do payments.',
+                confirmLabel: 'OK',
+                cancelLabel: 'Close',
+              );
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PaymentOptionsScreen(customer: customer),
+              ),
+            );
+          },
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Column(

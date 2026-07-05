@@ -11,9 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:lottie/lottie.dart';
-import 'package:provider/provider.dart';
 import '../../core/data/customer.dart';
-import '../customers/customer_list_provider.dart';
 import '../payment/payment_options_screen.dart';
 import '../complaints/complaints_screen.dart';
 import '../complaints/complaint_details_screen.dart';
@@ -104,12 +102,17 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   int _feedShown = _feedPage;
 
   /// Wraps a feed list with a display cap + a "Load more" footer.
+  /// [cap] — Android hard-caps some dashboard feeds (unpaid + complaints at 10,
+  /// `getItemCount → size>9?10:size`) with NO Load More. When set, show
+  /// `min(total, cap)` and no footer. Uncapped feeds keep the 30 + Load More.
   Widget _pagedListView({
     required int total,
     required IndexedWidgetBuilder itemBuilder,
+    int? cap,
   }) {
-    final shown = total <= _feedShown ? total : _feedShown;
-    final hasMore = total > shown;
+    final limit = cap ?? _feedShown;
+    final shown = total <= limit ? total : limit;
+    final hasMore = cap == null && total > shown;
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -227,8 +230,11 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
       body: _selectedTab == 0
           ? Container(
               color: AppColors.primary,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
+              // Android parity: the KPI cards + quick actions form a FIXED header
+              // (the page no longer scrolls as one unit); only the feed scrolls.
+              // Bottom padding 0 → the white feed card reaches the bottom nav.
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -244,7 +250,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 9),
 
                     // ── Row 1: 3 Gradient Summary Cards ───────────────────────────
                     // Due Amount  → deep blue-to-sky  
@@ -462,112 +468,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
 
                     const SizedBox(height: 10),
 
-                    // ── White card: filter chips + feed list ───────────────────────
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.10),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              physics: const BouncingScrollPhysics(),
-                              child: Row(
-                                children: [
-                                  _FeedChip(
-                                    label: AppStrings.of(context, 'complaints'),
-                                    selected: _feed == _FeedType.complaints,
-                                    onTap: () {
-                                      setState(() {
-                                        _feed = _FeedType.complaints;
-                                        _feedShown = _feedPage;
-                                      });
-                                      _dash.loadComplaints(force: true);
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _FeedChip(
-                                    label: AppStrings.of(context, 'unpaid'),
-                                    selected: _feed == _FeedType.unpaid,
-                                    onTap: () {
-                                      setState(() {
-                                        _feed = _FeedType.unpaid;
-                                        _feedShown = _feedPage;
-                                      });
-                                      // Lazy fetch (mirrors Android's tab-tap load).
-                                      context
-                                          .read<CustomerListProvider>()
-                                          .initialLoad();
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _FeedChip(
-                                    label: AppStrings.of(context, 'nearest'),
-                                    selected: _feed == _FeedType.nearest,
-                                    onTap: () {
-                                      setState(() {
-                                        _feed = _FeedType.nearest;
-                                        _feedShown = _feedPage;
-                                      });
-                                      _dash.loadNearest(force: true);
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _FeedChip(
-                                    label: AppStrings.of(context, 'pay_later'),
-                                    selected: _feed == _FeedType.payLater,
-                                    onTap: () {
-                                      setState(() {
-                                        _feed = _FeedType.payLater;
-                                        _feedShown = _feedPage;
-                                      });
-                                      _dash.loadPayLater(force: true);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const Divider(
-                            height: 1,
-                            thickness: 0.6,
-                            indent: 12,
-                            endIndent: 12,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-                            // Min-height keeps the white card filling the page
-                            // so an empty/errored feed doesn't leave a large
-                            // blue gap below (cosmetic only).
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight:
-                                    MediaQuery.sizeOf(context).height * 0.32,
-                              ),
-                              child: _feed == _FeedType.unpaid
-                                  ? _buildUnpaidFeed()
-                                  : _feed == _FeedType.complaints
-                                      ? _buildComplaintsFeed()
-                                      : _feed == _FeedType.payLater
-                                          ? _buildPayLaterFeed()
-                                          : _buildNearestFeed(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // White card → Expanded: only the feed scrolls; the KPI cards
+                    // and quick actions above stay fixed (Android parity).
+                    Expanded(child: _buildFeedSection()),
                   ],
                 ),
               ),
@@ -577,36 +480,155 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     );
   }
 
-  // ── Unpaid feed (real `unpaidCustomers` via CustomerListProvider) ───────────
+  // The white feed card (filter chips + divider + the selected feed list),
+  // extracted verbatim from the dashboard body — behaviour is UNCHANGED. Step 2
+  // will place this inside an Expanded so only the feed scrolls under a fixed
+  // header (the KPI cards + quick actions), matching Android's dashboard.
+  Widget _buildFeedSection() {
+    return Container(
+      width: double.infinity,
+      // Clip the scrolling feed to the rounded shape so cards never paint past
+      // the card's rounded corners (esp. the bottom corners / landscape). The
+      // shadow is drawn by the decoration behind the clip, so it stays intact.
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _FeedChip(
+                    label: AppStrings.of(context, 'complaints'),
+                    selected: _feed == _FeedType.complaints,
+                    onTap: () {
+                      setState(() {
+                        _feed = _FeedType.complaints;
+                        _feedShown = _feedPage;
+                      });
+                      _dash.loadComplaints(force: true);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FeedChip(
+                    label: AppStrings.of(context, 'unpaid'),
+                    selected: _feed == _FeedType.unpaid,
+                    onTap: () {
+                      setState(() {
+                        _feed = _FeedType.unpaid;
+                        _feedShown = _feedPage;
+                      });
+                      // Dashboard-owned fetch (force = fresh each tap, like the
+                      // Complaints tab). Decoupled from CustomerListProvider so
+                      // the Customer List screen's filters never bleed in.
+                      _dash.loadUnpaid(force: true);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FeedChip(
+                    label: AppStrings.of(context, 'nearest'),
+                    selected: _feed == _FeedType.nearest,
+                    onTap: () {
+                      setState(() {
+                        _feed = _FeedType.nearest;
+                        _feedShown = _feedPage;
+                      });
+                      _dash.loadNearest(force: true);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _FeedChip(
+                    label: AppStrings.of(context, 'pay_later'),
+                    selected: _feed == _FeedType.payLater,
+                    onTap: () {
+                      setState(() {
+                        _feed = _FeedType.payLater;
+                        _feedShown = _feedPage;
+                      });
+                      _dash.loadPayLater(force: true);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(
+            height: 1,
+            thickness: 0.6,
+            indent: 12,
+            endIndent: 12,
+          ),
+          // The feed fills the remaining card height and is the ONLY thing that
+          // scrolls (the tab chips above stay fixed). LayoutBuilder + a viewport
+          // min-height keeps the empty/error messages vertically CENTERED (restored)
+          // while still scrolling when the list is tall — and nothing overflows the
+          // bounded slot. Replaces the old MediaQuery min-height.
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+                    child: _feed == _FeedType.unpaid
+                        ? _buildUnpaidFeed()
+                        : _feed == _FeedType.complaints
+                            ? _buildComplaintsFeed()
+                            : _feed == _FeedType.payLater
+                                ? _buildPayLaterFeed()
+                                : _buildNearestFeed(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Unpaid feed (real `unpaidCustomers` via DashboardController.loadUnpaid) ──
   // Defensive: loading / error / empty states; never crashes. One feed failing
   // does not affect the KPI cards or the other tabs.
   Widget _buildUnpaidFeed() {
-    return Consumer<CustomerListProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading && !provider.loaded) {
-          return const _FeedSkeleton();
-        }
-        if (provider.hasError) {
-          return _feedMessage(
-            Iconsax.warning_2,
-            provider.statusMessage.isEmpty
-                ? 'Could not load unpaid customers'
-                : provider.statusMessage,
-            onRetry: () => context.read<CustomerListProvider>().initialLoad(),
-          );
-        }
-        final list = provider.customers;
-        if (list.isEmpty) {
-          return _feedMessage(Iconsax.tick_circle, 'No unpaid customers');
-        }
-        return _pagedListView(
-          total: list.length,
-          itemBuilder: (_, i) => _UnpaidCard(
-            customer: list[i],
-            isLast: i == list.length - 1,
-          ),
-        );
-      },
+    if (_dash.unpaidLoading && !_dash.unpaidLoaded) {
+      return const _FeedSkeleton();
+    }
+    if (_dash.unpaidError) {
+      return _feedMessage(
+        Iconsax.warning_2,
+        _dash.unpaidMessage.isEmpty
+            ? 'Could not load unpaid customers'
+            : _dash.unpaidMessage,
+        onRetry: () => _dash.loadUnpaid(force: true),
+      );
+    }
+    final list = _dash.unpaidCustomers;
+    if (list.isEmpty) {
+      return _feedMessage(Iconsax.tick_circle, 'No unpaid customers');
+    }
+    return _pagedListView(
+      total: list.length,
+      cap: 10, // Android UnpaidNewAdapter caps the dashboard preview at 10.
+      itemBuilder: (_, i) => _UnpaidCard(
+        customer: list[i],
+        isLast: i == list.length - 1,
+      ),
     );
   }
 
@@ -632,6 +654,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     }
     return _pagedListView(
       total: list.length,
+      cap: 10, // Android OpenComplaints adapter caps the dashboard preview at 10.
       itemBuilder: (_, i) {
         final c = list[i];
         final desc = c.description.isEmpty ? c.des : c.description;
@@ -639,7 +662,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
           ticketId: c.tktNumber.isEmpty ? c.complaintId : c.tktNumber,
           name: c.name.isEmpty ? 'NA' : c.name,
           description: 'Description : $desc',
-          customerId: c.customerId.isEmpty ? c.altCustId : c.customerId,
+          // "LCO Customer ID" = alt_custom_number, matching Android
+          // OpenComplaints_RecyclerView_Adapter:57 (getAltCustomNumber()) — NOT
+          // the internal customer_id, which is a different number.
+          customerId: c.altCustomNumber,
           status: _mapComplaintStatus(c.status),
           statusLabel: c.status.isEmpty ? null : c.status,
           altCustomerId: c.altCustId,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,8 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
   final _focusNode        = FocusNode();
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
+  // Selected CRF prefix (Android crf_selected). Defaults to the first prefix.
+  String? _crfPrefix;
 
   @override
   void initState() {
@@ -51,14 +54,22 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
 
   Future<void> _performSearch() async {
     _focusNode.unfocus();
+    final provider = context.read<SearchProvider>();
     // Android parity (SearchCustomer_Fragment_Newdesign:615-617): empty field →
     // "Please enter any value in the fields" instead of silently doing nothing.
-    if (_searchController.text.trim().isEmpty) {
+    final typed = _searchController.text.trim();
+    if (typed.isEmpty) {
       showPremiumSnackBar(context, 'Please enter any value in the fields',
           isError: true);
       return;
     }
-    await context.read<SearchProvider>().search(_searchController.text);
+    // CRF with a prefix dropdown: full CRF = prefix + last digits (Android :565).
+    final prefixes = SessionService.instance.crfPrefixes;
+    final isCrf = provider.criteria.contains('CRF');
+    final query = (isCrf && prefixes.isNotEmpty)
+        ? '${_crfPrefix ?? prefixes.first}$typed'
+        : typed;
+    await provider.search(query);
   }
 
   @override
@@ -230,48 +241,84 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
 
   // ── Search field ──────────────────────────────────────────────────────────
   Widget _searchField(AppThemeConst t) => Consumer<SearchProvider>(
-        builder: (context, p, _) => Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _focusNode,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _performSearch(),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0D1B4B)),
-                  decoration: InputDecoration(
-                    hintText: p.hintText,
-                    hintStyle: const TextStyle(color: Colors.black38, fontWeight: FontWeight.w400, fontSize: 14),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(6),
-                child: GestureDetector(
-                  onTap: _performSearch,
-                  child: Container(
-                    width: 42, height: 42,
-                    decoration: BoxDecoration(
-                      color: t.accent,
-                      borderRadius: BorderRadius.circular(10),
+        builder: (context, p, _) {
+          // CRF search (Android): a prefix dropdown (userCode) + a ≤4-digit field.
+          // Only when the dealer has CRF prefixes — else the single field stays.
+          final prefixes = SessionService.instance.crfPrefixes;
+          final showPrefix = p.criteria.contains('CRF') && prefixes.isNotEmpty;
+          final prefixValue =
+              (_crfPrefix != null && prefixes.contains(_crfPrefix))
+                  ? _crfPrefix
+                  : (prefixes.isNotEmpty ? prefixes.first : null);
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, 2))],
+            ),
+            child: Row(
+              children: [
+                if (showPrefix) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: prefixValue,
+                        isDense: true,
+                        icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0D1B4B)),
+                        items: prefixes
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                            .toList(),
+                        onChanged: (v) => setState(() => _crfPrefix = v),
+                      ),
                     ),
-                    child: const Icon(Iconsax.search_normal, color: Colors.white, size: 18),
+                  ),
+                  Container(width: 1, height: 26, color: Colors.black12),
+                ],
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _focusNode,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _performSearch(),
+                    keyboardType:
+                        showPrefix ? TextInputType.number : TextInputType.text,
+                    inputFormatters: showPrefix
+                        ? [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(4),
+                          ]
+                        : null,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0D1B4B)),
+                    decoration: InputDecoration(
+                      hintText: showPrefix ? 'Last 4 digits' : p.hintText,
+                      hintStyle: const TextStyle(color: Colors.black38, fontWeight: FontWeight.w400, fontSize: 14),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
+                Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: GestureDetector(
+                    onTap: _performSearch,
+                    child: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: t.accent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Iconsax.search_normal, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
 
   // ── Results count banner ──────────────────────────────────────────────────

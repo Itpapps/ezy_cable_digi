@@ -1,7 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../../core/data/customer.dart';
+import '../../core/services/real_bluetooth_service.dart';
+import '../../core/services/session_service.dart';
+import '../../core/services/settings_store.dart';
 import '../customer/data/act_deact_repository.dart';
 import '../customer/data/onetime_charges_repository.dart';
+import '../payment/printer_launcher.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACT-DEACT REPORT — real `packageActDeactReport` (Android Act_Deact_Report).
@@ -106,7 +117,14 @@ class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 class OneTimeChargesScreen extends StatefulWidget {
   final Customer customer;
-  const OneTimeChargesScreen({super.key, required this.customer});
+  // When non-null, the screen is in EDIT mode (Android Editonetime_Frag): the
+  // form is pre-filled and save() reuses the same endpoint with the real id.
+  final OnetimeChargeItem? editItem;
+  const OneTimeChargesScreen({
+    super.key,
+    required this.customer,
+    this.editItem,
+  });
 
   @override
   State<OneTimeChargesScreen> createState() => _OneTimeChargesScreenState();
@@ -130,7 +148,38 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   @override
   void initState() {
     super.initState();
+    final e = widget.editItem;
+    if (e != null) {
+      _amountCtrl.text = e.amount;
+      _remarksCtrl.text = e.remarks;
+      _chequeCtrl.text = e.chequeDdNo;
+      _bankCtrl.text = e.bankName;
+      _branchCtrl.text = e.branchName;
+      // Instrument (cheque) leg was used if any bank/cheque detail exists.
+      _instrument = e.chequeDdNo.trim().isNotEmpty ||
+          e.bankName.trim().isNotEmpty ||
+          e.branchName.trim().isNotEmpty;
+      _createdDate = _parseDate(e.date, _createdDate);
+      _instrumentDate = _parseDate(e.chequeDate, _instrumentDate);
+    }
     _loadChargeTypes();
+  }
+
+  /// Best-effort parse for a pre-filled date (yyyy-MM-dd or dd/MM/yyyy). The user
+  /// reviews the date field before saving, so a fallback is safe.
+  DateTime _parseDate(String s, DateTime fallback) {
+    final t = s.trim();
+    if (t.isEmpty || t == '0000-00-00') return fallback;
+    final iso = DateTime.tryParse(t);
+    if (iso != null) return iso;
+    final p = t.split(RegExp(r'[/-]'));
+    if (p.length == 3) {
+      final d = int.tryParse(p[0]), m = int.tryParse(p[1]), y = int.tryParse(p[2]);
+      if (d != null && m != null && y != null && y > 31) {
+        return DateTime(y, m, d); // dd/MM/yyyy
+      }
+    }
+    return fallback;
   }
 
   Future<void> _loadChargeTypes() async {
@@ -139,7 +188,13 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
     if (!mounted) return;
     setState(() {
       _chargeTypes = r.types;
-      _chargeType = r.types.isNotEmpty ? r.types.first : null;
+      final editName = widget.editItem?.chargeTypeName.trim();
+      _chargeType = r.types.isEmpty
+          ? null
+          : r.types.firstWhere(
+              (t) => editName != null && t.name.trim() == editName,
+              orElse: () => r.types.first,
+            );
       _loadingTypes = false;
     });
   }
@@ -207,6 +262,9 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       remarks: _remarksCtrl.text.trim(),
       createdDate: _ymd(_createdDate),
       checkPaidUnpaid: _instrument ? 1 : 2, // Android: 1 cheque · 2 cash
+      // Edit mode (Android Editonetime_Frag): real id + receipt_no → ot_type=1.
+      onetimeChargeId: widget.editItem?.onetimeChargeId ?? '0',
+      receiptNo: widget.editItem?.receiptNo ?? '',
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -225,7 +283,8 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
-      appBar: _appBar(context, 'ONE TIME CHARGES'),
+      appBar: _appBar(context,
+          widget.editItem == null ? 'ONE TIME CHARGES' : 'EDIT ONE TIME CHARGES'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
         child: Container(
@@ -412,10 +471,23 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
   String _message = '';
   List<OnetimeChargeItem> _items = const [];
 
+  // Thermal-print pipeline (same engine the receipt uses).
+  final RealBluetoothService _printerService = RealBluetoothService();
+
   @override
   void initState() {
     super.initState();
     _load();
+    // Header/footer for the print + share blocks (Android reads printer settings).
+    SettingsStore.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _printerService.disconnectPrinter();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -443,6 +515,141 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
         'remarks': it.remarks.isEmpty ? 'NA' : it.remarks,
         'paid': it.paidUnpaid == '1' || it.paidUnpaid.toLowerCase() == 'paid',
       };
+
+  // ── Print / Share helpers (Android parity) ───────────────────────────────
+  static const _sep = '--------------------------------'; // Android `line` (32)
+
+  String _na(String v) => v.trim().isEmpty ? 'Not Available' : v.trim();
+  String _naDate(String v) {
+    final t = v.trim();
+    return (t.isEmpty || t == '0000-00-00') ? 'Not Available' : t;
+  }
+  String _paidLabel(OnetimeChargeItem it) =>
+      (it.paidUnpaid == '1' || it.paidUnpaid.toLowerCase() == 'paid')
+          ? 'Paid'
+          : 'UnPaid';
+
+  /// Android's `new Date().toString()` order: "EEE MMM dd yyyy HH:mm:ss"
+  /// (Datesttings[0] [1] [2] [5] [3]).
+  String _timestamp() {
+    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${wd[n.weekday - 1]} ${mo[n.month - 1]} ${two(n.day)} ${n.year} '
+        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
+  }
+
+  /// Thermal print lines — 1:1 with BluetoothChatService `offline_report=9`
+  /// (ONETIME CHARGES block). Header/footer printed unconditionally (Android).
+  List<String> _buildOneTimePrintLines(OnetimeChargeItem it, ReceiptFormat fmt) {
+    final c = widget.customer;
+    final s = SettingsStore.instance;
+    final sep = fmt.sep;
+    return [
+      sep, s.header1, sep, s.header2,
+      sep, '        ONETIME CHARGES        ',
+      sep, _timestamp(), sep,
+      'CUSTOMER NAME    :${c.name}',
+      'ADDRESS          :${c.address}',
+      'MOBILE           :${c.primaryMobileNumber}',
+      'CHARGE TYPE      :${it.chargeTypeName}',
+      'AMOUNT           :${it.amount}',
+      'CREATED DATE     :${it.date}',
+      'BANK             :${_na(it.bankName)}',
+      'BRANCH           :${_na(it.branchName)}',
+      'CHEQUE/DD NO.    :${_na(it.chequeDdNo)}',
+      'CHEQUE DATE      :${_naDate(it.chequeDate)}',
+      'REMARKS          :${_na(it.remarks)}',
+      'PAID/UNPAID      :${_paidLabel(it)}',
+      sep, s.footer1, sep, s.footer2, sep,
+    ];
+  }
+
+  /// Share PDF lines — 1:1 with OnetimeHistory_Adapter.ShareOneTimeHistory
+  /// (header/footer only when non-empty). NOTE: Android's empty-cheque-date case
+  /// mislabels the line "CHEQUE/DD NO."; we use the correct "CHEQUE DATE" label.
+  List<String> _buildOneTimeShareLines(OnetimeChargeItem it) {
+    final c = widget.customer;
+    final s = SettingsStore.instance;
+    final lines = <String>[_sep];
+    if (s.header1.isNotEmpty) lines..add(s.header1)..add(_sep);
+    if (s.header2.isNotEmpty) lines..add(s.header2)..add(_sep);
+    lines..add(' ONETIME CHARGES  ')..add(_sep)..add(_timestamp())..add(_sep);
+    lines.add('CUSTOMER NAME   :${c.name}');
+    lines.add('ADDRESS         :${c.address}');
+    lines.add('MOBILE NO.      :${c.primaryMobileNumber}');
+    lines.add('RECEIPT NO.     :${_na(it.receiptNo)}');
+    lines.add('CHARGE TYPE     :${it.chargeTypeName}');
+    lines.add('AMOUNT          :${it.amount}');
+    lines.add('CREATED DATE    :${it.date}');
+    lines.add('BANK            :${_na(it.bankName)}');
+    lines.add('BRANCH          :${_na(it.branchName)}');
+    lines.add('CHEQUE/DD NO.   :${_na(it.chequeDdNo)}');
+    lines.add('CHEQUE DATE     :${_naDate(it.chequeDate)}');
+    lines.add('REMARKS         :${_na(it.remarks)}');
+    lines.add('PAID/UNPAID     :${_paidLabel(it)}');
+    lines.add(_sep);
+    if (s.footer1.isNotEmpty) lines..add(s.footer1)..add(_sep);
+    if (s.footer2.isNotEmpty) lines..add(s.footer2)..add(_sep);
+    return lines;
+  }
+
+  Future<void> _printOneTime(OnetimeChargeItem it) => launchThermalPrint(
+        context: context,
+        printerService: _printerService,
+        buildLines: (fmt) => _buildOneTimePrintLines(it, fmt),
+      );
+
+  Future<void> _shareOneTime(OnetimeChargeItem it) async {
+    try {
+      final lines = _buildOneTimeShareLines(it);
+      final doc = pw.Document();
+      final mono = pw.Font.courier();
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a5,
+          build: (_) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              for (final l in lines)
+                pw.Text(l, style: pw.TextStyle(font: mono, fontSize: 10)),
+            ],
+          ),
+        ),
+      );
+      final bytes = await doc.save();
+      final dir = await getTemporaryDirectory();
+      final safe = widget.customer.name
+          .trim()
+          .replaceAll(RegExp(r'[^A-Za-z0-9 ._-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final path = '${dir.path}/${safe.isEmpty ? 'onetime' : safe}.pdf';
+      await File(path).writeAsBytes(bytes);
+      if (!mounted) return;
+      await Share.shareXFiles([XFile(path)],
+          subject: 'Onetime History of ${widget.customer.name}');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
+  }
+
+  /// Edit — REUSES the existing create screen (OneTimeChargesScreen) in edit
+  /// mode (Android igv_edit → Editonetime_Frag, same `sotc` endpoint). Refreshes
+  /// the list on return so an edit is reflected.
+  Future<void> _editOneTime(OnetimeChargeItem it) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            OneTimeChargesScreen(customer: widget.customer, editItem: it),
+      ),
+    );
+    if (mounted) _load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -501,14 +708,33 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       itemCount: _items.length,
-      itemBuilder: (_, i) => _OneTimeCard(record: _toCard(_items[i])),
+      itemBuilder: (_, i) {
+        final item = _items[i];
+        return _OneTimeCard(
+          record: _toCard(item),
+          shareVisible: SessionService.instance.shareOption,
+          onShare: () => _shareOneTime(item),
+          onEdit: () => _editOneTime(item),
+          onPrint: () => _printOneTime(item),
+        );
+      },
     );
   }
 }
 
 class _OneTimeCard extends StatelessWidget {
   final Map<String, dynamic> record;
-  const _OneTimeCard({required this.record});
+  final bool shareVisible;        // Android hides Share when share_option == "0"
+  final VoidCallback onShare;
+  final VoidCallback onEdit;
+  final VoidCallback onPrint;
+  const _OneTimeCard({
+    required this.record,
+    required this.shareVisible,
+    required this.onShare,
+    required this.onEdit,
+    required this.onPrint,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -561,21 +787,25 @@ class _OneTimeCard extends StatelessWidget {
                   child: Text('Operations',
                       style: TextStyle(fontSize: 13, color: Color(0xFF5B7BAE))),
                 ),
-                GestureDetector(
-                  onTap: () {},
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1565C0),
-                      shape: BoxShape.circle,
+                // Share — hidden when share_option == "0" (Android parity).
+                if (shareVisible) ...[
+                  GestureDetector(
+                    onTap: onShare,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1565C0),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.share, color: Colors.white, size: 18),
                     ),
-                    child: const Icon(Icons.share, color: Colors.white, size: 18),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
+                // Edit — reuses OneTimeChargesScreen in edit mode (Android igv_edit).
                 GestureDetector(
-                  onTap: () {},
+                  onTap: onEdit,
                   child: Container(
                     width: 36,
                     height: 36,
@@ -583,12 +813,13 @@ class _OneTimeCard extends StatelessWidget {
                       color: Colors.blue.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.receipt_long, color: Color(0xFF0D47A1), size: 18),
+                    child: const Icon(Icons.edit, color: Color(0xFF0D47A1), size: 18),
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Print — thermal (Android igv_print → offline_report=9).
                 GestureDetector(
-                  onTap: () {},
+                  onTap: onPrint,
                   child: Container(
                     width: 36,
                     height: 36,

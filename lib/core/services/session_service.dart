@@ -25,6 +25,15 @@ class SessionService {
   // max_discount_percent_allowed: the % cap (default 100).
   int enablePaymentDiscount = 0;
   int maxDiscountPercentAllowed = 100;
+  // send_sms (Android LoginActivity.send_sms): 1 = the payment-SMS checkbox is
+  // pre-checked so a receipt SMS is sent by default (default 0 = off/safe).
+  int sendSms = 0;
+
+  // CRF prefixes for Search-by-CRF (Android LoginActivity.userCode split on ",").
+  // User picks a prefix + types only the last ≤4 digits; full CRF = prefix +
+  // digits (SearchCustomer_Fragment_Newdesign:565). Empty → CRF search falls
+  // back to a single full-number field (no regression).
+  List<String> crfPrefixes = const [];
 
   // ── Offline-mode fields (from validateLogin response) ──
   // machineNumber: device machine ID used in sync/download requests (11 chars).
@@ -81,6 +90,11 @@ class SessionService {
   // (Android commented it out).
   bool makePaymentAllowed = true;
 
+  // share_option (getRolePermissions `share_option`). Android hides the Share
+  // icon (invoice / one-time history) only on an explicit "0"
+  // (OnetimeHistory_Adapter:227, default "1"). Defaults true = show.
+  bool shareOption = true;
+
   bool get isLoggedIn => authToken.isNotEmpty;
 
   /// Centralized Android payment-permission rule, reused at every payment entry:
@@ -95,6 +109,8 @@ class SessionService {
     required String employeeId,
     int enablePaymentDiscount = 0,
     int maxDiscountPercentAllowed = 100,
+    int sendSms = 0,
+    List<String> crfPrefixes = const [],
     bool boxWiseServiceExtension = false,
     String machineNumber = '',
     String offlineUserCode = '',
@@ -116,6 +132,8 @@ class SessionService {
     this.employeeId = employeeId;
     this.enablePaymentDiscount = enablePaymentDiscount;
     this.maxDiscountPercentAllowed = maxDiscountPercentAllowed;
+    this.sendSms = sendSms;
+    this.crfPrefixes = crfPrefixes;
     this.boxWiseServiceExtension = boxWiseServiceExtension;
     this.machineNumber = machineNumber;
     this.offlineUserCode = offlineUserCode;
@@ -144,6 +162,7 @@ class SessionService {
     bool unpaidCustomerDeactivation = false,
     bool unpaidCustomerActivation = false,
     bool makePaymentAllowed = true,
+    bool shareOption = true,
   }) {
     this.packageActivation = packageActivation;
     this.packageDeactivation = packageDeactivation;
@@ -154,6 +173,7 @@ class SessionService {
     this.unpaidCustomerDeactivation = unpaidCustomerDeactivation;
     this.unpaidCustomerActivation = unpaidCustomerActivation;
     this.makePaymentAllowed = makePaymentAllowed;
+    this.shareOption = shareOption;
   }
 
   void clear() {
@@ -163,6 +183,8 @@ class SessionService {
     employeeId = '';
     enablePaymentDiscount = 0;
     maxDiscountPercentAllowed = 100;
+    sendSms = 0;
+    crfPrefixes = const [];
     boxWiseServiceExtension = false;
     packageActivation = false;
     packageDeactivation = false;
@@ -174,6 +196,7 @@ class SessionService {
     unpaidCustomerDeactivation = false;
     unpaidCustomerActivation = false;
     makePaymentAllowed = true;
+    shareOption = true;
     machineNumber = '';
     offlineUserCode = '';
     offlineStatus = 0;

@@ -18,7 +18,11 @@ import 'data/make_payment_repository.dart';
 class PaymentController extends ChangeNotifier {
   final Customer customer;
 
-  PaymentController({required this.customer});
+  PaymentController({required this.customer}) {
+    // SMS checkbox default mirrors Android: pre-checked when the dealer's
+    // send_sms config == 1 (CustomerMgmt_MakePayment_Fragment :459-461).
+    _sendSms = SessionService.instance.sendSms == 1;
+  }
 
   // ── TextEditingControllers ──────────────────────────────────────────────────
   final amountCtrl    = TextEditingController();
@@ -28,7 +32,6 @@ class PaymentController extends ChangeNotifier {
   final chequeNoCtrl  = TextEditingController();
   final bankNameCtrl  = TextEditingController();
   final branchCtrl    = TextEditingController();
-  final upiIdCtrl     = TextEditingController();
   final broadbandAmountCtrl = TextEditingController(); // broadband leg
 
   // ── State fields ────────────────────────────────────────────────────────────
@@ -53,6 +56,8 @@ class PaymentController extends ChangeNotifier {
   String? discountError;      // set when discount > due (mirrors Android toast)
   double  cablePending   = 0; // STB/cable leg (from gpa) — the STB amount + due
   double  broadcasterPending = 0; // broadband pending (from gpa; 0 for STB)
+  double  lastPaidAmount = 0; // Android last_paid_amount (from gpa) — the REAL
+                              // "last paid", NOT the pending/bill amount.
   MakePaymentResult? lastResult;  // last successful mpay response (for receipt)
 
   String    get paymentMethod   => _paymentMethod;
@@ -131,6 +136,7 @@ class PaymentController extends ChangeNotifier {
         _dueAmount = cablePending;          // due_amount for mpay (STB leg)
         _billingId = result.billingId;      // billingId for mpay (from gpa)
         broadcasterPending = result.broadcasterPendingAmount; // broadband pending
+        lastPaidAmount = result.lastPaidAmount; // Android last_paid_amount
         amountCtrl.text = cablePending.toStringAsFixed(2);
         // Android prefills the broadband field only when there is a broadband due.
         if (broadcasterPending > 0) {
@@ -216,15 +222,24 @@ class PaymentController extends ChangeNotifier {
       if (branchCtrl.text.trim().isEmpty)   return 'Please enter branch';
       if (_instrumentDate == null)           return 'Please select instrument date';
     }
-    if (_paymentMethod == 'upi') {
-      if (upiIdCtrl.text.trim().isEmpty) return 'Please enter UPI Id';
-    }
     return null;
   }
 
   double get parsedAmount => double.tryParse(amountCtrl.text) ?? 0.0;
   double get parsedBroadbandAmount =>
       double.tryParse(broadbandAmountCtrl.text) ?? 0.0;
+
+  /// Cheque/instrument date in Android's exact wire format: "yyyy-MM-dd", or
+  /// "0000-00-00" when no date was picked (CustomerMgmt_MakePayment_Fragment
+  /// :1788-1791). `validate()` already requires a date for bank mode, so this is
+  /// the defensive fallback only.
+  String get _chequeDate {
+    final d = _instrumentDate;
+    if (d == null) return '0000-00-00';
+    return '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
 
   bool get _isCombined =>
       isBroadbandCustomer && customer.customerType.trim() == '2';
@@ -251,8 +266,9 @@ class PaymentController extends ChangeNotifier {
   /// built from the SERVER response. Returns null if a duplicate submit is
   /// blocked. Throws on server rejection / network failure (screen shows it).
   ///
-  /// SCOPE: STB cash (✅ verified) + broadband leg (🟡 under live verification —
-  /// see server docs/BROADBAND_PAYMENT_FLOW.md). bank/card/upi NOT handled.
+  /// SCOPE: STB cash + bank/cheque (Android's only two modes) + broadband leg
+  /// (🟡 under live verification — see server docs/BROADBAND_PAYMENT_FLOW.md).
+  /// Bank now sends chequeNo/bank/branch/chequeDate (Android :1876-1879).
   Future<Payment?> pay() async {
     if (_isStoring) return null; // double-submit guard
     _setStoring(true);
@@ -261,16 +277,23 @@ class PaymentController extends ChangeNotifier {
           ? customer.primaryMobileNumber
           : mobileCtrl.text;
 
+      final isBank = _paymentMethod == 'bank';
       final result = await MakePaymentRepository.instance.pay(
         altCustomerId:   int.tryParse(customer.lcoCustomerId) ?? 0,
         billingId:       _billingId,             // from gpa
         amount:          parsedAmount,           // = due − discount (user-entered)
         dueAmount:       _dueAmount,             // from gpa
         discountApplied: double.tryParse(discountCtrl.text) ?? 0.0,
-        modeType:        _paymentMethod,         // "cash" (Phase-1)
+        modeType:        _paymentMethod,         // "cash" or "bank"
         sendSms:         _sendSms,
         remarks:         remarksCtrl.text.trim(),
         mobileNumber:    mobile,
+        // Bank/Cheque leg — Android populates these only in the "bank" branch
+        // (CustomerMgmt_MakePayment_Fragment :1876-1879); cash sends empty.
+        chequeNo:        isBank ? chequeNoCtrl.text.trim() : '',
+        bank:            isBank ? bankNameCtrl.text.trim() : '',
+        branch:          isBank ? branchCtrl.text.trim()   : '',
+        chequeDate:      isBank ? _chequeDate              : '',
         // Broadband leg — sent only for broadband customers (else 0/empty),
         // mirroring Android. broadband_due = the broadband pending as text.
         broadbandAmount: isBroadbandCustomer ? parsedBroadbandAmount : 0.0,
@@ -363,7 +386,7 @@ class PaymentController extends ChangeNotifier {
   void dispose() {
     for (final c in [
       amountCtrl, discountCtrl, remarksCtrl, mobileCtrl,
-      chequeNoCtrl, bankNameCtrl, branchCtrl, upiIdCtrl,
+      chequeNoCtrl, bankNameCtrl, branchCtrl,
       broadbandAmountCtrl,
     ]) {
       c.dispose();

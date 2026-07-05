@@ -3,12 +3,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/data/customer.dart';
 import '../../core/network/rest_client.dart';
 import '../../core/network/server_url_resolver.dart';
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
 import '../../features/collections/data/pay_later.dart';
 import '../../features/collections/data/pay_later_repository.dart';
+import '../customers/data/unpaid_customers_repository.dart';
 import 'data/complaints_repository.dart';
 import 'data/dashboard_repository.dart';
 import 'data/nearest_repository.dart';
@@ -153,6 +155,57 @@ class DashboardController extends ChangeNotifier {
     } finally {
       complaintsLoading = false;
       complaintsLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  // ── Unpaid feed (unpaidCustomers `uc`) ──────────────────────────────────────
+  // Dashboard-OWNED unpaid state, deliberately SEPARATE from CustomerListProvider
+  // so the Customer List screen's filters (customerType/group) and its cache can
+  // never bleed into the dashboard preview. Always fetches the FULL unpaid list
+  // with fixed params — mirrors Android's dedicated `getunpaiddata` (hit_from=1)
+  // path, which is independent of the Customer List (`Unpaid_Fragment`).
+  List<Customer> unpaidCustomers = [];
+  bool unpaidLoading = false;
+  bool unpaidLoaded = false;
+  bool unpaidError = false;
+  String unpaidMessage = '';
+
+  Future<void> loadUnpaid({bool force = false}) async {
+    if (unpaidLoading) return;
+    if (unpaidLoaded && !force) return;
+    unpaidLoading = true;
+    unpaidError = false;
+    notifyListeners();
+    try {
+      final now = DateTime.now();
+      final r = await UnpaidCustomersRepository.instance.fetch(
+        customerStatus: -1, // Total Unpaid List (never the Customer List filter)
+        stbStatus: -1,
+        unpaidListType: 1,
+        groupId: 0, // no group filter
+        billMonth: '${now.month}-${now.year}',
+      );
+      unpaidMessage = r.statusMessage;
+      if (r.statusCode == 0) {
+        unpaidCustomers = r.customers; // may be empty → empty-state
+        unpaidError = false;
+      } else if (r.statusCode == 1) {
+        unpaidCustomers = const []; // no records → empty-state, not an error
+        unpaidError = false;
+      } else {
+        unpaidCustomers = const [];
+        unpaidError = true; // status 2/3 → error message
+      }
+    } catch (e, s) {
+      unpaidCustomers = const [];
+      unpaidError = true;
+      unpaidMessage = 'Could not load unpaid customers';
+      ErrorHandlerService.recordError(e, s,
+          reason: 'DashboardController.loadUnpaid');
+    } finally {
+      unpaidLoading = false;
+      unpaidLoaded = true;
       notifyListeners();
     }
   }

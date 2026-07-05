@@ -188,9 +188,10 @@ class SearchProvider extends ChangeNotifier {
   }
 
   String get hintText {
-    if (_criteria.contains('Mobile')) return 'Eg: 9876543210';
+    // Hints match Android SearchCustomer_Fragment_Newdesign.setHint(...).
+    if (_criteria.contains('Mobile')) return 'Eg: 9700000010';
     if (_criteria.contains('Id') || _criteria.contains('Number')) return 'Eg: 1234';
-    if (_criteria.contains('Name')) return 'Eg: Bala';
+    if (_criteria.contains('Name')) return 'Eg: Ravi';
     return 'Enter search text...';
   }
 }

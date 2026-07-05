@@ -59,10 +59,17 @@ class MakePaymentRepository {
     required double amount,
     required double dueAmount,
     required double discountApplied,
-    required String modeType, // "cash" (Phase-1)
+    required String modeType, // "cash" or "bank"
     required bool sendSms,
     required String remarks,
     required String mobileNumber,
+    // Bank/Cheque leg — Android sends these ONLY in the "bank" branch
+    // (CustomerMgmt_MakePayment_Fragment :1876-1879). For cash they stay empty,
+    // so the default '' keeps the cash payload byte-identical.
+    String chequeNo = '',
+    String bank = '',
+    String branch = '',
+    String chequeDate = '',
     // Broadband leg — empty/0 for STB-only (Android sets these only when the
     // broadband account id is non-empty).
     double broadbandAmount = 0.0,
@@ -90,10 +97,10 @@ class MakePaymentRepository {
         'altCustomerId': altCustomerId,                 // 0
         'authToken': SessionService.instance.authToken, // 1
         'amount': amount,                               // 2  float (= due − discount)
-        'chequeNo': '',                                 // 3  (bank only)
-        'bank': '',                                     // 4  (bank only)
-        'branch': '',                                   // 5  (bank only)
-        'chequeDate': '',                               // 6  (bank only)
+        'chequeNo': chequeNo,                           // 3  (bank only; '' for cash)
+        'bank': bank,                                   // 4  (bank only; '' for cash)
+        'branch': branch,                               // 5  (bank only; '' for cash)
+        'chequeDate': chequeDate,                       // 6  (bank only; '' for cash)
         'billingId': billingId,                         // 7  from GPA
         'remarks': remarks,                             // 8
         'imei': _imei,                                  // 9

@@ -81,6 +81,21 @@ class AuthService {
           int.tryParse(SoapClient.readField(xml, 'enable_payment_discount') ?? '') ?? 0;
       final maxDiscountPct =
           int.tryParse(SoapClient.readField(xml, 'max_discount_percent_allowed') ?? '') ?? 100;
+      // send_sms (Android LoginActivity.send_sms): 1 = pre-check the payment-SMS
+      // box so a receipt SMS is sent by default. Default 0 (off) — safe-fails to
+      // today's behaviour if the field is absent.
+      final sendSms =
+          int.tryParse(SoapClient.readField(xml, 'send_sms') ?? '') ?? 0;
+      // CRF prefixes for Search-by-CRF (Android LoginActivity.userCode from
+      // `usercode=`). Empty → CRF search keeps the single full-number field.
+      final userCode = (SoapClient.readField(xml, 'usercode') ?? '').trim();
+      final crfPrefixes = userCode.isEmpty
+          ? const <String>[]
+          : userCode
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
 
       // Gates the Package Hub's Service Extension tile (validateLogin property,
       // default "0"). Same response parsed for the discount config above.
@@ -133,6 +148,8 @@ class AuthService {
         employeeId: SoapClient.readField(xml, 'employeeId') ?? '',
         enablePaymentDiscount: enableDiscount,
         maxDiscountPercentAllowed: maxDiscountPct,
+        sendSms: sendSms,
+        crfPrefixes: crfPrefixes,
         boxWiseServiceExtension: boxWiseExt,
         machineNumber: machineNum,
         offlineUserCode: offlineUserCode,
@@ -205,6 +222,10 @@ class AuthService {
       final makePaymentAllowed =
           !(mpNode is Map && '${mpNode['permission']}' == '0');
 
+      // share_option (Android default "1"; hide Share icon only on explicit "0").
+      final soNode = rp['share_option'];
+      final shareOption = !(soNode is Map && '${soNode['permission']}' == '0');
+
       SessionService.instance.setRolePermissions(
         packageActivation: perm('package_activation'),
         packageDeactivation: perm('package_deactivation'),
@@ -216,6 +237,7 @@ class AuthService {
         unpaidCustomerDeactivation: perm('unpaid_customer_deactivation'),
         unpaidCustomerActivation: perm('unpaid_customer_activation'),
         makePaymentAllowed: makePaymentAllowed,
+        shareOption: shareOption,
       );
     } catch (_) {
       // keep safe deny defaults (all false)

@@ -1,5 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../../core/data/customer.dart';
+import '../../core/services/real_bluetooth_service.dart';
+import '../../core/services/session_service.dart';
+import '../../core/services/settings_store.dart';
+import '../payment/printer_launcher.dart';
 import 'data/invoice_history_repository.dart';
 
 /// Invoice History — real `InvoiceService` SOAP (Android `InvoiceHistory`).
@@ -17,10 +28,128 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
   String _message = '';
   List<InvoiceRecord> _invoices = const [];
 
+  final RealBluetoothService _printerService = RealBluetoothService();
+
   @override
   void initState() {
     super.initState();
     _load();
+    SettingsStore.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _printerService.disconnectPrinter();
+    super.dispose();
+  }
+
+  static const _sep = '--------------------------------';
+
+  String _timestamp() {
+    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${wd[n.weekday - 1]} ${mo[n.month - 1]} ${two(n.day)} ${n.year} '
+        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
+  }
+
+  /// Thermal print — 1:1 with BluetoothChatService "INVOICE HISTORY"
+  /// (offline_report=8, :1678-1693). CRF line omitted (no CRF in the model).
+  List<String> _buildPrintLines(InvoiceRecord inv, ReceiptFormat fmt) {
+    final c = widget.customer;
+    final s = SettingsStore.instance;
+    final sep = fmt.sep;
+    return [
+      sep, s.header1, sep, s.header2,
+      sep, '        INVOICE HISTORY         ',
+      sep, _timestamp(), sep,
+      'CUSTOMER NAME    :${c.name}',
+      'LCO CUST ID      :${c.lcoCustomerId}',
+      'INVOICE NO.      :${inv.billingId}',
+      'INVOICE DATE     :${inv.billDate}',
+      'DUE DATE         :${inv.dueDate}',
+      'BILL NO.         :${inv.billNo}',
+      'BILL AMOUNT      :${inv.billAmount}',
+      'TAX AMOUNT       :${inv.taxAmount}',
+      'PENDING AMOUNT   :${inv.pendingAmount}',
+      'TOTAL AMOUNT     :${inv.totalAmount}',
+      'PACKAGE NAME     :${inv.packageName}',
+      sep, s.footer1, sep, s.footer2, sep,
+    ];
+  }
+
+  /// Share PDF — 1:1 with InvoiceHistory.ShareInvoice (:204-253).
+  List<String> _buildShareLines(InvoiceRecord inv) {
+    final c = widget.customer;
+    final s = SettingsStore.instance;
+    final lines = <String>[_sep];
+    if (s.header1.isNotEmpty) lines..add(s.header1)..add(_sep);
+    if (s.header2.isNotEmpty) lines..add(s.header2)..add(_sep);
+    lines
+      ..add(' INVOICE HISTORY  ')
+      ..add(_sep)
+      ..add(_timestamp())
+      ..add(_sep);
+    lines.add('CUSTOMER NAME   :${c.name}');
+    lines.add('LCO CUSTOMER ID :${c.lcoCustomerId}');
+    lines.add('INVOICE NUMBER  :${inv.billingId}');
+    lines.add('INVOICE DATE    :${inv.billDate}');
+    lines.add('DUE DATE        :${inv.dueDate}');
+    lines.add('BILL NUMBER     :${inv.billNo}');
+    lines.add('BILL AMOUNT     :${inv.billAmount}');
+    lines.add('TAX AMOUNT      :${inv.taxAmount}');
+    lines.add('PENDING AMOUNT  :${inv.pendingAmount}');
+    lines.add('TOTAL AMOUNT    :${inv.totalAmount}');
+    lines.add('PACKAGE NAME    :${inv.packageName}');
+    lines.add(_sep);
+    if (s.footer1.isNotEmpty) lines..add(s.footer1)..add(_sep);
+    if (s.footer2.isNotEmpty) lines..add(s.footer2)..add(_sep);
+    return lines;
+  }
+
+  Future<void> _printInvoice(InvoiceRecord inv) => launchThermalPrint(
+        context: context,
+        printerService: _printerService,
+        buildLines: (fmt) => _buildPrintLines(inv, fmt),
+      );
+
+  Future<void> _shareInvoice(InvoiceRecord inv) async {
+    try {
+      final lines = _buildShareLines(inv);
+      final doc = pw.Document();
+      final mono = pw.Font.courier();
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a5,
+          build: (_) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              for (final l in lines)
+                pw.Text(l, style: pw.TextStyle(font: mono, fontSize: 10)),
+            ],
+          ),
+        ),
+      );
+      final bytes = await doc.save();
+      final dir = await getTemporaryDirectory();
+      final safe = widget.customer.name
+          .trim()
+          .replaceAll(RegExp(r'[^A-Za-z0-9 ._-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final path = '${dir.path}/${safe.isEmpty ? 'invoice' : safe}.pdf';
+      await File(path).writeAsBytes(bytes);
+      if (!mounted) return;
+      await Share.shareXFiles([XFile(path)],
+          subject: 'Invoice History of ${widget.customer.name}');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    }
   }
 
   Future<void> _load() async {
@@ -79,7 +208,15 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
       itemCount: _invoices.length,
-      itemBuilder: (_, i) => _InvoiceCard(invoice: _invoices[i]),
+      itemBuilder: (_, i) {
+        final inv = _invoices[i];
+        return _InvoiceCard(
+          invoice: inv,
+          shareVisible: SessionService.instance.shareOption,
+          onPrint: () => _printInvoice(inv),
+          onShare: () => _shareInvoice(inv),
+        );
+      },
     );
   }
 
@@ -107,7 +244,15 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
 
 class _InvoiceCard extends StatelessWidget {
   final InvoiceRecord invoice;
-  const _InvoiceCard({required this.invoice});
+  final bool shareVisible;   // Android hides Share when share_option == "0"
+  final VoidCallback onPrint;
+  final VoidCallback onShare;
+  const _InvoiceCard({
+    required this.invoice,
+    required this.shareVisible,
+    required this.onPrint,
+    required this.onShare,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +297,37 @@ class _InvoiceCard extends StatelessWidget {
                 _row('Pending Amount', '₹${invoice.pendingAmount}'),
                 _row('Package Name', invoice.packageName),
                 _row('Total Amount', '₹${invoice.totalAmount}', isTotal: true),
+                const SizedBox(height: 8),
+                // Print + Share (Android row_invoice: emailInvoice / whatsupInvoice).
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: onPrint,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                            color: Colors.red.shade50, shape: BoxShape.circle),
+                        child: const Icon(Icons.print, color: Colors.red, size: 20),
+                      ),
+                    ),
+                    if (shareVisible) ...[
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: onShare,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: const BoxDecoration(
+                              color: Color(0xFF1565C0), shape: BoxShape.circle),
+                          child: const Icon(Icons.share,
+                              color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),

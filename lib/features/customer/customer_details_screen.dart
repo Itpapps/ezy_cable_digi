@@ -871,7 +871,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     final newMobile = controller.text.trim();
     if (newMobile.isEmpty || newMobile == currentMobile) return;
     setState(() { _customer = _customer.copyWith(primaryMobileNumber: newMobile); });
-    controller.dispose();
+    // NOTE: do NOT dispose `controller` here. The dialog has a 260ms exit
+    // animation, so the TextField using this controller is still mounted when
+    // this line runs. Disposing now makes the TextField's later teardown call
+    // removeListener() on a disposed controller → "used after being disposed"
+    // crash. The TextField removes its own listener on teardown and the local
+    // controller is then garbage-collected.
   }
 
   Future<void> _confirmAndCall(String mobile) async {

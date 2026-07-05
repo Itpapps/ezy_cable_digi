@@ -8,6 +8,8 @@ class PaymentConfirmationDialog extends StatefulWidget {
   final double amount;          // STB / cable leg
   final double broadbandAmount; // broadband leg (0 = none)
   final String paymentMethod;
+  final double lastPaidAmount;  // Android last_paid_amount (from GPA) — the REAL
+                                // last paid, NOT the pending/bill amount.
 
   const PaymentConfirmationDialog({
     super.key,
@@ -15,6 +17,7 @@ class PaymentConfirmationDialog extends StatefulWidget {
     required this.amount,
     this.broadbandAmount = 0,
     required this.paymentMethod,
+    this.lastPaidAmount = 0,
   });
 
   @override
@@ -81,7 +84,8 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               const Center(child: CircularProgressIndicator())
             else ...[
               // ── Info Rows ──
-              _infoRow('Last Paid Amount', widget.customer.pendingAmount.isEmpty ? '₹0.0' : widget.customer.pendingAmount),
+              // Android last_paid_amount (GPA) — NOT the pending/bill amount.
+              _infoRow('Last Paid Amount', '₹${widget.lastPaidAmount.toStringAsFixed(2)}'),
               _infoRow('Last Paid Date', widget.customer.lastPaidDate.isEmpty ? 'Code=0' : widget.customer.lastPaidDate),
               _infoRow('Current Month\nPayments Count', _currentMonthPayments.toString()),
               _infoRow('Current Month\nAdjustments Count', _currentMonthAdjustments.toString()),

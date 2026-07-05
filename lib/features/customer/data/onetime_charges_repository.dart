@@ -165,25 +165,34 @@ class OnetimeChargesRepository {
     required String remarks,
     required String createdDate, // yyyy-MM-dd
     required int checkPaidUnpaid, // 1 = cheque/instrument · 2 = cash
+    // EDIT support (Android Editonetime_Frag → same `sotc` endpoint):
+    //   • onetimeChargeId '0' = create (unchanged); real id = edit.
+    //   • edit sets ot_type='1' and sends receipt_no (Editonetime_Frag:556-560).
+    // Defaults keep the CREATE payload byte-identical.
+    String onetimeChargeId = '0',
+    String receiptNo = '',
   }) async {
     try {
+      final isEdit = onetimeChargeId != '0';
+      final body = {
+        ..._auth,
+        'customer_id': customerId,
+        'charge_type': chargeType,
+        'amount': amount,
+        'chq_dd': chqDd,
+        'bank': bank,
+        'branch': branch,
+        'chq_dd_date': chqDdDate,
+        'remarks': remarks,
+        'created_date': createdDate,
+        'check_paid_unpaid': '$checkPaidUnpaid',
+        'onetime_charge_id': onetimeChargeId,
+        'ot_type': isEdit ? '1' : '0',
+      };
+      if (isEdit) body['receipt_no'] = receiptNo; // Android sends it only on edit
       final data = await RestClient.instance.postForm(
         _url('saveOnetimeCharges'),
-        {
-          ..._auth,
-          'customer_id': customerId,
-          'charge_type': chargeType,
-          'amount': amount,
-          'chq_dd': chqDd,
-          'bank': bank,
-          'branch': branch,
-          'chq_dd_date': chqDdDate,
-          'remarks': remarks,
-          'created_date': createdDate,
-          'check_paid_unpaid': '$checkPaidUnpaid',
-          'onetime_charge_id': '0', // new
-          'ot_type': '0',
-        },
+        body,
         timeout: const Duration(seconds: 70),
       );
       return OnetimeSaveResult(_status(data), '${data['status_msg'] ?? ''}');

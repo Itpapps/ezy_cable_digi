@@ -50,16 +50,15 @@ class NotificationService {
     _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
     if (androidPlugin != null) {
-      // Check if already granted — areNotificationsEnabled is reliable on all API levels
+      // Notification permission is requested ONCE at login
+      // (login_screen._requestPermissions → Permission.notification). Do NOT
+      // re-prompt on the payment path — only CHECK. If it isn't granted, silently
+      // skip the success notification (a best-effort extra; Android shows no
+      // post-payment system notification at all). This stops the permission popup
+      // from re-appearing after every payment.
       final alreadyEnabled = await androidPlugin.areNotificationsEnabled();
       debugPrint('NotificationService: areNotificationsEnabled=$alreadyEnabled');
-
-      if (alreadyEnabled == true) return true;
-
-      // Not granted yet — request it
-      final granted = await androidPlugin.requestNotificationsPermission();
-      debugPrint('NotificationService: requestNotificationsPermission=$granted');
-      return granted == true;
+      return alreadyEnabled == true;
     }
 
     // iOS

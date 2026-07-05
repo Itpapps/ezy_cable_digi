@@ -95,6 +95,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         broadbandAmount:
             _ctrl.isBroadbandCustomer ? _ctrl.parsedBroadbandAmount : 0.0,
         paymentMethod: '',
+        lastPaidAmount: _ctrl.lastPaidAmount, // real GPA last_paid_amount
       ),
     ) ?? false;
     
@@ -603,10 +604,11 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
               isExpanded: true,
               icon: const Icon(Icons.keyboard_arrow_down, size: 20),
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: t.cardBodyText),
+              // Android offers only Cash and Bank (CustomerMgmt_MakePayment_Fragment
+              // arrayOfString = {"Cash","Bank"}). No UPI mode exists in Android.
               items: const [
                 DropdownMenuItem(value: 'cash', child: Text('Cash')),
                 DropdownMenuItem(value: 'bank', child: Text('Bank / Cheque')),
-                DropdownMenuItem(value: 'upi',  child: Text('UPI')),
               ],
               onChanged: (v) { if (v != null) _ctrl.setPaymentMethod(v); },
             ),
@@ -683,21 +685,6 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                       t: t,
                       onTap: _pickInstrumentDate,
                     ),
-                  ],
-                )
-              : const SizedBox.shrink(),
-        ),
-
-        // ── UPI-only fields ──────────────────────────────────────────────────
-        AnimatedSize(
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeInOut,
-          child: _ctrl.paymentMethod == 'upi'
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
-                    _CompactField(controller: _ctrl.upiIdCtrl, hint: 'UPI ID *', t: t),
                   ],
                 )
               : const SizedBox.shrink(),

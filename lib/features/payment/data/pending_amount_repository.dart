@@ -11,9 +11,10 @@ class PendingAmountResult {
   final int billingId;        // bill to settle — passed to mpay (verified: from GPA)
   final double cablePendingAmount;       // STB/cable leg — the STB amount + due_amount for mpay
   final double broadcasterPendingAmount; // broadband pending (0 for STB-only)
+  final double lastPaidAmount;           // Android last_paid_amount (from GPA :1459)
   const PendingAmountResult(this.statusCode, this.statusMessage,
       this.pendingAmount, this.billingId, this.cablePendingAmount,
-      this.broadcasterPendingAmount);
+      this.broadcasterPendingAmount, [this.lastPaidAmount = 0.0]);
 }
 
 /// Get Pending Amount (config key `gpa`).
@@ -57,7 +58,13 @@ class PendingAmountRepository {
     final broadcasterPending = double.tryParse(
             SoapClient.readField(xml, 'broadcaster_pending_amount') ?? '') ??
         0.0;
-    return PendingAmountResult(
-        status, message, pending, billingId, cablePending, broadcasterPending);
+    // Android's ACTUAL last paid amount (CustomerMgmt_MakePayment_Fragment :1459
+    // parses `last_paid_amount=` from this same GPA response). This is NOT the
+    // pending/bill amount — it's what the customer last paid.
+    final lastPaid = double.tryParse(
+            SoapClient.readField(xml, 'last_paid_amount') ?? '') ??
+        0.0;
+    return PendingAmountResult(status, message, pending, billingId, cablePending,
+        broadcasterPending, lastPaid);
   }
 }

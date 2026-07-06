@@ -16,15 +16,30 @@ class CustomerListProvider extends ChangeNotifier {
   bool _loaded = false;
   int _statusCode = 0; // 0 ok · 1 no records · 3 failed
   String _statusMessage = '';
-  String _customerType = 'Total Unpaid List';
+  // Android Unpaid_Fragment filters — options HARDCODED exactly like Android
+  // (statussp/stbsp/paidunpaid arrays); only Group is server-driven. The
+  // repository already sends all of these (billmonth/customerstatus/stbstatus/
+  // unpaidlist_type/group_id) — only the UI was missing.
+  String _paidUnpaid = 'Total Unpaid List'; // sp_paidunpaid → unpaidlist_type 1/2/3
+  String _customerStatus = 'All';           // cusstatus → customerstatus -1/1/2
+  String _stbStatus = 'All';                // stbstatus → -1/1/2/3
+  DateTime _billMonth = DateTime.now();      // billmonth "M-yyyy"
   String _group = 'Select';
+
+  static const paidUnpaidOptions =
+      ['Total Unpaid List', 'Partial Paid List', 'Zero Paid'];
+  static const customerStatusOptions = ['All', 'Active', 'DeActive'];
+  static const stbStatusOptions = ['All', 'Active', 'DeActive', 'All Deactive'];
 
   List<Customer> get customers     => _customers;
   bool           get isLoading     => _isLoading;
   bool           get loaded        => _loaded;
   int            get statusCode    => _statusCode;
   String         get statusMessage => _statusMessage;
-  String         get customerType  => _customerType;
+  String         get paidUnpaid     => _paidUnpaid;
+  String         get customerStatus => _customerStatus;
+  String         get stbStatus      => _stbStatus;
+  DateTime       get billMonth      => _billMonth;
   String         get group         => _group;
   bool           get hasError      => _loaded && _statusCode == 3;
 
@@ -50,11 +65,34 @@ class CustomerListProvider extends ChangeNotifier {
   }
 
   // ── Filters ────────────────────────────────────────────────────────────────
-  void setCustomerType(String value) {
-    if (_customerType == value) return;
-    _customerType = value;
+  void setPaidUnpaid(String value) {
+    if (_paidUnpaid == value) return;
+    _paidUnpaid = value;
     refresh();
   }
+
+  // Advanced filters — Android cusstatus/stbstatus/bill-month DON'T auto-fetch;
+  // they only set the value and are applied by the Search button (tv_search).
+  // So these just update state + rebuild the dropdown; call refresh() (Search).
+  void setCustomerStatus(String value) {
+    if (_customerStatus == value) return;
+    _customerStatus = value;
+    notifyListeners();
+  }
+
+  void setStbStatus(String value) {
+    if (_stbStatus == value) return;
+    _stbStatus = value;
+    notifyListeners();
+  }
+
+  void setBillMonth(DateTime value) {
+    _billMonth = value;
+    notifyListeners();
+  }
+
+  /// Apply the advanced filters (Android tv_search "Search" button → getunpaiddata).
+  void applySearch() => refresh();
 
   void setGroup(String value) {
     if (_group == value) return;
@@ -79,11 +117,11 @@ class CustomerListProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await UnpaidCustomersRepository.instance.fetch(
-        customerStatus: _customerStatus(),
-        stbStatus: -1,
-        unpaidListType: 1,
+        customerStatus: _customerStatusValue(),
+        stbStatus: _stbStatusValue(),
+        unpaidListType: _unpaidListTypeValue(),
         groupId: selectedGroupId,
-        billMonth: _billMonth(),
+        billMonth: _billMonthValue(),
       );
       _statusCode = result.statusCode;
       _statusMessage = result.statusMessage;
@@ -101,21 +139,37 @@ class CustomerListProvider extends ChangeNotifier {
     }
   }
 
-  // 'Total Unpaid List' → -1 (all) · 'Active Customers' → 1 · 'Inactive Customers' → 2
-  int _customerStatus() {
-    switch (_customerType) {
-      case 'Active Customers':
+  // Android position-based mappings (Unpaid_Fragment spinner listeners :247-298).
+  // sp_paidunpaid → selectedpaidunpaid = position + 1 (Total Unpaid=1 · Partial
+  // Paid=2 · Zero Paid=3).
+  int _unpaidListTypeValue() => paidUnpaidOptions.indexOf(_paidUnpaid) + 1;
+
+  // cusstatus: All → -1 · Active → 1 · DeActive → 2.
+  int _customerStatusValue() {
+    switch (_customerStatus) {
+      case 'Active':
         return 1;
-      case 'Inactive Customers':
+      case 'DeActive':
         return 2;
       default:
-        return -1;
+        return -1; // All
+    }
+  }
+
+  // stbstatus: All → -1 · Active → 1 · DeActive → 2 · All Deactive → 3.
+  int _stbStatusValue() {
+    switch (_stbStatus) {
+      case 'Active':
+        return 1;
+      case 'DeActive':
+        return 2;
+      case 'All Deactive':
+        return 3;
+      default:
+        return -1; // All
     }
   }
 
   // billmonth format "M-yyyy" (Android: Unpaid_Fragment tv_dateset).
-  String _billMonth() {
-    final now = DateTime.now();
-    return '${now.month}-${now.year}';
-  }
+  String _billMonthValue() => '${_billMonth.month}-${_billMonth.year}';
 }

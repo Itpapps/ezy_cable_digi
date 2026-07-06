@@ -6,10 +6,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
+import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
-import '../customer/customer_details_screen.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../customer/customer_map_screen.dart';
+import '../payment/payment_options_screen.dart';
 import 'customer_list_provider.dart';
+import 'paid_customers_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomerListScreen — reads from CustomerListProvider (ChangeNotifier).
@@ -27,6 +30,9 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
+  // Android tv_advsearch: bill-month / customer-status / STB-status hidden until
+  // "Advanced Search" is tapped.
+  bool _advancedOpen = false;
 
   @override
   void initState() {
@@ -104,7 +110,9 @@ class _CustomerListScreenState extends State<CustomerListScreen>
               Expanded(child: _buildCustomerList(t)),
             ],
           ),
-          _buildPaidPlaceholder(t),
+          // Real Paid list (Android CustomerPay_Tab_Fragment "Paid List" tab) —
+          // reuses PaidCustomersScreen (gpcd, month picker) in embedded mode.
+          const PaidCustomersScreen(embedded: true),
         ],
       ),
     );
@@ -133,13 +141,15 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                 color: t.accent, letterSpacing: 0.8,
               )),
               const SizedBox(height: 10),
+              // Row 1 — always visible (Android sp_paidunpaid + sp_group).
               Row(children: [
                 Expanded(child: _FilterDrop(
-                  label: 'Customer Type',
-                  value: provider.customerType,
-                  items: const ['Total Unpaid List', 'Active Customers', 'Inactive Customers'],
+                  label: 'Paid / Unpaid',
+                  value: provider.paidUnpaid,
+                  items: CustomerListProvider.paidUnpaidOptions,
                   accent: t.accent,
-                  onChanged: (v) => context.read<CustomerListProvider>().setCustomerType(v),
+                  onChanged: (v) =>
+                      context.read<CustomerListProvider>().setPaidUnpaid(v),
                 )),
                 const SizedBox(width: 12),
                 Expanded(child: _FilterDrop(
@@ -147,9 +157,106 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                   value: provider.group,
                   items: provider.groupNames,
                   accent: t.accent,
-                  onChanged: (v) => context.read<CustomerListProvider>().setGroup(v),
+                  onChanged: (v) =>
+                      context.read<CustomerListProvider>().setGroup(v),
                 )),
               ]),
+              const SizedBox(height: 8),
+              // Advanced Search toggle (Android tv_advsearch / tv_advsearch1).
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _advancedOpen = !_advancedOpen),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(_advancedOpen ? Icons.expand_less : Icons.expand_more,
+                          size: 18, color: t.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        _advancedOpen ? 'Hide Advanced Search' : 'Advanced Search',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: t.accent),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_advancedOpen) ...[
+                const SizedBox(height: 8),
+                // Bill month (Android ll_seldat) — reuses the month-picker pattern.
+                Text('Bill Month', style: TextStyle(
+                    fontSize: 11, color: t.subtitleText, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: provider.billMonth,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      helpText: 'Select bill month',
+                    );
+                    if (picked != null && context.mounted) {
+                      context.read<CustomerListProvider>().setBillMonth(picked);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: t.inputBorderColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.calendar_month, size: 18, color: t.accent),
+                      const SizedBox(width: 8),
+                      Text('${provider.billMonth.month}-${provider.billMonth.year}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, color: t.bodyText)),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _FilterDrop(
+                    label: 'Customer Status',
+                    value: provider.customerStatus,
+                    items: CustomerListProvider.customerStatusOptions,
+                    accent: t.accent,
+                    onChanged: (v) =>
+                        context.read<CustomerListProvider>().setCustomerStatus(v),
+                  )),
+                  const SizedBox(width: 12),
+                  Expanded(child: _FilterDrop(
+                    label: 'STB Status',
+                    value: provider.stbStatus,
+                    items: CustomerListProvider.stbStatusOptions,
+                    accent: t.accent,
+                    onChanged: (v) =>
+                        context.read<CustomerListProvider>().setStbStatus(v),
+                  )),
+                ]),
+                const SizedBox(height: 12),
+                // Search — applies the advanced filters (Android tv_search).
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        context.read<CustomerListProvider>().applySearch(),
+                    icon: const Icon(Icons.search, size: 18),
+                    label: const Text('Search'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: t.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -161,8 +268,10 @@ class _CustomerListScreenState extends State<CustomerListScreen>
   Widget _buildCustomerList(AppThemeConst t) {
     return Consumer<CustomerListProvider>(
       builder: (context, provider, _) {
-        // Loading first page
-        if (provider.customers.isEmpty && provider.isLoading) {
+        // Loading — initial load OR any dropdown/advanced-search apply. Mirrors
+        // Android's getunpaiddata ProgressDialog: a clear loader on every fetch.
+        // Crash-safe: fetch() try/catches → statusCode 3 → the error state below.
+        if (provider.isLoading) {
           return Center(child: CircularProgressIndicator(color: t.accent));
         }
 
@@ -219,21 +328,6 @@ class _CustomerListScreenState extends State<CustomerListScreen>
           },
         );
       },
-    );
-  }
-
-  // ── Paid placeholder ─────────────────────────────────────────────────────────
-  Widget _buildPaidPlaceholder(AppThemeConst t) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Iconsax.receipt_item, size: 52, color: t.emptyStateIconColor),
-          const SizedBox(height: 12),
-          Text('Paid list coming soon',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: t.bodyText)),
-        ],
-      ),
     );
   }
 }
@@ -308,18 +402,9 @@ class _CustomerTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8EAF6),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFC5CAE9)),
-                  ),
-                  child: Text(customer.customerType,
-                      style: const TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w800,
-                          color: Color(0xFF3F51B5))),
-                ),
+                // (Removed: raw customer_type badge "0/1/2" — Android's
+                // UnpaidFrag_Adapter row does NOT show a customer-type badge; it
+                // only uses customer_type internally to pass to Make Payment.)
               ],
             ),
           ),
@@ -346,22 +431,37 @@ class _CustomerTile extends StatelessWidget {
                 // Buttons
                 Row(
                   children: [
+                    // Pay → Make Payment, gated by make_payment (Android
+                    // UnpaidFrag_Adapter tv_pay:131-206). Same guard as the
+                    // dashboard Unpaid row.
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(
-                            builder: (_) => CustomerDetailsScreen(customer: customer))),
+                        onTap: () {
+                          if (!SessionService.instance.canMakePayment) {
+                            showPremiumConfirm(
+                              context: context,
+                              title: 'Access denied!',
+                              body: 'You have no access to do payments.',
+                              confirmLabel: 'OK',
+                              cancelLabel: 'Close',
+                            );
+                          } else {
+                            Navigator.push(context, MaterialPageRoute(
+                                builder: (_) => PaymentOptionsScreen(customer: customer)));
+                          }
+                        },
                         child: Container(
                           height: 44,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1A3A8C), // dark navy
+                            color: const Color(0xFF2E7D32), // green — Pay
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Iconsax.user_tag, color: Colors.white, size: 18),
+                              Icon(Icons.payment, color: Colors.white, size: 18),
                               SizedBox(width: 8),
-                              Text('View Details',
+                              Text('Pay',
                                   style: TextStyle(color: Colors.white, fontSize: 13,
                                       fontWeight: FontWeight.w700)),
                             ],
@@ -369,6 +469,9 @@ class _CustomerTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // Android's UnpaidFrag_Adapter row has only "Pay" (tv_pay) —
+                    // no View Details. Removed for parity. Map kept as a location
+                    // shortcut (harmless extra).
                     if (hasLoc) ...[
                       const SizedBox(width: 10),
                       GestureDetector(

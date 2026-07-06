@@ -9,7 +9,10 @@ import 'data/paid_customers_repository.dart';
 /// who paid that month, with total count. status 0 → list · 1 → "No Details
 /// Found!" · 3 → "Failed.".
 class PaidCustomersScreen extends StatefulWidget {
-  const PaidCustomersScreen({super.key});
+  // When true, renders WITHOUT its own Scaffold/app bar so it can be embedded as
+  // the Customer List "Paid List" tab (Android CustomerPay_Tab_Fragment).
+  final bool embedded;
+  const PaidCustomersScreen({super.key, this.embedded = false});
 
   @override
   State<PaidCustomersScreen> createState() => _PaidCustomersScreenState();
@@ -76,14 +79,7 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: AppBar(
-        title: const Text('PAID CUSTOMERS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
-      body: Column(
+    final content = Column(
         children: [
           Container(
             color: Colors.white,
@@ -141,7 +137,20 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
             ),
           Expanded(child: _body()),
         ],
+    );
+    // Embedded (Customer List "Paid List" tab) → no Scaffold/app bar; the tab
+    // sits under the Customer List's app bar. Standalone (drawer) → full screen.
+    if (widget.embedded) {
+      return Container(color: AppColors.primary, child: content);
+    }
+    return Scaffold(
+      backgroundColor: AppColors.primary,
+      appBar: AppBar(
+        title: const Text('PAID CUSTOMERS'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
       ),
+      body: content,
     );
   }
 

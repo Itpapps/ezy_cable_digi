@@ -187,6 +187,19 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
       _dash.loadKpis();
       _dash.loadWallet(); // Android refreshes the wallet on every recreate too
+      // Android's changeFragment(replace) RECREATES the dashboard on return, so
+      // onCreateView re-runs: KPIs + wallet + COMPLAINTS reload and the tab resets
+      // to the default (Complaints); getunpaiddata stays lazy
+      // (DashboardHomeFragment onCreateView :264-266). Mirror that so the Unpaid
+      // feed can't show stale (already-paid) rows — re-tapping Unpaid then
+      // force-refetches a fresh list.
+      if (mounted) {
+        setState(() {
+          _feed = _FeedType.complaints;
+          _feedShown = _feedPage;
+        });
+      }
+      _dash.loadComplaints(force: true);
     }
   }
 
@@ -363,6 +376,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                 end: Alignment.bottomRight,
                               ),
                               lottieAsset: 'assets/Growth Chart.json',
+                              // Android parity: Collections card tap opens the
+                              // Employee Collection report (Report_EmpCollect →
+                              // MonthlyReportScreen), same target as the Monthly
+                              // Report quick-action and Reports Home tile.
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const MonthlyReportScreen(),
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -933,6 +956,10 @@ class _LottieHighlightCard extends StatefulWidget {
   final String subtitle;
   final LinearGradient gradient;
   final String lottieAsset;
+  // Optional tap action (Android parity: the Collections card navigates to the
+  // Employee Collection report). When null (e.g. LCO Wallet card) the card keeps
+  // its original replay-only behaviour.
+  final VoidCallback? onTap;
 
   const _LottieHighlightCard({
     required this.title,
@@ -940,6 +967,7 @@ class _LottieHighlightCard extends StatefulWidget {
     required this.subtitle,
     required this.gradient,
     required this.lottieAsset,
+    this.onTap,
   });
 
   @override
@@ -970,7 +998,10 @@ class _LottieHighlightCardState extends State<_LottieHighlightCard>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: _replay,
+      onTap: () {
+        _replay();
+        widget.onTap?.call();
+      },
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
         decoration: BoxDecoration(

@@ -49,3 +49,7 @@ key.properties
 android/key.properties
 *.jks
 *.keystore
+
+# Internal docs — keep LOCAL only (investigation notes, specs, release guide)
+server docs/
+IOS_RELEASE_GUIDE.md

@@ -30,6 +30,7 @@ import '../../features/settings/printer_settings_screen.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_refresh_signal.dart';
 import 'data/nearest_repository.dart';
+import '../collections/data/pay_later.dart';
 import '../../core/config/app_config.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
@@ -734,18 +735,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     }
     return _pagedListView(
       total: list.length,
-      itemBuilder: (_, i) {
-        final s = list[i];
-        final item = _TicketItem(
-          ticketId: s.altCustomNumber.isEmpty ? s.customnumber : s.altCustomNumber,
-          name: s.customerName.isEmpty ? 'NA' : s.customerName,
-          description: 'Date: ${s.scheduledDate}  Amt: ${s.amount}',
-          customerId: s.altCustId.isEmpty ? s.customerId : s.altCustId,
-          status: _TicketStatus.assigned,
-          statusLabel: s.status,
-        );
-        return _TicketCard(item: item, isLast: i == list.length - 1);
-      },
+      itemBuilder: (_, i) => _PayLaterCard(
+        item: list[i],
+        isLast: i == list.length - 1,
+      ),
     );
   }
 
@@ -1422,7 +1415,9 @@ class _UnpaidCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = customer.pendingAmount; // already '₹…' from Customer.fromJson
     final account = customer.altCustomerId.isEmpty ? 'NA' : customer.altCustomerId;
-    final lcoId = customer.lcoCustomerId.isEmpty ? 'NA' : customer.lcoCustomerId;
+    // "LCO Customer ID" = Android alt_custom_number (customer-facing LCO id), NOT
+    // lcoCustomerId (== customer_id, the internal operation key).
+    final lcoId = customer.altCustomNumber.isEmpty ? 'NA' : customer.altCustomNumber;
 
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
@@ -1628,6 +1623,140 @@ class _NearestCard extends StatelessWidget {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pay Later Card — real `scheduled_collection_data` row. Android parity
+// (PayLaterAdapter: tv_custname / tv_crf / tv_lastpaiddate=status /
+// tv_Amount=scheduled_date) — a plain collection row, NOT the complaint ticket
+// card. Shows name + schedule date + status/CRF + amount.
+// ─────────────────────────────────────────────────────────────────────────────
+class _PayLaterCard extends StatelessWidget {
+  final PayLaterSchedule item;
+  final bool isLast;
+  const _PayLaterCard({required this.item, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = item.customerName.trim().isEmpty ? 'NA' : item.customerName.trim();
+    final date = item.scheduledDate.trim().isEmpty ? 'NA' : item.scheduledDate.trim();
+    final status = item.status.trim();
+    final crf = item.crfno.trim();
+    final amount = item.amount.trim();
+    final showAmount = amount.isNotEmpty && amount != '0' && amount != '0.0';
+
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  name != 'NA' ? name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Name + schedule date + status/CRF
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.event, size: 13, color: Colors.black45),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Schedule: $date',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (status.isNotEmpty || crf.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        if (status.isNotEmpty) 'Status: $status',
+                        if (crf.isNotEmpty) 'CRF: $crf',
+                      ].join('    '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // Amount badge (when present)
+            if (showAmount) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                  border:
+                      Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  '₹$amount',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

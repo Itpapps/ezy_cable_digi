@@ -52,10 +52,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   // non-broadband customers). Drives the OTT tile; empty = tile hidden.
   List<CustomerBox> _ottBoxes = const [];
 
+  // Displayed/editable LCO id (Android `lco_cust_no`). The edit updates ONLY this
+  // for display; the stable key `_customer.lcoCustomerId` (== customersidd) is
+  // kept untouched so every operation keeps using the correct customer id.
+  late String _lcoId;
+
   @override
   void initState() {
     super.initState();
     _customer = widget.customer;
+    // "LCO Customer id" shows Android's alt_custom_number (customer-facing LCO id),
+    // NOT lcoCustomerId (== customer_id, the internal operation key).
+    _lcoId = _customer.altCustomNumber;
     _loadOttBoxes();
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
@@ -270,7 +278,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               'Address',
               _customer.address.isEmpty ? 'N/A' : _customer.address, t,
               isLast: true,
-              hasMoreIcon: true),
+              hasMoreIcon: true,
+              onMoreTap: _showAddressDialog),
         ],
       ),
     );
@@ -285,6 +294,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     bool copyable = false,
     bool hasCallIcon = false,
     bool hasMoreIcon = false,
+    VoidCallback? onMoreTap,
     bool isLast = false,
   }) {
     return Column(
@@ -308,12 +318,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: valueBold ? FontWeight.w800 : FontWeight.w700,
-                          color: valueColor ?? t.cardBodyText,
+                      child: GestureDetector(
+                        onTap: onMoreTap,
+                        child: Text(
+                          value,
+                          // Android parity: the address is shown truncated with a
+                          // "more" affordance; the full text opens in a popup.
+                          maxLines: hasMoreIcon ? 1 : null,
+                          overflow:
+                              hasMoreIcon ? TextOverflow.ellipsis : TextOverflow.clip,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: valueBold ? FontWeight.w800 : FontWeight.w700,
+                            color: valueColor ?? t.cardBodyText,
+                          ),
                         ),
                       ),
                     ),
@@ -329,7 +347,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                         child: const Icon(Icons.edit, size: 15, color: Color(0xFF9CA3AF)),
                       ),
                     if (hasMoreIcon)
-                      Icon(Icons.more_vert, size: 15, color: t.accent),
+                      GestureDetector(
+                        onTap: onMoreTap,
+                        behavior: HitTestBehavior.opaque,
+                        child: Icon(Icons.more_vert, size: 15, color: t.accent),
+                      ),
                   ],
                 ),
               ),
@@ -388,10 +410,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               _locDivider(t),
               Expanded(
                 child: _locCell(
-                  _customer.lcoCustomerId,
+                  _lcoId,
                   'LCO Customer id',
                   t: t,
                   hasEditIcon: true,
+                  onEditTap: _showUpdateLcoDialog,
                 ),
               ),
             ],
@@ -454,16 +477,14 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     Color? valueColor,
     bool hasEditIcon = false,
     bool copyable = false,
+    VoidCallback? onEditTap,
     required AppThemeConst t,
   }) {
     final canCopy =
         copyable && value.trim().isNotEmpty && value.trim() != 'N/A';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    final valueRow = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
             // Flexible + ellipsis so long values (VC/Box numbers, dates) never
             // overflow the column on narrow screens — responsive on all sizes.
             Flexible(
@@ -491,8 +512,21 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                 child: Icon(Icons.copy_rounded, size: 14, color: t.accent),
               ),
             ],
-          ],
-        ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Android parity: the LCO id value is itself tappable to open the edit
+        // dialog (tv_lcocustomerno.setOnClickListener). Cells without onEditTap
+        // stay non-interactive.
+        onEditTap != null
+            ? GestureDetector(
+                onTap: onEditTap,
+                behavior: HitTestBehavior.opaque,
+                child: valueRow,
+              )
+            : valueRow,
         const SizedBox(height: 2),
         Text(
           label,
@@ -879,6 +913,125 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     // controller is then garbage-collected.
   }
 
+  // ── Update LCO Customer id ────────────────────────────────────────────────
+  // Android parity (CustomerOperations_Fragment: tap LCO id → row_updatelcoidview
+  // → update_Lco_or_mobile(newLco,"") → POST updateMobileAndLCOCustID). The API
+  // keys on the STABLE customerId (== _customer.lcoCustomerId / customersidd),
+  // which we never mutate; only the on-screen value (_lcoId) changes on success.
+  Future<void> _showUpdateLcoDialog() async {
+    final controller = TextEditingController(text: _lcoId);
+    final result = await showPremiumDialog<bool>(
+      context: context,
+      child: PremiumDialogShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.edit, color: AppColors.primary, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Update LCO id',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text('Present Lco Id: $_lcoId',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  hintText: 'New LCO id',
+                  hintStyle: const TextStyle(fontSize: 12),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('CANCEL',
+                          style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('UPDATE',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != true) return;
+    final newLco = controller.text.trim();
+    // Android validation (row_updatelcoidview): LCO id must be >= 5 chars.
+    if (newLco.length < 5) {
+      if (mounted) showPremiumSnackBar(context, 'Please enter valid Lco Id', isError: true);
+      return;
+    }
+    if (newLco == _lcoId) return;
+    if (!mounted) return;
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    showPremiumLoading(context, message: 'Updating...');
+    final res = await PackageOperationsRepository.instance.updateLcoCustomerId(
+      customerId: _customer.lcoCustomerId, // stable key — never the edited value
+      newLcoId: newLco,
+    );
+    if (!mounted) return;
+    nav.pop(); // dismiss loader
+    if (res.isSuccess) {
+      setState(() => _lcoId = newLco);
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text(res.isSuccess
+          ? (res.statusMessage.isEmpty ? 'LCO id updated successfully' : res.statusMessage)
+          : (res.statusMessage.isEmpty ? 'Update failed' : res.statusMessage)),
+      backgroundColor: res.isSuccess ? Colors.green.shade600 : Colors.red.shade600,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
+    // Do NOT dispose `controller` — the dialog's exit animation keeps the
+    // TextField mounted briefly (same reasoning as _showUpdateMobileDialog).
+  }
+
   Future<void> _confirmAndCall(String mobile) async {
     if (mobile.isEmpty) return;
     final shouldCall = await showPremiumConfirm(
@@ -896,6 +1049,61 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       if (!mounted) return;
       showPremiumSnackBar(context, 'Unable to open dialer', isError: true);
     }
+  }
+
+  // Android parity (custoper_tv_address click): show the full address in a popup
+  // titled "Address of {name}" with a single OK button.
+  Future<void> _showAddressDialog() async {
+    final addr = _customer.address.trim();
+    await showPremiumDialog<void>(
+      context: context,
+      child: PremiumDialogShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.location_on, color: AppColors.primary, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Address of ${_customer.name}',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(addr.isEmpty ? 'N/A' : addr,
+                  style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87)),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showUpdateLocationDialog() async {

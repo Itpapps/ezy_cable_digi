@@ -483,6 +483,40 @@ class PackageOperationsRepository {
     }
   }
 
+  // ── updateMobileAndLCOCustID (upmoblcoid) — edit the customer's LCO id ───────
+  // VERIFIED (CustomerOperations_Fragment:2976-3103; configg.properties
+  // upmoblcoid=/packagelist/updateMobileAndLCOCustID). POST params: dealer_id,
+  // customerId (= customersidd == Flutter lcoCustomerId — the STABLE key that
+  // identifies the customer; it is NOT the value being changed), imei, authtoken,
+  // employeeId, updateType="LCO_customer_id", updateValue=<new LCO id>.
+  // status_code: 0 = success · 1 = backend-rejected (show status_msg) · 3 =
+  // transport. Android validates the new id is >= 5 chars before calling
+  // (row_updatelcoidview). The mobile edit is the same call with
+  // updateType="mobile" / updateValue="91"+number.
+  Future<PackageWriteResult> updateLcoCustomerId({
+    required String customerId,
+    required String newLcoId,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('updateMobileAndLCOCustID'),
+        {
+          ..._auth,
+          'customerId': customerId,
+          'employeeId': SessionService.instance.employeeId,
+          'updateType': 'LCO_customer_id',
+          'updateValue': newLcoId,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
+
   // ── STB Deactivation reasons — gdr (getDeactiveReasons, SOAP) ───────────────
   // VERIFIED (Deactivatestb_Frag_New:388-468): wrapper reasonsInfo/DeactivateReasonsInfo,
   // fields showforlco=0, authToken, imei; response = repeated <reasonList>{reasonId,

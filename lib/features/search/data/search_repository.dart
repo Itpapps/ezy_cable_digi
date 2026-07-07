@@ -145,6 +145,8 @@ class SearchRepository {
     final total = f('total_amount');
     return Customer(
       altCustomerId: f('customnumber'),
+      // "LCO Customer id" display — Android alt_custom_number (NOT customer_id).
+      altCustomNumber: f('alt_custom_number'),
       name: f('name'),
       primaryMobileNumber: f('mobile_no'),
       lcoCustomerId: f('customer_id'),

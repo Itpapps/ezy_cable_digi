@@ -4,6 +4,11 @@ class Customer {
   final String name;
   final String primaryMobileNumber;
   final String lcoCustomerId;
+  // The user-facing "LCO Customer id" (Android `alt_custom_number` →
+  // tv_lcocustomerno). Distinct from [lcoCustomerId], which holds `customer_id`
+  // — the internal STABLE operation key used by every API call. Display-only;
+  // intentionally NOT persisted in the offline DB (defaults to '' offline).
+  final String altCustomNumber;
   final String crfNumber;
   final String serialNumber;
   final String vcNumber;
@@ -32,6 +37,7 @@ class Customer {
   Customer({
     this.id,
     required this.altCustomerId,
+    this.altCustomNumber = '',
     required this.name,
     required this.primaryMobileNumber,
     required this.lcoCustomerId,
@@ -144,7 +150,13 @@ class Customer {
     final amount = s('amount');
     final total = s('total');
     return Customer(
-      altCustomerId: s('alt_cust_id'),
+      // Account number shown on the receipt / row = `customnumber`, matching the
+      // search flow (search_repository: f('customnumber')) and Android's
+      // UnpaidNewAdapter (getCustomnumber()). NOT `alt_cust_id`, which is an
+      // internal integer row-id and was surfacing as a random-looking number.
+      altCustomerId: s('customnumber'),
+      // "LCO Customer id" display — Android alt_custom_number (NOT customer_id).
+      altCustomNumber: s('alt_custom_number'),
       name: fullName,
       primaryMobileNumber: s('mobile_no'),
       lcoCustomerId: s('customer_id'),
@@ -173,6 +185,7 @@ class Customer {
   Customer copyWith({
     int? id,
     String? altCustomerId,
+    String? altCustomNumber,
     String? name,
     String? primaryMobileNumber,
     String? lcoCustomerId,
@@ -201,6 +214,7 @@ class Customer {
     return Customer(
       id: id ?? this.id,
       altCustomerId: altCustomerId ?? this.altCustomerId,
+      altCustomNumber: altCustomNumber ?? this.altCustomNumber,
       name: name ?? this.name,
       primaryMobileNumber: primaryMobileNumber ?? this.primaryMobileNumber,
       lcoCustomerId: lcoCustomerId ?? this.lcoCustomerId,

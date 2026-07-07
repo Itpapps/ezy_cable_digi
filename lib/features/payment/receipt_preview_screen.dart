@@ -145,8 +145,11 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       lines.add(fld('CRF NUMBER', c.crfNumber));
     }
     lines.add(fld('CUSTOMER NAME', c.name));
-    lines.add(fld('ACCOUNT NUMBER', c.altCustomerId));
-    lines.add(fld('LCO CUST ID', c.lcoCustomerId));
+    // Android parity (BluetoothChatService write): ACCOUNT NUMBER = custId =
+    // customer_id (Flutter lcoCustomerId); LCO CUST ID = alt_custom_number
+    // (Flutter altCustomNumber). Previously these were swapped/mismapped.
+    lines.add(fld('ACCOUNT NUMBER', c.lcoCustomerId));
+    lines.add(fld('LCO CUST ID', c.altCustomNumber));
     lines.add(fld('CUSTOMER ADDRESS', c.address)); // Android always prints
     lines.add(fld('RECEIPT NUMBER', p.transactionId));
     lines.add(fld('LAST PAID DATE', c.lastPaidDate)); // Android always prints (:1067)
@@ -224,7 +227,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         lines.add(fld('BroadBand Amt', money(bbPaid)));
       }
     }
-    lines.add(fld('Lco Customer Id', c.lcoCustomerId));
+    lines.add(fld('Lco Customer Id', c.altCustomNumber)); // alt_custom_number
     if (addr.isNotEmpty) lines.add(fld('Address', addr));
     lines.add(fld('Mobile No.', c.primaryMobileNumber));
     lines.add(fld('Receipt No.', p.transactionId));
@@ -418,12 +421,12 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
               _infoCard(
                 title: 'CUSTOMER INFO',
                 rows: [
-                  ('Account No',      c.altCustomerId),
+                  ('Account No',      c.lcoCustomerId), // customer_id (Android custId)
                   ('Customer Type',   c.customerTypeLabel),
                   ('Customer Name',   c.name),
                   ('NickName',        c.nickName.isEmpty ? 'NA' : c.nickName),
                   ('Mobile No',       c.primaryMobileNumber),
-                  ('LCO Customer Id', c.lcoCustomerId),
+                  ('LCO Customer Id', c.altCustomNumber), // alt_custom_number
                   ('Address',         c.address),
                   ('Last Paid Date',  c.lastPaidDate),
                   ('Bill For',        c.billMonth),

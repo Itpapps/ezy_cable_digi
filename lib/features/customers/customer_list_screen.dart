@@ -313,11 +313,28 @@ class _CustomerListScreenState extends State<CustomerListScreen>
           controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(
               AppSizes.paddingM, AppSizes.paddingS, AppSizes.paddingM, 24),
-          // +1 for the bottom loader
-          itemCount: provider.customers.length + 1,
+          // index 0 = "Total Count" header; then the customers; then bottom loader.
+          itemCount: provider.customers.length + 2,
           itemBuilder: (context, index) {
-            if (index < provider.customers.length) {
-              return _CustomerTile(customer: provider.customers[index], t: t);
+            if (index == 0) {
+              // Android parity (Unpaid_Fragment: tv_total = "Total Count  N",
+              // N = the full unpaid list size).
+              return Padding(
+                padding: const EdgeInsets.only(left: 4, top: 2, bottom: 8),
+                child: Text(
+                  'Total Count  ${provider.customers.length}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: t.bodyText,
+                  ),
+                ),
+              );
+            }
+            final custIndex = index - 1;
+            if (custIndex < provider.customers.length) {
+              return _CustomerTile(
+                  customer: provider.customers[custIndex], t: t);
             }
             return provider.isLoading
                 ? Padding(

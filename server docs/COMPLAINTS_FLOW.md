@@ -184,3 +184,117 @@ Before coding steps 2–3, quickly line-verify the 🟡 response field names
 - [ ] Created/updated complaints reflect across history + dashboard feed on refetch.
 - [ ] `flutter analyze` clean.
 - [ ] 🟡 User verifies each section live before it is marked complete.
+
+---
+
+## 8. CREATE COMPLAINT — verified end-to-end (Android source of truth)
+
+All code references below are READ-ONLY from
+`Fragments/Complaint_NewComplaint_Fragment.java` unless noted. This is how the
+existing app builds the create screen **dynamically** (no hardcoded categories or
+employees) and submits robustly.
+
+### 8.1 Two modes — `complaintType` (from login) ✅
+- `complaintType = LoginActivity.complaintType` (:141). It is a **login flag**.
+- Branch (:170–188):
+  - **SIMPLE** layout → loads **Categories** (`ComplaintCategoriesList`) +
+    **Assigned employees** (`ComplaintAssigned`). No error list. `error` sent as 0.
+  - **ADV** (else) → loads **Errors** (`ComplaintErrorList`). (assigned commented out.)
+- ✅ The current Flutter create UI (Category + Assign-To + Employee + Description)
+  matches **SIMPLE**. So we implement SIMPLE first; ADV (error list) is a 🟡 follow-up
+  gated on the tenant's `complaintType` (not yet captured at login).
+
+### 8.2 The three dynamic dropdowns (LOV APIs) — all SOAP, same namespace
+
+**A. Categories — `complaintCategories` (key `comcat`)** ✅
+- Wrapper element `categoriesinfo`/complex `getComplaintCategoriesInfo`; request
+  `authToken` + `imei`. Timeout 60s/30s.
+- Response: repeated `complaintCategories` items → `categoryId` (int) +
+  `categoryName` (string), parsed at :402–433; a `Select` (id 0) is prepended.
+- Selecting a row sets `CategoriesIdValue = categoryId` (the submit `category`).
+
+**B. Assigned employees — `assignedemployeedetails` (key `aed`)** ✅
+- Wrapper element `assignedinfo` (i:type `assignedEmployeeInfo`); request
+  `authToken` + `imei` + `customerId` (= `altCustId` = **customer_id**, :616).
+  Timeout 60s/30s.
+- Response: repeated `assignedemployee_details` items → `employee_id` (int) +
+  `employee_name` (string), parsed at :668–694; a `Select` (id 0) is prepended.
+- Selecting a row sets `Assignednames = employee_name` and
+  `assignedvalue = employee_id` (:771–773) — `employee_id` becomes the submit
+  `assigned_to`.
+- ⚠️ The **"Employee / Service" dropdown is cosmetic** — a hardcoded
+  `{"Employee","Service"}` array (:257) whose selection handler is **commented
+  out** (:266–276). It does **not** filter the list or affect the request. The
+  real people come from this one API. (So the Flutter hardcoded employee names are
+  wrong on two counts: hardcoded, and the Employee/Service split is meaningless.)
+
+**C. Errors (ADV only) — `complaintErrors` (key `comperr`)** 🟡
+- Wrapper `getComplaintErrorsInfo`; request `authToken` + `imei`. Items
+  `errorId` / `errorCode` / `errorDescription` (parse ~:872–900). Only used in ADV
+  mode; `ErrorId` feeds the submit `error`. Not needed for SIMPLE.
+
+### 8.3 Submit — `createComplaint` (key `crecomp`) ✅
+- Wrapper element `newCompInfo`, i:type `createComplaintInfo` (:1108–1120).
+- Fields (:1088–1106): `customerId` (= altCustId = **customer_id**), `authToken`,
+  `complaint` (the typed text), `category` (categoryId), `error` (errorId, 0 in
+  SIMPLE), `imei`, `latitude` (string), `longitude` (string),
+  `assigned_to` (employee_id), `lat` (string), `lang` (string). Timeout 100s/200s.
+- ✅ `customerId` here is the **customer_id** — the same id `getCustomerComplaintList`
+  uses (CustomerOperations_Fragment.java:2460 sets `altCustId = getCustomerId()`),
+  i.e. our `Customer.lcoCustomerId`. (Verified live: history with `lcoCustomerId`
+  returns the right records; with the alphanumeric account number it returns none.)
+
+### 8.4 Validation & robustness (how Android avoids errors/crashes) ✅
+- Register button (:228–233): blocks submit unless **category selected**
+  (`CategoriesIdValue != 0`) **and** an **employee selected**
+  (`Assignednames != "Select"`), else Toast "Select Complaint /employee".
+- **Signal check** before submit (:228, `getSignaStrength`): weak signal → dialog,
+  no call. (Flutter: a plain network check is enough; the Wi-Fi RSSI logic is
+  Android-specific and optional.)
+- **GPS optional** (:191–199): if location unavailable, `latitude=longitude=0.0`.
+  Never blocks submit.
+- Every LOV parse is in try/catch; on failure the spinner just keeps its `Select`
+  default. LOV failures Toast "… not Loaded" / "Contact Support" (statusCode 1/2),
+  null → "Server is Unreachable" dialog. None crash the screen.
+- Submit response (:1158–1240): `0` → "New Complaint Registered Successfully"
+  dialog (date, category, description, assignee) → `popBackStack`; `1` → "Enter
+  Valid Details" dialog; `2` → "Contact Support"; null → "Server busy" dialog.
+
+### 8.5 Interlink (create → history → dashboard) ✅
+- `createComplaint` writes a record keyed on **customer_id** + `assigned_to`.
+- It then appears in **History** (`getCustomerComplaintList` by customer_id —
+  already wired ✅) and, while open, in the **dashboard open feed**
+  (`getopencomplaintslist`, dealer-scoped — already wired ✅).
+- No auto-refresh in Android; lists re-fetch when reopened. Our history + both
+  complaint lists already re-fetch (history on open, feeds on tab tap / after
+  update). After a successful create we should pop back and let those re-fetch.
+
+### 8.6 Flutter current state vs target (create) ✅
+- `create_complaint_screen.dart` is a **stub**: categories hardcoded (:18–22),
+  employees hardcoded (:26–30), **no** category/employee API, `_register()` only
+  shows a snackbar (:38–49). The Employee/Service dropdown copies Android's
+  cosmetic one.
+- **To build (SIMPLE mode):**
+  1. Repo: `fetchComplaintCategories()` → `[(id,name)]` with `Select`.
+  2. Repo: `fetchAssignedEmployees(customerId)` → `[(id,name)]` with `Select`.
+  3. Repo: `createComplaint(customerId, complaint, category, error=0, assignedTo, lat, long)`
+     → `ComplaintActionResult`.
+  4. Screen: load both LOVs on open (using `customer.lcoCustomerId`), populate real
+     dropdowns, GPS (0.0 fallback), validate (category≠Select & employee≠Select &
+     description non-empty), submit, handle 0/1/2/null, pop on success.
+  5. Keep the Employee/Service dropdown **cosmetic** (parity) OR omit it — it has no
+     backend effect; recommend omitting to avoid confusion. (Decision needed.)
+- Defensive everywhere: LOV failure → keep `Select`, show a soft message, never
+  crash; submit failure → message, keep form.
+
+### 8.7 Code file index (read-only Android)
+- Create screen / modes / validation / GPS / submit:
+  `Fragments/Complaint_NewComplaint_Fragment.java`
+  (:141 mode, :170–188 branch, :191–199 GPS, :228–233 validate,
+  :330–545 categories, :598–795 assigned employees, :799–1020 errors,
+  :1058–1240 createComplaint).
+- History id source: `Fragments/CustomerOperations_Fragment.java:2460` & `:1797`.
+- Update/status: `Fragments/ComplaintHistory_Others_Fragment.java`
+  (:228–313 status LOV, :450–621 closeComplaint).
+- Open list: `Fragments/DashboardHomeFragment.java` (:760–978) /
+  `Fragments/OpenComplaints_Fragment.java`.

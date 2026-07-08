@@ -125,7 +125,7 @@ class _PrivacyPolicyWebViewState extends State<PrivacyPolicyWebView> {
         ),
       )
       ..loadRequest(Uri.parse(
-          'http://www.itpworld.com/news/itp-software-india-pvt-ltd-privacy-policy'));
+          'https://www.itpworld.com/news/itp-software-india-pvt-ltd-privacy-policy'));
   }
 
   void _reload() {

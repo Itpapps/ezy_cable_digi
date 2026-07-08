@@ -74,17 +74,30 @@ class _BroadBandListScreenState extends State<BroadBandListScreen> {
       showPremiumSnackBar(context, 'Failed.', isError: true);
       return;
     }
-    // Android: status 0 → "Success" → popBackStack; error → "Fail!" stays.
+    // Android shows a bare "Fail!" for EVERY non-success renew response. But a
+    // duplicate / already-in-progress rejection (RENEW tapped again while the
+    // first renewal is still being processed by the backend) is NOT a true
+    // failure. We keep the backend's own status_message as the source of truth
+    // and only replace the alarming "Fail!" verdict with a neutral title, so an
+    // "already in progress" response no longer reads as a lost/failed renewal.
+    // Genuine backend errors still surface verbatim via the server message, and
+    // we never claim success. Intentional, scoped divergence from Android's
+    // "Fail!" title (renewal logic + navigation are unchanged).
+    final renewOk = res.statusCode == 0;
     await showPremiumConfirm(
       context: context,
-      title: res.statusCode == 0 ? 'Success' : 'Fail!',
-      body: res.message.trim().isEmpty
-          ? (res.statusCode == 0 ? 'Success' : 'Failed')
-          : res.message,
+      title: renewOk ? 'Success' : 'Renewal Status',
+      body: res.message.trim().isNotEmpty
+          ? res.message
+          : (renewOk
+              ? 'Success'
+              : "We couldn't confirm the renewal. If you just submitted one, it "
+                  'may already be processing — please refresh before trying '
+                  'again.'),
       confirmLabel: 'OK',
       cancelLabel: 'Close',
     );
-    if (res.statusCode == 0 && mounted) Navigator.of(context).pop();
+    if (renewOk && mounted) Navigator.of(context).pop();
   }
 
   @override

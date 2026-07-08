@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import 'custom_packages_activation_screen.dart';
 import 'custom_packages_deactivation_screen.dart';
 
@@ -17,22 +17,86 @@ class CustomPackagesHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('CUSTOM PACKAGES'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        title: const Text('Custom Packages'),
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _hubButton(
+            // ── Gradient header (customer context) ──────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: t.headerGradient,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: t.headerGradient.first.withValues(alpha: 0.30),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.widgets_outlined,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Custom Packages',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 3),
+                        Text(
+                          customer.name.trim().isEmpty
+                              ? 'Manage packages'
+                              : customer.name.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            _actionCard(
               context,
-              'Activate Packages',
-              Icons.add_box,
+              t,
+              title: 'Activate Packages',
+              subtitle: 'Add packages to this customer',
+              icon: Icons.add_box_rounded,
+              tint: const Color(0xFF2E7D32),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -41,11 +105,14 @@ class CustomPackagesHomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            _hubButton(
+            const SizedBox(height: 14),
+            _actionCard(
               context,
-              'Deactivate Packages',
-              Icons.indeterminate_check_box,
+              t,
+              title: 'Deactivate Packages',
+              subtitle: 'Remove packages from this customer',
+              icon: Icons.indeterminate_check_box_rounded,
+              tint: const Color(0xFFD32F2F),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -60,20 +127,66 @@ class CustomPackagesHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _hubButton(BuildContext context, String label, IconData icon,
-      {required VoidCallback onTap}) {
-    return SizedBox(
-      width: double.infinity,
-      height: 60,
-      child: ElevatedButton.icon(
-        icon: Icon(icon),
-        label: Text(label,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: AppColors.primary,
+  Widget _actionCard(
+    BuildContext context,
+    AppThemeConst t, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color tint,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: t.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: t.cardShadowColor,
+              blurRadius: 14,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: tint, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: t.cardHeadingText)),
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          style: TextStyle(
+                              fontSize: 12, color: t.cardSubtitleText)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: t.cardSubtitleText),
+              ],
+            ),
+          ),
         ),
-        onPressed: onTap,
       ),
     );
   }

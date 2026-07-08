@@ -47,7 +47,9 @@ class AppConfig {
     if (_cachedDeviceImei.isNotEmpty) return _cachedDeviceImei;
     final overridden = const String.fromEnvironment('DEVICE_IMEI', defaultValue: '');
     if (overridden.isNotEmpty) return overridden;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
       debugPrint('AppConfig.deviceImei: native device id not initialized yet');
     }
     return overridden;
@@ -62,8 +64,13 @@ class AppConfig {
       return;
     }
 
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
-      _log('Not running on Android; no native imei available.');
+    // Android + iOS both expose the native `getDeviceIdentifier` over the same
+    // MethodChannel (Android: ANDROID_ID; iOS: identifierForVendor). Only web /
+    // other platforms have no native id — they keep the empty fallback.
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      _log('No native device id on this platform.');
       return;
     }
 

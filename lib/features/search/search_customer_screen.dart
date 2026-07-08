@@ -622,10 +622,20 @@ class _CustomerCard extends StatelessWidget {
         await SearchRepository.instance.fetchCustomerDetail(c.lcoCustomerId);
     if (!context.mounted) return;
     Navigator.of(context).pop(); // dismiss loading
+    // Android parity: CRF is carried from the LIST result into the details/
+    // payment screen via the bundle (CustomerMgmt_MakePayment_Fragment:263,
+    // 1213-1216), NOT re-read from the enriched is_list=1 detail (whose response
+    // omits `crf`). So keep the list CRF when the enriched detail lacks it, else
+    // the CRF row shows "NA" for CRF dealers.
+    final customer = enriched == null
+        ? c
+        : (enriched.crfNumber.isEmpty && c.crfNumber.isNotEmpty
+            ? enriched.copyWith(crfNumber: c.crfNumber)
+            : enriched);
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CustomerDetailsScreen(customer: enriched ?? c),
+        builder: (_) => CustomerDetailsScreen(customer: customer),
       ),
     );
   }

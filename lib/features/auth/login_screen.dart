@@ -346,6 +346,7 @@ DropdownButton<String>(
                                           obscureText: true,
                                           enabled: !_isOffline,
                                           lottieAsset: 'assets/Login.json',
+                                          showPasswordToggle: true,
                                         ),
                                         const SizedBox(height: AppSizes.paddingS),
                                         Row(
@@ -436,12 +437,15 @@ DropdownButton<String>(
   }
 }
 
-class _GlassTextField extends StatelessWidget {
+class _GlassTextField extends StatefulWidget {
   final TextEditingController controller;
   final String hint;
   final bool obscureText;
   final String lottieAsset;
   final bool enabled;
+  // Android parity: the login password TextInputLayout shows a password-toggle
+  // eye by default for textPassword fields. Enabled only for the password field.
+  final bool showPasswordToggle;
 
   const _GlassTextField({
     required this.controller,
@@ -449,7 +453,15 @@ class _GlassTextField extends StatelessWidget {
     required this.lottieAsset,
     this.obscureText = false,
     this.enabled = true,
+    this.showPasswordToggle = false,
   });
+
+  @override
+  State<_GlassTextField> createState() => _GlassTextFieldState();
+}
+
+class _GlassTextFieldState extends State<_GlassTextField> {
+  late bool _obscure = widget.obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -479,7 +491,7 @@ class _GlassTextField extends StatelessWidget {
               height: 40,
               width: 40,
               child: Lottie.asset(
-                lottieAsset,
+                widget.lottieAsset,
                 fit: BoxFit.contain,
                 renderCache: RenderCache.raster,
               ),
@@ -488,16 +500,16 @@ class _GlassTextField extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: TextField(
-              controller: controller,
-              obscureText: obscureText,
-              enabled: enabled,
+              controller: widget.controller,
+              obscureText: _obscure,
+              enabled: widget.enabled,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
               decoration: InputDecoration(
-                hintText: hint,
+                hintText: widget.hint,
                 hintStyle: TextStyle(
                   color: AppColors.textSecondary.withValues(alpha: 0.85),
                   fontWeight: FontWeight.w600,
@@ -511,6 +523,23 @@ class _GlassTextField extends StatelessWidget {
               ),
             ),
           ),
+          // Eye toggle — size-constrained to the 40px row height so the
+          // fixed-height glass card never overflows.
+          if (widget.showPasswordToggle)
+            IconButton(
+              icon: Icon(
+                _obscure
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded,
+                size: 20,
+                color: AppColors.primary.withValues(alpha: 0.75),
+              ),
+              splashRadius: 20,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+          const SizedBox(width: 4),
         ],
       ),
     );

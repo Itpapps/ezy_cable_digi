@@ -189,10 +189,14 @@ double _offlineTotalDue(OfflineCustomer c) {
 
 /// Map an [OfflineCustomer] to the [Customer] the receipt screen expects.
 Customer _customerFromOffline(OfflineCustomer c) => Customer(
+      // Receipt field mapping (receipt_preview_screen after the account-no/LCO
+      // fix): ACCOUNT NUMBER reads lcoCustomerId, LCO CUST ID reads
+      // altCustomNumber. Offline: account number = accountNum, LCO id = lcoCustId.
       altCustomerId: c.accountNum,
+      altCustomNumber: c.lcoCustId.isEmpty ? c.customerId : c.lcoCustId,
       name: c.name,
       primaryMobileNumber: c.mobileNum,
-      lcoCustomerId: c.lcoCustId.isEmpty ? c.customerId : c.lcoCustId,
+      lcoCustomerId: c.accountNum,
       crfNumber: c.crfNumber,
       serialNumber: '',
       vcNumber: '',

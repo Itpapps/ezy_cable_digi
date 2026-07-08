@@ -1389,44 +1389,57 @@ class _OpItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: gradientColors.last.withValues(alpha: 0.30),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+      // Presentation-only overflow guard: the grid cell has a fixed height
+      // (childAspectRatio), so under large accessibility fonts / very narrow
+      // phones the icon + 2-line label can exceed the cell and throw a
+      // RenderFlex overflow. FittedBox(scaleDown) shrinks the whole tile to fit
+      // when needed and is a no-op at normal sizes (identical look). The inner
+      // SizedBox keeps the label's 2-line wrap — FittedBox alone would give the
+      // Text unbounded width and collapse it to a single line.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: 64,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: gradientColors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: gradientColors.last.withValues(alpha: 0.30),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Icon(icon, size: 22, color: Colors.white),
+                child: Icon(icon, size: 22, color: Colors.white),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: gradientColors.first,
+                  height: 1.2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: gradientColors.first,
-              height: 1.2,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

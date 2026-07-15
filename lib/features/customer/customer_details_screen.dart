@@ -101,18 +101,77 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       appBar: _buildAppBar(t),
       body: FadeTransition(
         opacity: _fadeAnim,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildCustomerInfoCard(t),
-              const SizedBox(height: 12),
-              _buildLocationCard(t),
-              const SizedBox(height: 12),
-              _buildOperationsCard(t),
-            ],
-          ),
+        child: Column(
+          children: [
+            _buildPrevNextStrip(t),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildCustomerInfoCard(t),
+                    const SizedBox(height: 12),
+                    _buildLocationCard(t),
+                    const SizedBox(height: 12),
+                    _buildOperationsCard(t),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Prev/Next customer strip (below the AppBar) ─────────────────────────
+  // Presentation only: the Prev/Next controls live here instead of the AppBar,
+  // so the AppBar shows a standard back button. Taps call the SAME
+  // _prevNextCustomer(flag) — no logic/routing change. Expanded halves +
+  // Flexible/ellipsis keep it overflow-safe.
+  Widget _buildPrevNextStrip(AppThemeConst t) {
+    return Material(
+      color: t.appBarBg,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        child: Row(
+          children: [
+            Expanded(child: _prevNextChip(t, isPrev: true)),
+            const SizedBox(width: 8),
+            Expanded(child: _prevNextChip(t, isPrev: false)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _prevNextChip(AppThemeConst t, {required bool isPrev}) {
+    final row = <Widget>[
+      Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
+          size: 20, color: t.backBtnIcon),
+      const SizedBox(width: 4),
+      Flexible(
+        child: Text(
+          isPrev ? 'Previous Customer' : 'Next Customer',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+              color: t.backBtnIcon, fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+      ),
+    ];
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _prevNextCustomer(isPrev ? 2 : 1),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: t.backBtnBg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: isPrev ? row : row.reversed.toList(),
         ),
       ),
     );
@@ -125,20 +184,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
-      // Android CustomerOperations `prev_next_layout` band has NO back button —
-      // ◄ prev arrow sits at the far left (next_cust_search flag 2). OS back
-      // button/gesture still pops the screen, matching the Android fragment.
+      // Standard back button. Prev/Next customer controls moved to a strip below
+      // the AppBar (see _buildPrevNextStrip); _prevNextCustomer logic unchanged —
+      // only the widgets were relocated.
       leading: IconButton(
-        tooltip: 'Previous customer',
+        tooltip: 'Back',
         icon: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: t.backBtnBg,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(Icons.chevron_left, size: 22, color: t.backBtnIcon),
+          child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
         ),
-        onPressed: () => _prevNextCustomer(2),
+        onPressed: () => Navigator.pop(context),
       ),
       title: Text(
         'CUSTOMER DETAILS',
@@ -168,20 +227,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ),
           ),
         ),
-        // Next customer — Android CustomerOperations ► pinned at the far right
-        // (next_cust_search flag 1).
-        IconButton(
-          tooltip: 'Next customer',
-          icon: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: t.backBtnBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.chevron_right, size: 22, color: t.backBtnIcon),
-          ),
-          onPressed: () => _prevNextCustomer(1),
-        ),
+        // Next-customer control moved to the Prev/Next strip below the AppBar.
       ],
     );
   }

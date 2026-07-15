@@ -18,6 +18,8 @@ import '../complaints/complaint_details_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../expenses/add_expenses_screen.dart';
 import '../offline/static_content_screen.dart';
+import '../notifications/data/notification_repository.dart';
+import '../notifications/login_notification_dialog.dart';
 import '../../core/services/session_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -149,6 +151,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   }
 
 
+  // DUMMY login-notification popup — one-shot guard so it shows only once.
+  bool _notificationShown = false;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
@@ -158,6 +163,25 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     _dash.loadKpis();
     _dash.loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
     _dash.loadComplaints(); // Complaints is the default feed tab.
+    // DUMMY login notification popup (demo only). Comment out this line to
+    // disable it until the real API is ready.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _showLoginNotification());
+  }
+
+  // DUMMY login notification popup — runs once after the first frame, over the
+  // painted dashboard. To go live later, only NotificationRepository
+  // .fetchLoginNotification()'s body changes (dummy → API); this stays the same.
+  Future<void> _showLoginNotification() async {
+    if (_notificationShown || !mounted) return;
+    _notificationShown = true;
+    final n = await NotificationRepository.instance.fetchLoginNotification();
+    if (n == null || !mounted) return;
+    await showPremiumDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      child: LoginNotificationDialog(notification: n),
+    );
   }
 
   @override

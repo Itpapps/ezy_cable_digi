@@ -784,19 +784,37 @@ class _PaymentSuccessContent extends StatefulWidget {
 
 class _PaymentSuccessContentState extends State<_PaymentSuccessContent> {
   Timer? _autoClose;
+  // Single-shot guard: onContinue (a Navigator.pop) must run at most ONCE.
+  // Otherwise the OK tap and the 1.5s auto-close timer — or a double-tap —
+  // could each fire it, and the second Navigator.pop() would remove the payment
+  // screen (not just the dialog), making `mounted` false so the pushReplacement
+  // to the receipt is silently skipped. See _handleContinue.
+  bool _continued = false;
 
   @override
   void initState() {
     super.initState();
     // Auto-close the success popup, then proceed to the receipt — no manual
     // "VIEW RECEIPT" tap needed. Cancelled if the dialog is dismissed earlier.
-    _autoClose = Timer(const Duration(milliseconds: 1500), widget.onContinue);
+    _autoClose = Timer(const Duration(milliseconds: 1500), _handleContinue);
   }
 
   @override
   void dispose() {
     _autoClose?.cancel();
     super.dispose();
+  }
+
+  // Dismiss the popup and proceed to the receipt — guaranteed to run exactly
+  // once. The first call (OK tap OR the auto-close timer) cancels the timer and
+  // invokes onContinue; any later call is a no-op. This makes ONLY ONE
+  // Navigator.pop() ever run (closing the dialog), so the payment screen can no
+  // longer be popped by a second pop and the receipt is never skipped.
+  void _handleContinue() {
+    if (_continued) return;
+    _continued = true;
+    _autoClose?.cancel();
+    widget.onContinue();
   }
 
   @override
@@ -877,7 +895,7 @@ class _PaymentSuccessContentState extends State<_PaymentSuccessContent> {
                       color: Colors.black.withValues(alpha: 0.12),
                     ),
                     InkWell(
-                      onTap: widget.onContinue,
+                      onTap: _handleContinue,
                       borderRadius: const BorderRadius.vertical(
                           bottom: Radius.circular(28)),
                       child: const SizedBox(

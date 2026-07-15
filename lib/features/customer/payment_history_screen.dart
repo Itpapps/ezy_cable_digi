@@ -138,6 +138,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: const Color(0xFF0D47A1).withValues(alpha: 0.15)),
             ),
             child: Column(
               children: [
@@ -170,11 +172,12 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     if (_payments.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
           child: Text(
             _message.isEmpty ? 'No payments found' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+            style: const TextStyle(
+                color: Colors.white70, fontSize: 16, height: 1.4),
           ),
         ),
       );
@@ -248,6 +251,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           SizedBox(
             width: 130,
             child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     fontSize: 13, color: Color(0xFF5B7BAE))),
           ),
@@ -283,7 +288,7 @@ class _PaymentCard extends StatelessWidget {
       MapEntry('Payment Type', record.paymentTypeLabel),
     ];
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -303,6 +308,9 @@ class _PaymentCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           ...List.generate(rows.length, (i) {
+            // Amount emphasis: the paid amount is the card's focal value
+            // (larger/heavier). Presentation only — the value string is unchanged.
+            final isAmount = rows[i].key == 'Amount Paid';
             return Column(
               children: [
                 Padding(
@@ -312,15 +320,19 @@ class _PaymentCard extends StatelessWidget {
                       SizedBox(
                         width: 130,
                         child: Text(rows[i].key,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 fontSize: 13, color: Color(0xFF5B7BAE))),
                       ),
                       Expanded(
                         child: Text(rows[i].value,
-                            style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0D47A1))),
+                            style: TextStyle(
+                                fontSize: isAmount ? 16 : 13,
+                                fontWeight: isAmount
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                                color: const Color(0xFF0D47A1))),
                       ),
                     ],
                   ),

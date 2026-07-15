@@ -483,6 +483,21 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       elevation: 0,
       centerTitle: true,
       automaticallyImplyLeading: false,
+      // Visible back button (same pill style used across the app). Navigator.pop
+      // only closes this screen (online = pushReplacement already removed the
+      // payment screen; offline = push). Print/Share/Prev-Next unchanged.
+      leading: IconButton(
+        tooltip: 'Back',
+        icon: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: t.backBtnBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
       title: Text(
         title,
         style: const TextStyle(
@@ -502,10 +517,11 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         color: t.cardBg,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
         boxShadow: [
+          // Match the info-card elevation (16 / (0,4)) for consistent card depth.
           BoxShadow(
             color: t.cardShadowColor,
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -885,7 +901,7 @@ class _ReceiptRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

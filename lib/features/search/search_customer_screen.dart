@@ -212,7 +212,10 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
             child: DropdownButton<String>(
               value: p.criteria,
               isExpanded: true,
-              menuMaxHeight: 320,
+              // Presentation-only polish: shorter, rounded, softer dropdown menu.
+              menuMaxHeight: 200,
+              borderRadius: BorderRadius.circular(12),
+              elevation: 3,
               icon: const Padding(
                 padding: EdgeInsets.only(right: 14),
                 child: Icon(Icons.keyboard_arrow_down_rounded, size: 24, color: Colors.black54),

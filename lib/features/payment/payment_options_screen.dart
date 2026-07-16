@@ -972,50 +972,60 @@ class _CustomerInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: t.cardBg,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
+        border: Border.all(color: t.accent.withValues(alpha: 0.15)),
         boxShadow: [BoxShadow(color: t.cardShadowColor, blurRadius: 14, offset: const Offset(0, 4))],
       ),
+      // Clip so the tinted header respects the card's rounded top corners.
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 38, height: 38,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: t.headerGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(10),
+          // Tinted header strip (complaints-card style) — avatar + name/id + type.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            color: t.accent.withValues(alpha: 0.08),
+            child: Row(
+              children: [
+                Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: t.headerGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Iconsax.user, color: Colors.white, size: 18),
                 ),
-                child: const Icon(Iconsax.user, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(customer.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.cardHeadingText)),
-                    Text(customer.lcoCustomerId, style: TextStyle(fontSize: 11, color: t.cardSubtitleText, fontWeight: FontWeight.w600)),
-                  ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(customer.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.cardHeadingText)),
+                      Text(customer.lcoCustomerId, style: TextStyle(fontSize: 11, color: t.cardSubtitleText, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: t.accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: t.accent.withValues(alpha: 0.25)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: t.accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: t.accent.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(customer.customerTypeLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: t.accent)),
                 ),
-                child: Text(customer.customerTypeLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: t.accent)),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Divider(height: 1, color: t.dividerColor),
-          const SizedBox(height: 8),
-          _infoGrid(customer, t),
+          // Body: the detail grid (Mobile / Total Due / Payable / …).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: _infoGrid(customer, t),
+          ),
         ],
       ),
     );

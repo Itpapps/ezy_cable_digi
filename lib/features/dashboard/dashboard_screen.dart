@@ -463,14 +463,20 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                             _QuickActionTile(
                               icon: Iconsax.search_status,
                               label: AppStrings.of(context, 'offline_search'),
-                              onTap: () {
+                              onTap: () async{
+                                if(!await offlineDataMatchesDealer()){
+                                  if(!context.mounted)return;
+                                  await showIdMismatch(context);
+                                  return;
+                                }
+                                if(!context.mounted)return;
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const OfflineDashboardScreen(),
+                                    builder: (_)=> const OfflineDashboardScreen(),
                                   ),
                                 );
-                              },
+                              }
                             ),
                             _QuickActionTile(
                               icon: Iconsax.calendar_1,

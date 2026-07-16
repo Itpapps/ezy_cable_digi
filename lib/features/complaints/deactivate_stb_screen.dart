@@ -175,26 +175,37 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
               ],
             ),
             const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _submitting ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D47A1),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+            // Android parity (Deactivatestb_Frag_New.java:160-165): the Deactivate
+            // action is shown only when the selected box is Active (box_status=="1")
+            // and hidden otherwise. Mirrors Android's setVisibility(INVISIBLE) —
+            // layout space is preserved (maintainSize) so nothing shifts. Pure
+            // presentation: _submit, APIs, dialogs and navigation are unchanged.
+            Visibility(
+              visible: _selectedBox?.isActive ?? false,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D47A1),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: Colors.white))
+                      : const Text('DEACTIVATE',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w800)),
                 ),
-                child: _submitting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white))
-                    : const Text('DEACTIVATE',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
               ),
             ),
           ],

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../services/debug_log_service.dart';
 import 'digi_crypto.dart';
 
 /// Thrown when a REST call does not return HTTP 200 or returns a non-JSON body.
@@ -24,22 +25,55 @@ class RestClient {
   /// Same User-Agent as the SOAP client — some Digi servers gate on it (403).
   static const String _userAgent = 'ksoap2-android/2.6.0+';
 
+  /// Endpoint label for the debug console (path only; never throws).
+  static String _ep(String url) => Uri.tryParse(url)?.path ?? url;
+
   /// POST [params] as form-encoded; return the decoded JSON object.
   Future<Map<String, dynamic>> postForm(
     String url,
     Map<String, String> params, {
     Duration timeout = const Duration(seconds: 60),
   }) async {
-    final res = await http
-        .post(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': _userAgent,
-          },
-          body: params,
-        )
-        .timeout(timeout);
+    final dbg = DebugLogService.instance;
+    final sw = dbg.enabled ? (Stopwatch()..start()) : null;
+    late final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': _userAgent,
+            },
+            body: params,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      if (sw != null) {
+        dbg.log(DebugLogEntry(
+          timestamp: DateTime.now(),
+          method: 'POST',
+          endpoint: _ep(url),
+          requestData: DebugLogService.maskFields(params),
+          durationMs: sw.elapsedMilliseconds,
+          error: e.toString(),
+        ));
+      }
+      rethrow;
+    }
+
+    if (sw != null) {
+      dbg.log(DebugLogEntry(
+        timestamp: DateTime.now(),
+        method: 'POST',
+        endpoint: _ep(url),
+        requestData: DebugLogService.maskFields(params),
+        httpStatus: res.statusCode,
+        responsePreview: DebugLogService.preview(res.body),
+        durationMs: sw.elapsedMilliseconds,
+        ok: res.statusCode == 200,
+      ));
+    }
 
     if (res.statusCode != 200) {
       throw RestException('HTTP ${res.statusCode}', statusCode: res.statusCode);
@@ -59,17 +93,47 @@ class RestClient {
     Map<String, String> params, {
     Duration timeout = const Duration(seconds: 200),
   }) async {
-    final res = await http
-        .post(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
-            'User-Agent': _userAgent,
-          },
-          body: params,
-        )
-        .timeout(timeout);
+    final dbg = DebugLogService.instance;
+    final sw = dbg.enabled ? (Stopwatch()..start()) : null;
+    late final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+              'User-Agent': _userAgent,
+            },
+            body: params,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      if (sw != null) {
+        dbg.log(DebugLogEntry(
+          timestamp: DateTime.now(),
+          method: 'POST',
+          endpoint: _ep(url),
+          requestData: DebugLogService.maskFields(params),
+          durationMs: sw.elapsedMilliseconds,
+          error: e.toString(),
+        ));
+      }
+      rethrow;
+    }
+
+    if (sw != null) {
+      dbg.log(DebugLogEntry(
+        timestamp: DateTime.now(),
+        method: 'POST',
+        endpoint: _ep(url),
+        requestData: DebugLogService.maskFields(params),
+        httpStatus: res.statusCode,
+        responsePreview: DebugLogService.preview(res.body),
+        durationMs: sw.elapsedMilliseconds,
+        ok: res.statusCode == 200,
+      ));
+    }
 
     if (res.statusCode != 200) {
       throw RestException('HTTP ${res.statusCode}', statusCode: res.statusCode);
@@ -96,17 +160,48 @@ class RestClient {
     // `method_name` claim = the endpoint segment after /digi_rest_api/.
     final methodName =
         url.contains('/digi_rest_api/') ? url.split('/digi_rest_api/').last : '';
-    final res = await http
-        .post(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': _userAgent,
-            'apitoken': DigiCrypto.apiToken(methodName),
-          },
-          body: body,
-        )
-        .timeout(timeout);
+    final dbg = DebugLogService.instance;
+    final sw = dbg.enabled ? (Stopwatch()..start()) : null;
+    final ep = methodName.isNotEmpty ? methodName : _ep(url);
+    late final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': _userAgent,
+              'apitoken': DigiCrypto.apiToken(methodName),
+            },
+            body: body,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      if (sw != null) {
+        dbg.log(DebugLogEntry(
+          timestamp: DateTime.now(),
+          method: 'POST',
+          endpoint: ep,
+          requestData: DebugLogService.maskFields(params),
+          durationMs: sw.elapsedMilliseconds,
+          error: e.toString(),
+        ));
+      }
+      rethrow;
+    }
+
+    if (sw != null) {
+      dbg.log(DebugLogEntry(
+        timestamp: DateTime.now(),
+        method: 'POST',
+        endpoint: ep,
+        requestData: DebugLogService.maskFields(params),
+        httpStatus: res.statusCode,
+        responsePreview: DebugLogService.preview(res.body),
+        durationMs: sw.elapsedMilliseconds,
+        ok: res.statusCode == 200,
+      ));
+    }
 
     if (res.statusCode != 200) {
       throw RestException('HTTP ${res.statusCode}', statusCode: res.statusCode);

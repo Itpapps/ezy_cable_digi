@@ -5,6 +5,7 @@ import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezi_cable_digi/features/offline/sync_clear_screen.dart';
 import 'package:ezi_cable_digi/features/reports/reports_home_screen.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../core/services/auth_service.dart';
@@ -26,6 +27,7 @@ import '../features/employee_track/employee_track_screen.dart';
 import '../features/offline/download_records_screen.dart';
 import '../features/offline/static_content_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/debug/debug_console_screen.dart';
 
 void _closeDrawerThen(
   BuildContext drawerContext,
@@ -40,11 +42,10 @@ void _closeDrawerThen(
   });
 }
 
-/// Android parity (MainActivity `nav_switchtoofflinemode` / `nav_syncdata`):
 /// offline data must belong to THIS dealer — the machineNumber stored at
 /// download must match the current login's machineNumber. If not, Android shows
 /// an "ID Mismatch!" dialog and blocks entry (also covers "no data downloaded").
-Future<bool> _offlineDataMatchesDealer() async {
+Future<bool> offlineDataMatchesDealer() async {
   final stored = (await OfflineModeService.instance.machineId).trim();
   final current = SessionService.instance.machineNumber.trim();
   return stored.isNotEmpty &&
@@ -53,7 +54,7 @@ Future<bool> _offlineDataMatchesDealer() async {
 }
 
 /// Android "ID Mismatch!" dialog (MainActivity:697-710 / :722-731).
-Future<void> _showIdMismatch(BuildContext ctx) async {
+Future<void> showIdMismatch(BuildContext ctx) async {
   final usercode = await OfflineModeService.instance.userCode;
   if (!ctx.mounted) return;
   await showPremiumConfirm(
@@ -492,8 +493,8 @@ class AppDrawer extends StatelessWidget {
               onTap: () {
                 _closeDrawerThen(context, (navCtx) async {
                   // Android: block if this dealer's data isn't downloaded.
-                  if (!await _offlineDataMatchesDealer()) {
-                    if (navCtx.mounted) await _showIdMismatch(navCtx);
+                  if (!await offlineDataMatchesDealer()) {
+                    if (navCtx.mounted) await showIdMismatch(navCtx);
                     return;
                   }
                   final conn = await Connectivity().checkConnectivity();
@@ -574,8 +575,8 @@ class AppDrawer extends StatelessWidget {
                 // Android nav_syncdata: machineNumber guard → SyncData_Fragment
                 // (a screen with Sync + Clear + counts). No one-shot dialog.
                 _closeDrawerThen(context, (navCtx) async {
-                  if (!await _offlineDataMatchesDealer()) {
-                    if (navCtx.mounted) await _showIdMismatch(navCtx);
+                  if (!await offlineDataMatchesDealer()) {
+                    if (navCtx.mounted) await showIdMismatch(navCtx);
                     return;
                   }
                   if (!navCtx.mounted) return;
@@ -647,6 +648,28 @@ class AppDrawer extends StatelessWidget {
                 );
               },
             ),
+            // API Debug Console — dev + profile builds only. Both kDebugMode and
+            // kProfileMode are compile-time `false` in a RELEASE build, so this
+            // entry AND the DebugConsoleScreen reference are tree-shaken out — it
+            // can never ship in the Play Store (release) build.
+            if (kDebugMode || kProfileMode)
+              ListTile(
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 1),
+                leading: const Icon(Icons.bug_report,
+                    color: AppColors.primary, size: 20),
+                title: const Text('API Debug Console',
+                    style: TextStyle(fontSize: 14)),
+                onTap: () {
+                  Navigator.pop(context); // close drawer
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const DebugConsoleScreen()),
+                  );
+                },
+              ),
             const SizedBox(height: 12),
           ],
         ),

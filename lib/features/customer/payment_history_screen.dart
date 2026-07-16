@@ -133,23 +133,34 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 
           // Customer summary
           Container(
-            margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF8B5CF6), Color(0xFFC084FC)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: const Color(0xFF0D47A1).withValues(alpha: 0.15)),
+                  color: Colors.white.withValues(alpha: 0.45), width: 1.5),
+              boxShadow:[
+                BoxShadow(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.45),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],    
             ),
             child: Column(
               children: [
                 _row('Customer Name', widget.customer.name),
                 const Divider(
-                    height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
+                    height: 1, thickness: 0.5, color: Colors.white24),
                 _row('Address',
                     widget.customer.address.isEmpty ? 'N/A' : widget.customer.address),
                 const Divider(
-                    height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
+                    height: 1, thickness: 0.5, color: Colors.white24),
                 _row(
                     'Mobile No.',
                     widget.customer.primaryMobileNumber.isEmpty
@@ -200,8 +211,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           ),
           child: _PaymentCard(
             record: rec,
-            index: i + 1,
-            total: _payments.length,
           ),
         );
       },
@@ -236,8 +245,15 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         // WHOLE payment history as one report.
         IconButton(
           onPressed: _payments.isEmpty ? null : _printHistory,
-          icon: const Icon(Icons.print, color: Colors.white, size: 22),
           tooltip: 'Print payment history',
+          icon: Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.print, color: Colors.red, size: 20),
+          ),
         ),
       ],
     );
@@ -254,14 +270,16 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF5B7BAE))),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
           ),
           Expanded(
             child: Text(value,
                 style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0D47A1))),
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white)),
           ),
         ],
       ),
@@ -271,22 +289,12 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 
 class _PaymentCard extends StatelessWidget {
   final PaymentRecord record;
-  final int index;
-  final int total;
   const _PaymentCard({
     required this.record,
-    required this.index,
-    required this.total,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Fields mirror Android's `paymenthistory_items` row.
-    final rows = <MapEntry<String, String>>[
-      MapEntry('Payment Date', record.paidDateDisplay),
-      MapEntry('Amount Paid', '₹${record.amount}'),
-      MapEntry('Payment Type', record.paymentTypeLabel),
-    ];
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -295,54 +303,96 @@ class _PaymentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: const Color(0xFF0D47A1).withValues(alpha: 0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha:0.12),
+            blurRadius: 6,
+            offset: const Offset(0,2),
+          ),
+        ],    
       ),
       child: Column(
-        children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text('$index / $total',
-                style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF5B7BAE),
-                    fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(height: 4),
-          ...List.generate(rows.length, (i) {
-            // Amount emphasis: the paid amount is the card's focal value
-            // (larger/heavier). Presentation only — the value string is unchanged.
-            final isAmount = rows[i].key == 'Amount Paid';
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 130,
-                        child: Text(rows[i].key,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 13, color: Color(0xFF5B7BAE))),
-                      ),
-                      Expanded(
-                        child: Text(rows[i].value,
-                            style: TextStyle(
-                                fontSize: isAmount ? 16 : 13,
-                                fontWeight: isAmount
-                                    ? FontWeight.w800
-                                    : FontWeight.w700,
-                                color: const Color(0xFF0D47A1))),
-                      ),
-                    ],
-                  ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children:[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payment Type',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF5B7BAE))),
+                    const SizedBox(height: 3),
+                    Text(
+                      record.paymentTypeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0D47A1)),
+                    ),
+                  ],
                 ),
-                if (i < rows.length - 1)
-                  const Divider(
-                      height: 1, thickness: 0.5, color: Color(0xFFE5E7EB)),
-              ],
-            );
-          }),
+              ),
+              const Icon(Icons.chevron_right,
+                  size: 20, color: Color(0xFF5B7BAE)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payment Date',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF5B7BAE))),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            size: 14, color: Color(0xFF0D47A1)),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(record.paidDateDisplay,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0D47A1))),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Paid Amount',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF5B7BAE))),
+                    const SizedBox(height: 3),
+                    Text('₹${record.amount}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0D47A1))),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -550,7 +600,16 @@ class _PaymentHistoryDetailScreenState
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.10),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
           child: Column(
             children: [
               for (int i = 0; i < rows.length; i++) ...[
@@ -587,14 +646,14 @@ class _PaymentHistoryDetailScreenState
                   _DetailActionButton(
                       icon: Icons.print,
                       label: 'Print',
-                      color: const Color(0xFF0D47A1),
+                      color: Colors.red,
                       onTap: _print),
                   if (SessionService.instance.shareOption) ...[
                     const SizedBox(width: 20),
                     _DetailActionButton(
                         icon: Icons.share,
                         label: 'Share',
-                        color: const Color(0xFF1565C0),
+                        color: const Color(0xFF2E7D32),
                         onTap: _share),
                   ],
                 ],
@@ -628,8 +687,12 @@ class _DetailActionButton extends StatelessWidget {
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            child: Icon(icon, color: Colors.white, size: 22),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+            ),
+            child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(height: 6),
           Text(label,

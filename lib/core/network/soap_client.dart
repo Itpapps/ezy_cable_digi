@@ -1,5 +1,7 @@
 import 'package:http/http.dart' as http;
 
+import '../services/debug_log_service.dart';
+
 /// Thrown when a SOAP call does not return HTTP 200.
 class SoapException implements Exception {
   final String message;
@@ -41,17 +43,51 @@ class SoapClient {
       fields: fields,
     );
 
-    final res = await http
-        .post(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'text/xml;charset=utf-8',
-            'SOAPAction': soapAction,
-            'User-Agent': _userAgent,
-          },
-          body: body,
-        )
-        .timeout(timeout);
+    // ── Debug console hook (observational only) ──────────────────────────
+    // Times/records the call for the in-app API console when logging is ON.
+    // When OFF, `sw` is null → zero work. Any thrown error is rethrown
+    // unchanged; return value and timeout behaviour are untouched.
+    final dbg = DebugLogService.instance;
+    final sw = dbg.enabled ? (Stopwatch()..start()) : null;
+    late final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'text/xml;charset=utf-8',
+              'SOAPAction': soapAction,
+              'User-Agent': _userAgent,
+            },
+            body: body,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      if (sw != null) {
+        dbg.log(DebugLogEntry(
+          timestamp: DateTime.now(),
+          method: 'SOAP',
+          endpoint: methodName,
+          requestData: DebugLogService.maskFields(fields),
+          durationMs: sw.elapsedMilliseconds,
+          error: e.toString(),
+        ));
+      }
+      rethrow;
+    }
+
+    if (sw != null) {
+      dbg.log(DebugLogEntry(
+        timestamp: DateTime.now(),
+        method: 'SOAP',
+        endpoint: methodName,
+        requestData: DebugLogService.maskFields(fields),
+        httpStatus: res.statusCode,
+        responsePreview: DebugLogService.preview(res.body),
+        durationMs: sw.elapsedMilliseconds,
+        ok: res.statusCode == 200,
+      ));
+    }
 
     if (res.statusCode != 200) {
       throw SoapException('HTTP ${res.statusCode}',

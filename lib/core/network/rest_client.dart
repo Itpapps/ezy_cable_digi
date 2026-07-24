@@ -223,4 +223,46 @@ class RestClient {
     }
     return map;
   }
+
+  /// DIAGNOSTIC (TEMPORARY) — same request as [postEncrypted], but decodes the
+  /// response `hash` field instead of `payload`, to check whether the server's
+  /// two fields disagree for an endpoint. Remove once the backend is confirmed.
+  Future<Map<String, dynamic>> postEncryptedHash(
+    String url,
+    Map<String, String> params, {
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final paramsJson = jsonEncode(params);
+    final hash = DigiCrypto.hexconv(paramsJson);
+    final body = jsonEncode({
+      'payload': DigiCrypto.encryptions(hash),
+      'env_key': DigiCrypto.envKey(),
+      'hash': hash,
+    });
+    final methodName =
+        url.contains('/digi_rest_api/') ? url.split('/digi_rest_api/').last : '';
+    final res = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': _userAgent,
+            'apitoken': DigiCrypto.apiToken(methodName),
+          },
+          body: body,
+        )
+        .timeout(timeout);
+    if (res.statusCode != 200) {
+      throw RestException('HTTP ${res.statusCode}', statusCode: res.statusCode);
+    }
+    final outer = jsonDecode(res.body);
+    if (outer is! Map || outer['hash'] == null) {
+      throw RestException('Unexpected response (no hash)');
+    }
+    final inner = jsonDecode(DigiCrypto.hexToString(outer['hash'].toString()));
+    if (inner is! Map) {
+      throw RestException('hash did not decode to JSON');
+    }
+    return Map<String, dynamic>.from(inner);
+  }
 }

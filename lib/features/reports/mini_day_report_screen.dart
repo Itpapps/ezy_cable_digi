@@ -1,4 +1,4 @@
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -129,9 +129,10 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
               letterSpacing: 1.1, color: t.appBarFg),
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             // ── Print button row ──────────────────────────────────────────
             Material(
@@ -176,28 +177,45 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                 color: t.cardBg,
                 borderRadius: t.cardBorderRadius,
                 boxShadow: [
-                  BoxShadow(color: t.cardShadowColor, blurRadius: 12, offset: const Offset(0, 4)),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
                 ],
               ),
               child: Column(
                 children: [
-                  // Header row
+                  // Header row — fixed 3-column grid so values line up (Android parity)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(AppStrings.of(context, 'mode'),
-                          style: TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 13, color: t.cardHeadingText)),
-                      Text(AppStrings.of(context, 'count'),
-                          style: TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 13, color: t.cardHeadingText)),
-                      Text(AppStrings.of(context, 'amount'),
-                          style: TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 13, color: t.cardHeadingText)),
+                      Expanded(
+                        flex: 4,
+                        child: Text(AppStrings.of(context, 'mode'),
+                            style: TextStyle(fontWeight: FontWeight.w800,
+                                fontSize: 13, color: t.cardHeadingText)),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(AppStrings.of(context, 'count'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w800,
+                                fontSize: 13, color: t.cardHeadingText)),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Text(AppStrings.of(context, 'amount'),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(fontWeight: FontWeight.w800,
+                                fontSize: 13, color: t.cardHeadingText)),
+                      ),
                     ],
                   ),
 
-                  Divider(height: 20, color: t.dividerColor),
+                  Divider(
+                      height: 20,
+                      thickness: 1,
+                      color: t.accent.withValues(alpha: 0.25)),
 
                   if (_loading)
                     const Padding(
@@ -232,21 +250,30 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                       ),
                     ],
 
-                    Divider(height: 20, color: t.dividerColor),
+                    Divider(
+                      height: 20,
+                      thickness: 1,
+                      color: t.accent.withValues(alpha: 0.25)),
 
-                    // Total row
+                    // Total row — amount aligned under the AMOUNT column
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          AppStrings.of(context, 'total_collection'),
-                          style: TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 14, color: t.accent),
+                        Expanded(
+                          flex: 6,
+                          child: Text(
+                            AppStrings.of(context, 'total_collection'),
+                            style: TextStyle(fontWeight: FontWeight.w800,
+                                fontSize: 14, color: t.accent),
+                          ),
                         ),
-                        Text(
-                          '₹${_data.totalAmount}',
-                          style: TextStyle(fontWeight: FontWeight.w800,
-                              fontSize: 14, color: t.accent),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            '₹${_data.totalAmount}',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(fontWeight: FontWeight.w800,
+                                fontSize: 14, color: t.accent),
+                          ),
                         ),
                       ],
                     ),
@@ -277,11 +304,24 @@ class _ReportRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
-        Text(count,  style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
-        Text(amount, style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+        Expanded(
+          flex: 4,
+          child: Text(label,
+              style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+        ),
+        Expanded(
+          flex: 2,
+          child: Text(count,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+        ),
+        Expanded(
+          flex: 3,
+          child: Text(amount,
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+        ),
       ],
     );
   }

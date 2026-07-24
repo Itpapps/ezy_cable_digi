@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:ezi_cable_digi/core/config/app_config.dart';
+import 'package:ezy_cable_digi/core/config/app_config.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/data/customer.dart';

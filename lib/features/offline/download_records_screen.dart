@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_sync_service.dart';
@@ -132,15 +133,33 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('DOWNLOAD RECORDS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.backBtnBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'DOWNLOAD RECORDS',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
+              letterSpacing: 1.1, color: t.appBarFg),
+        ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -164,20 +183,40 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  InkWell(
-                    onTap: _download,
-                    child: Column(
-                      children: [
-                        const Icon(Icons.download, color: Colors.red, size: 56),
-                        const Text(
-                          'DOWNLOAD',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
                         ),
                       ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _download,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.download, color: Colors.red, size: 56),
+                              Text(
+                                'DOWNLOAD',
+                                style: TextStyle(
+                                  color: t.cardHeadingText,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -204,6 +243,13 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

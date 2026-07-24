@@ -1,4 +1,4 @@
-name: ezi_cable_digi
+name: ezy_cable_digi
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -67,6 +67,7 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   intl: ^0.20.2
   webview_flutter: ^4.14.0
+  flutter_html: ^3.0.0
 
 dev_dependencies:
   flutter_test:

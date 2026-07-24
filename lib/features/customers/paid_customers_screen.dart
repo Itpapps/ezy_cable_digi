@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import 'data/paid_customer.dart';
 import 'data/paid_customers_repository.dart';
 
@@ -26,8 +26,18 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
   List<PaidCustomer> _items = const [];
 
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   // Android `paid_month` = "(month)-(year)", month NOT zero-padded (e.g. "7-2026").
@@ -45,8 +55,9 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
       _loading = true;
       _error = false;
     });
-    final r = await PaidCustomersRepository.instance
-        .getPaidCustomers(paidMonth: _paidMonth);
+    final r = await PaidCustomersRepository.instance.getPaidCustomers(
+      paidMonth: _paidMonth,
+    );
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -56,8 +67,9 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
       } else if (r.statusCode == 1) {
         _items = const [];
         _error = false;
-        _message =
-            r.statusMessage.isEmpty ? 'No Details Found!' : r.statusMessage;
+        _message = r.statusMessage.isEmpty
+            ? 'No Details Found!'
+            : r.statusMessage;
       } else {
         _items = const [];
         _error = true;
@@ -79,91 +91,160 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     final content = Column(
-        children: [
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _pickMonth,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFCBD5F5)),
-                        borderRadius: BorderRadius.circular(8),
+      children: [
+        // Filter card — a floating rounded card (was a flat edge-to-edge white
+        // strip). Only the LOOK changes: the month picker (_pickMonth) and the
+        // Search action (_load) are byte-for-byte the same.
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: t.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: t.isLight
+                ? Border.all(color: t.inputBorderColor.withValues(alpha: 0.6))
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: t.isLight ? 0.05 : 0.12),
+                blurRadius: t.isLight ? 12 : 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: _pickMonth,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: t.accent.withValues(alpha: 0.06),
+                    border: Border.all(
+                      color: t.inputBorderColor.withValues(alpha: 0.5),
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_month_rounded,
+                        size: 18,
+                        color: t.accent,
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_month,
-                              size: 18, color: AppColors.primary),
-                          const SizedBox(width: 8),
-                          Text(_monthLabel,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700)),
-                        ],
+                      const SizedBox(width: 8),
+                      Text(
+                        _monthLabel,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: t.cardBodyText,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.search_rounded, size: 18),
+                  label: const Text(
+                    'Search',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: t.accent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _loading ? null : _load,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
+              ),
+            ],
+          ),
+        ),
+        if (!_loading && !_error && _items.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: t.accent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.people_alt_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Total Count',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: const Text('Search',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+                const Spacer(),
+                Text(
+                  '${_items.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ],
             ),
           ),
-          if (!_loading && !_error && _items.isNotEmpty)
-            Container(
-              width: double.infinity,
-              color: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Text('Total Count ${_items.length}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700)),
-            ),
-          Expanded(child: _body()),
-        ],
+        Expanded(child: _body()),
+      ],
     );
     // Embedded (Customer List "Paid List" tab) → no Scaffold/app bar; the tab
     // sits under the Customer List's app bar. Standalone (drawer) → full screen.
     if (widget.embedded) {
-      return Container(color: AppColors.primary, child: content);
+      return Container(color: t.scaffoldBg, child: content);
     }
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
         title: const Text('PAID CUSTOMERS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
       ),
       body: content,
     );
   }
 
   Widget _body() {
+    final t = AppThemeConst.of(context);
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_error) {
       return _message_(Icons.error_outline_rounded, _message);
     }
     if (_items.isEmpty) {
-      return _message_(Icons.info_outline_rounded,
-          _message.isEmpty ? 'No Details Found!' : _message);
+      return _message_(
+        Icons.info_outline_rounded,
+        _message.isEmpty ? 'No Details Found!' : _message,
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
@@ -173,25 +254,29 @@ class _PaidCustomersScreenState extends State<PaidCustomersScreen> {
   }
 
   Widget _message_(IconData icon, String text) {
+    final t = AppThemeConst.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white70, size: 44),
+            Icon(icon, color: t.subtitleText, size: 44),
             const SizedBox(height: 12),
-            Text(text,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 15)),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: t.bodyText, fontSize: 15),
+            ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary),
+                backgroundColor: t.accent,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
@@ -206,12 +291,13 @@ class _PaidCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     final c = customer;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: t.cardBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -220,48 +306,66 @@ class _PaidCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(c.name.isEmpty ? '-' : c.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.primary)),
+                child: Text(
+                  c.name.isEmpty ? '-' : c.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: t.cardHeadingText,
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.35),
+                  ),
                 ),
-                child: Text('₹${c.lastPaidAmount.isEmpty ? '0' : c.lastPaidAmount}',
-                    style: TextStyle(
-                        color: Colors.green.shade700,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12)),
+                child: Text(
+                  '₹${c.lastPaidAmount.isEmpty ? '0' : c.lastPaidAmount}',
+                  style: TextStyle(
+                    color: Colors.green.shade700,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          _row('LCO Customer id', c.altCustomNumber),
-          _row('Last Paid Date', c.lastPaidDate),
-          if (c.mobileNo.trim().isNotEmpty) _row('Mobile', c.mobileNo),
-          _row('This Month Pending',
-              '₹${c.thisMonthPending.isEmpty ? '0' : c.thisMonthPending}'),
+          _row('LCO Customer id', c.altCustomNumber, t),
+          _row('Last Paid Date', c.lastPaidDate, t),
+          if (c.mobileNo.trim().isNotEmpty) _row('Mobile', c.mobileNo, t),
+          _row(
+            'This Month Pending',
+            '₹${c.thisMonthPending.isEmpty ? '0' : c.thisMonthPending}',
+            t,
+          ),
         ],
       ),
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, AppThemeConst t) {
     return Padding(
       padding: const EdgeInsets.only(top: 3),
-      child: Text('$label : ${value.trim().isEmpty ? 'NA' : value}',
-          style: const TextStyle(
-              fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600)),
+      child: Text(
+        '$label : ${value.trim().isEmpty ? 'NA' : value}',
+        style: TextStyle(
+          fontSize: 12,
+          color: t.cardSubtitleText,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

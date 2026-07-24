@@ -51,6 +51,10 @@ class DigiCrypto {
     return x;
   }
 
+  /// DIAGNOSTIC — decode ONE hex layer. The digi_rest_api response `hash` field
+  /// is `hexconv(json)` (a single hex layer), so this reverses it back to JSON.
+  static String hexToString(String hex) => _layer(hex);
+
   /// The fixed env-key envelope value sent with every request.
   static String envKey() =>
       encryptions(hexconv('{"app_env_key":"selfcareapps"}'));

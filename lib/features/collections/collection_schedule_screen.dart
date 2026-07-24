@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import '../../core/constants/app_colors.dart';
 import 'data/pay_later.dart';
 import 'data/pay_later_repository.dart';

@@ -1,16 +1,17 @@
-import 'package:ezi_cable_digi/bluetooth/bluetooth_devices_screen.dart';
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
-import 'package:ezi_cable_digi/features/event/event_management_screen.dart';
-import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
-import 'package:ezi_cable_digi/features/offline/download_records_screen.dart';
-import 'package:ezi_cable_digi/features/reports/mini_day_report_screen.dart';
-import 'package:ezi_cable_digi/features/reports/monthly_report_screen.dart';
-import 'package:ezi_cable_digi/features/scan/scan_customer_screen.dart';
-import 'package:ezi_cable_digi/features/search/search_customer_screen.dart';
+import 'package:ezy_cable_digi/bluetooth/bluetooth_devices_screen.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/features/event/event_management_screen.dart';
+import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
+import 'package:ezy_cable_digi/features/offline/download_records_screen.dart';
+import 'package:ezy_cable_digi/features/reports/mini_day_report_screen.dart';
+import 'package:ezy_cable_digi/features/reports/monthly_report_screen.dart';
+import 'package:ezy_cable_digi/features/scan/scan_customer_screen.dart';
+import 'package:ezy_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:lottie/lottie.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/data/customer.dart';
 import '../payment/payment_options_screen.dart';
 import '../complaints/complaints_screen.dart';
@@ -22,6 +23,7 @@ import '../notifications/data/notification_repository.dart';
 import '../notifications/login_notification_dialog.dart';
 import '../../core/services/session_service.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../main.dart';
@@ -46,8 +48,10 @@ class _TicketItem {
   final String customerId;
   final _TicketStatus status;
   final String? statusLabel; // real status text (complaints); null → use enum
-  final String altCustomerId;   // alt_cust_id from OpenComplaint (complaints feed)
-  final String realComplaintId; // complaint_id from OpenComplaint (complaints feed)
+  final String
+  altCustomerId; // alt_cust_id from OpenComplaint (complaints feed)
+  final String
+  realComplaintId; // complaint_id from OpenComplaint (complaints feed)
 
   const _TicketItem({
     required this.ticketId,
@@ -96,6 +100,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   }
 
   int _selectedTab = 0;
+  bool _statsCollapsed = false;
   _FeedType _feed = _FeedType.complaints;
 
   // Client-side "Load more" — the APIs return the full list (no server paging,
@@ -131,9 +136,12 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                 label: Text('Load more (${total - shown} more)'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
-                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  side: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                  ),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
               ),
             ),
@@ -150,7 +158,6 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     if (mounted) setState(() {});
   }
 
-
   // DUMMY login-notification popup — one-shot guard so it shows only once.
   bool _notificationShown = false;
 
@@ -161,12 +168,14 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
     _dash.addListener(_onDash);
     _dash.loadKpis();
-    _dash.loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
+    _dash
+        .loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
     _dash.loadComplaints(); // Complaints is the default feed tab.
     // DUMMY login notification popup (demo only). Comment out this line to
     // disable it until the real API is ready.
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _showLoginNotification());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _showLoginNotification(),
+    );
   }
 
   // DUMMY login notification popup — runs once after the first frame, over the
@@ -175,12 +184,14 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   Future<void> _showLoginNotification() async {
     if (_notificationShown || !mounted) return;
     _notificationShown = true;
-    final n = await NotificationRepository.instance.fetchLoginNotification();
-    if (n == null || !mounted) return;
+    // ALL notifications in ONE scrollable popup (not multiple popups).
+    final list = await NotificationRepository.instance
+        .fetchLoginNotifications();
+    if (list.isEmpty || !mounted) return;
     await showPremiumDialog<void>(
       context: context,
       barrierDismissible: false,
-      child: LoginNotificationDialog(notification: n),
+      child: LoginNotificationDialog(notifications: list),
     );
   }
 
@@ -231,6 +242,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // ── Build ──────
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     // Back on a sub-tab returns to the Dashboard tab; back on the Dashboard tab
     // shows Android's "Close Application?" confirm before exiting the app
     // (DashboardHomeFragment OnBackPressedCallback:172-209 parity).
@@ -256,280 +268,464 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         }
       },
       child: Scaffold(
-      drawer: const AppDrawer(),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(62),
-        child: _PremiumAppBar(),
-      ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: _selectedTab,
-        onChanged: (i) => setState(() => _selectedTab = i),
-      ),
-      body: _selectedTab == 0
-          ? Container(
-              color: AppColors.primary,
-              // Android parity: the KPI cards + quick actions form a FIXED header
-              // (the page no longer scrolls as one unit); only the feed scrolls.
-              // Bottom padding 0 → the white feed card reaches the bottom nav.
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── itp label ─────────────────────────────────────────────────
-                    Text(
-                      SessionService.instance.businessName.isNotEmpty
-                          ? SessionService.instance.businessName
-                          : 'itp',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 9),
-
-                    // ── Row 1: 3 Gradient Summary Cards ───────────────────────────
-                    // Due Amount  → deep blue-to-sky  
-                    // Month Billing → rose-to-pink    
-                    // Onetime Ch…  → amber-to-orange  
-                    IntrinsicHeight(
-                      child: Row(
+        drawer: const AppDrawer(),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(62),
+          child: _PremiumAppBar(),
+        ),
+        bottomNavigationBar: BottomNavBar(
+          currentIndex: _selectedTab,
+          onChanged: (i) => setState(() => _selectedTab = i),
+        ),
+        body: _selectedTab == 0
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Fixed-blue hero: business header + KPI + Quick Actions.
+                  //    Full-bleed blue in BOTH themes (3-B2 will NOT touch this).
+                  Container(
+                    color: t.scaffoldBg,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: _GradientSummaryCard(
-                              title: AppStrings.of(context, 'due_amount'),
-                              amount: _dash.dueAmountText,
-                              subtitle: '',
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFFB91C1C),
-                                  Color(0xFFEF4444),
-                                  Color(0xFFFB7185),
-                                ],
-                                stops: [0.0, 0.55, 1.0],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                          // ── itp label ─────────────────────────────────────────────────
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  SessionService
+                                          .instance
+                                          .businessName
+                                          .isNotEmpty
+                                      ? SessionService.instance.businessName
+                                      : 'itp',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: t.headingText,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                               ),
-                              icon: Iconsax.receipt_item,
+                              IconButton(
+                                onPressed: () => setState(
+                                  () => _statsCollapsed = !_statsCollapsed,
+                                ),
+                                icon: Icon(
+                                  _statsCollapsed
+                                      ? Icons.keyboard_arrow_down
+                                      : Icons.keyboard_arrow_up,
+                                  color: t.headingText,
+                                ),
+                                tooltip: _statsCollapsed
+                                    ? 'Show summary'
+                                    : 'Hide summary',
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                          // Collapsible gradient stat cards (Row 1 + Row 2).
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            alignment: Alignment.topCenter,
+                            child: _statsCollapsed
+                                ? SingleChildScrollView(
+                                    // Compact summary when collapsed — a horizontally
+                                    // scrollable ticker (swipe if it overflows), so
+                                    // big amounts stay full-size. Read-only.
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        for (final chip
+                                            in <(String, String, Color)>[
+                                              (
+                                                'Due',
+                                                _dash.dueAmountText,
+                                                const Color(0xFFEF4444),
+                                              ),
+                                              (
+                                                'Bill',
+                                                _dash.monthBillingText,
+                                                const Color(0xFFF97316),
+                                              ),
+                                              (
+                                                'Onetime',
+                                                _dash.onetimeChargesText,
+                                                const Color(0xFF26C6DA),
+                                              ),
+                                              if (_dash.showLcoWallet)
+                                                (
+                                                  'Wallet',
+                                                  _dash.lcoWalletText,
+                                                  const Color(0xFF22C55E),
+                                                ),
+                                              (
+                                                'Coll',
+                                                _dash.collectionsText,
+                                                const Color(0xFF8B5CF6),
+                                              ),
+                                            ])
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              right: 14,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: BoxDecoration(
+                                                    color: chip.$3,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Text(
+                                                  '${chip.$1}: ${chip.$2}',
+                                                  style: TextStyle(
+                                                    color: t.headingText,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  )
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 9),
+
+                                      // ── Row 1: 3 Gradient Summary Cards ───────────────────────────
+                                      // Due Amount  → deep blue-to-sky
+                                      // Month Billing → rose-to-pink
+                                      // Onetime Ch…  → amber-to-orange
+                                      IntrinsicHeight(
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: _GradientSummaryCard(
+                                                title: AppStrings.of(
+                                                  context,
+                                                  'due_amount',
+                                                ),
+                                                amount: _dash.dueAmountText,
+                                                subtitle: '',
+                                                gradient: const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFFB91C1C),
+                                                    Color(0xFFEF4444),
+                                                    Color(0xFFFB7185),
+                                                  ],
+                                                  stops: [0.0, 0.55, 1.0],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                icon: Iconsax.receipt_item,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: _GradientSummaryCard(
+                                                title: AppStrings.of(
+                                                  context,
+                                                  'month_billing',
+                                                ),
+                                                amount: _dash.monthBillingText,
+                                                subtitle: AppStrings.of(
+                                                  context,
+                                                  'this_month',
+                                                ),
+                                                gradient: const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFFEA580C),
+                                                    Color(0xFFF97316),
+                                                    Color(0xFFFBBF24),
+                                                  ],
+                                                  stops: [0.0, 0.5, 1.0],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                icon: Iconsax.calendar_tick,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: _GradientSummaryCard(
+                                                title: AppStrings.of(
+                                                  context,
+                                                  'onetime_charges',
+                                                ),
+                                                amount:
+                                                    _dash.onetimeChargesText,
+                                                subtitle: AppStrings.of(
+                                                  context,
+                                                  'installations',
+                                                ),
+                                                gradient: const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFF0277BD),
+                                                    Color(0xFF0288D1),
+                                                    Color(0xFF26C6DA),
+                                                  ],
+                                                  stops: [0.0, 0.45, 1.0],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                icon: Iconsax.flash_circle,
+                                                useDarkText: false,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 10),
+
+                                      // ── Row 2: LCO Wallet + Collections ───────────────────────────
+                                      // LCO Wallet  → green-to-cyan  (existing — premium mixing)
+                                      // Collections → purple-to-violet matching the same diagonal style
+                                      IntrinsicHeight(
+                                        child: Row(
+                                          children: [
+                                            // LCO Wallet — Android shows this card only when
+                                            // useLcoDeposit==1 (ll_lcowallet visibility); else hidden
+                                            // and Collections spans full width.
+                                            if (_dash.showLcoWallet) ...[
+                                              Expanded(
+                                                child: _LottieHighlightCard(
+                                                  title: AppStrings.of(
+                                                    context,
+                                                    'lco_wallet',
+                                                  ),
+                                                  amount: _dash.lcoWalletText,
+                                                  subtitle: AppStrings.of(
+                                                    context,
+                                                    'available',
+                                                  ),
+                                                  gradient:
+                                                      const LinearGradient(
+                                                        colors: [
+                                                          Color(0xFF22C55E),
+                                                          Color(0xFF0EA5E9),
+                                                        ],
+                                                        begin:
+                                                            Alignment.topLeft,
+                                                        end: Alignment
+                                                            .bottomRight,
+                                                      ),
+                                                  lottieAsset:
+                                                      'assets/Wallet Animation.json',
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                            ],
+                                            Expanded(
+                                              child: _LottieHighlightCard(
+                                                title: AppStrings.of(
+                                                  context,
+                                                  'collections',
+                                                ),
+                                                amount: _dash.collectionsText,
+                                                subtitle: AppStrings.of(
+                                                  context,
+                                                  'today',
+                                                ),
+                                                gradient: const LinearGradient(
+                                                  colors: [
+                                                    Color(0xFFEC4899),
+                                                    Color(0xFF8B5CF6),
+                                                    Color(0xFF4F46E5),
+                                                  ],
+                                                  stops: [0.0, 0.5, 1.0],
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                ),
+                                                lottieAsset:
+                                                    'assets/Growth Chart.json',
+                                                // Android parity: Collections card tap opens the
+                                                // Employee Collection report (Report_EmpCollect →
+                                                // MonthlyReportScreen), same target as the Monthly
+                                                // Report quick-action and Reports Home tile.
+                                                onTap: () => Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        const MonthlyReportScreen(),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          // ── Row 3: Quick Actions — horizontal scroll ───────────────────
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF3FF),
+                              borderRadius: BorderRadius.circular(18),
+                              // Premium Light: a hairline border + slightly
+                              // stronger shadow so the pale card separates from
+                              // the light body. Theme 1 (blue bg) unchanged.
+                              border: t.isLight
+                                  ? Border.all(color: t.inputBorderColor)
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.12),
+                                  blurRadius: t.isLight ? 16 : 12,
+                                  spreadRadius: t.isLight ? 1 : 0,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 6,
+                            ),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                children: [
+                                  _QuickActionTile(
+                                    icon: Iconsax.user_tag,
+                                    label: AppStrings.of(
+                                      context,
+                                      'customer_list',
+                                    ),
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const CustomerListScreen(),
+                                      ),
+                                    ),
+                                  ),
+                                  _QuickActionTile(
+                                    icon: Iconsax.document_download,
+                                    label: AppStrings.of(
+                                      context,
+                                      'download_data_btn',
+                                    ),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const DownloadRecordsScreen(),
+                                      ),
+                                    ),
+                                  ),
+                                  _QuickActionTile(
+                                    icon: Iconsax.search_status,
+                                    label: AppStrings.of(
+                                      context,
+                                      'offline_search',
+                                    ),
+                                    onTap: () async {
+                                      if (!await offlineDataMatchesDealer()) {
+                                        if (!context.mounted) return;
+                                        await showIdMismatch(context);
+                                        return;
+                                      }
+                                      if (!context.mounted) return;
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const OfflineDashboardScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  _QuickActionTile(
+                                    icon: Iconsax.calendar_1,
+                                    label: AppStrings.of(
+                                      context,
+                                      'miniday_report_btn',
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MiniDayReportScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  _QuickActionTile(
+                                    icon: Iconsax.chart_2,
+                                    label: AppStrings.of(
+                                      context,
+                                      'monthly_report_btn',
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MonthlyReportScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  _QuickActionTile(
+                                    icon: Iconsax.setting_2,
+                                    label: AppStrings.of(
+                                      context,
+                                      'settings_btn',
+                                    ),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const PrinterSettingsScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _GradientSummaryCard(
-                              title: AppStrings.of(context, 'month_billing'),
-                              amount: _dash.monthBillingText,
-                              subtitle: AppStrings.of(context, 'this_month'),
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFFEA580C),
-                                  Color(0xFFF97316),
-                                  Color(0xFFFBBF24),
-                                ],
-                                stops: [0.0, 0.5, 1.0],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              icon: Iconsax.calendar_tick,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _GradientSummaryCard(
-                              title: AppStrings.of(context, 'onetime_charges'),
-                              amount: _dash.onetimeChargesText,
-                              subtitle: AppStrings.of(context, 'installations'),
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFF0277BD),
-                                  Color(0xFF0288D1),
-                                  Color(0xFF26C6DA),
-                                ],
-                                stops: [0.0, 0.45, 1.0],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              icon: Iconsax.flash_circle,
-                              useDarkText: false,
-                            ),
-                          ),
-                        ],
+                        ], // close hero inner Column children (A,B,C,D)
+                      ), // close hero inner Column
+                    ), // close hero Padding
+                  ), // close hero Container
+                  // ── Blue feed backdrop — the ONLY thing 3-B2 will re-theme.
+                  //    3-B1: still AppColors.primary → no visual change.
+                  Expanded(
+                    child: Container(
+                      color: t.scaffoldBg,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                        child: _buildFeedSection(),
                       ),
                     ),
-
-                    const SizedBox(height: 10),
-
-                    // ── Row 2: LCO Wallet + Collections ───────────────────────────
-                    // LCO Wallet  → green-to-cyan  (existing — premium mixing)
-                    // Collections → purple-to-violet matching the same diagonal style
-                    IntrinsicHeight(
-                      child: Row(
-                        children: [
-                          // LCO Wallet — Android shows this card only when
-                          // useLcoDeposit==1 (ll_lcowallet visibility); else hidden
-                          // and Collections spans full width.
-                          if (_dash.showLcoWallet) ...[
-                            Expanded(
-                              child: _LottieHighlightCard(
-                                title: AppStrings.of(context, 'lco_wallet'),
-                                amount: _dash.lcoWalletText,
-                                subtitle: AppStrings.of(context, 'available'),
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF22C55E), Color(0xFF0EA5E9)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                lottieAsset: 'assets/Wallet Animation.json',
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                          ],
-                          Expanded(
-                            child: _LottieHighlightCard(
-                              title: AppStrings.of(context, 'collections'),
-                              amount: _dash.collectionsText,
-                              subtitle: AppStrings.of(context, 'today'),
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFFEC4899),
-                                  Color(0xFF8B5CF6),
-                                  Color(0xFF4F46E5),
-                                ],
-                                stops: [0.0, 0.5, 1.0],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              lottieAsset: 'assets/Growth Chart.json',
-                              // Android parity: Collections card tap opens the
-                              // Employee Collection report (Report_EmpCollect →
-                              // MonthlyReportScreen), same target as the Monthly
-                              // Report quick-action and Reports Home tile.
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const MonthlyReportScreen(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // ── Row 3: Quick Actions — horizontal scroll ───────────────────
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF3FF),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.12),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 6,
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: [
-                            _QuickActionTile(
-                              icon: Iconsax.user_tag,
-                              label: AppStrings.of(context, 'customer_list'),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const CustomerListScreen(),
-                                ),
-                              ),
-                            ),
-                            _QuickActionTile(
-                              icon: Iconsax.document_download,
-                              label: AppStrings.of(context, 'download_data_btn'),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const DownloadRecordsScreen(),
-                                ),
-                              ),
-                            ),
-                            _QuickActionTile(
-                              icon: Iconsax.search_status,
-                              label: AppStrings.of(context, 'offline_search'),
-                              onTap: () async{
-                                if(!await offlineDataMatchesDealer()){
-                                  if(!context.mounted)return;
-                                  await showIdMismatch(context);
-                                  return;
-                                }
-                                if(!context.mounted)return;
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_)=> const OfflineDashboardScreen(),
-                                  ),
-                                );
-                              }
-                            ),
-                            _QuickActionTile(
-                              icon: Iconsax.calendar_1,
-                              label: AppStrings.of(context, 'miniday_report_btn'),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const MiniDayReportScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _QuickActionTile(
-                              icon: Iconsax.chart_2,
-                              label: AppStrings.of(context, 'monthly_report_btn'),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const MonthlyReportScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _QuickActionTile(
-                              icon: Iconsax.setting_2,
-                              label: AppStrings.of(context, 'settings_btn'),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const PrinterSettingsScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // White card → Expanded: only the feed scrolls; the KPI cards
-                    // and quick actions above stay fixed (Android parity).
-                    Expanded(child: _buildFeedSection()),
-                  ],
-                ),
-              ),
-            )
-          : _getScreen(),
+                  ),
+                ], // close outer Column children
+              ) // close outer Column
+            : _getScreen(),
       ),
     );
   }
@@ -620,12 +816,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
               ),
             ),
           ),
-          const Divider(
-            height: 1,
-            thickness: 0.6,
-            indent: 12,
-            endIndent: 12,
-          ),
+          const Divider(height: 1, thickness: 0.6, indent: 12, endIndent: 12),
           // The feed fills the remaining card height and is the ONLY thing that
           // scrolls (the tab chips above stay fixed). LayoutBuilder + a viewport
           // min-height keeps the empty/error messages vertically CENTERED (restored)
@@ -635,17 +826,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
             child: LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
                 child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(minHeight: constraints.maxHeight),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
                     child: _feed == _FeedType.unpaid
                         ? _buildUnpaidFeed()
                         : _feed == _FeedType.complaints
-                            ? _buildComplaintsFeed()
-                            : _feed == _FeedType.payLater
-                                ? _buildPayLaterFeed()
-                                : _buildNearestFeed(),
+                        ? _buildComplaintsFeed()
+                        : _feed == _FeedType.payLater
+                        ? _buildPayLaterFeed()
+                        : _buildNearestFeed(),
                   ),
                 ),
               ),
@@ -679,10 +869,8 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     return _pagedListView(
       total: list.length,
       cap: 10, // Android UnpaidNewAdapter caps the dashboard preview at 10.
-      itemBuilder: (_, i) => _UnpaidCard(
-        customer: list[i],
-        isLast: i == list.length - 1,
-      ),
+      itemBuilder: (_, i) =>
+          _UnpaidCard(customer: list[i], isLast: i == list.length - 1),
     );
   }
 
@@ -708,7 +896,8 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     }
     return _pagedListView(
       total: list.length,
-      cap: 10, // Android OpenComplaints adapter caps the dashboard preview at 10.
+      cap:
+          10, // Android OpenComplaints adapter caps the dashboard preview at 10.
       itemBuilder: (_, i) {
         final c = list[i];
         final desc = c.description.isEmpty ? c.des : c.description;
@@ -765,10 +954,8 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     }
     return _pagedListView(
       total: list.length,
-      itemBuilder: (_, i) => _PayLaterCard(
-        item: list[i],
-        isLast: i == list.length - 1,
-      ),
+      itemBuilder: (_, i) =>
+          _PayLaterCard(item: list[i], isLast: i == list.length - 1),
     );
   }
 
@@ -823,9 +1010,12 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                 label: const Text('Retry'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
-                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.4)),
+                  side: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                  ),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
               ),
             ],
@@ -834,7 +1024,6 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
       ),
     );
   }
-
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -858,11 +1047,7 @@ class _FeedSkeleton extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _bar(140, 12),
-              const SizedBox(height: 10),
-              _bar(90, 10),
-            ],
+            children: [_bar(140, 12), const SizedBox(height: 10), _bar(90, 10)],
           ),
         );
       }),
@@ -870,13 +1055,13 @@ class _FeedSkeleton extends StatelessWidget {
   }
 
   Widget _bar(double w, double h) => Container(
-        width: w,
-        height: h,
-        decoration: BoxDecoration(
-          color: const Color(0xFFD9E1F2),
-          borderRadius: BorderRadius.circular(6),
-        ),
-      );
+    width: w,
+    height: h,
+    decoration: BoxDecoration(
+      color: const Color(0xFFD9E1F2),
+      borderRadius: BorderRadius.circular(6),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1225,28 +1410,25 @@ class _FeedChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ticket Card 
+// Ticket Card
 // ─────────────────────────────────────────────────────────────────────────────
 class _TicketCard extends StatelessWidget {
   final _TicketItem item;
   final bool isLast;
   final VoidCallback? onRefresh; // called after a successful status update
 
-  const _TicketCard({
-    required this.item,
-    required this.isLast,
-    this.onRefresh,
-  });
+  const _TicketCard({required this.item, required this.isLast, this.onRefresh});
 
   /// Maps the real backend status string to its display colour.
   /// Mirrors the Android app badge colours for each known status value.
   static Color _statusColor(String s) {
     final u = s.toUpperCase();
-    if (u.contains('ASSIGN'))                         return const Color(0xFF1565C0); // blue
-    if (u.contains('PROCESS') || u.contains('PROGRESS')) return const Color(0xFFF59E0B); // amber
-    if (u.contains('HOLD'))                           return const Color(0xFFE53935); // red
-    if (u.contains('RESOLV'))                         return const Color(0xFF43A047); // green
-    if (u.contains('CLOS'))                           return const Color(0xFF757575); // grey
+    if (u.contains('ASSIGN')) return const Color(0xFF1565C0); // blue
+    if (u.contains('PROCESS') || u.contains('PROGRESS'))
+      return const Color(0xFFF59E0B); // amber
+    if (u.contains('HOLD')) return const Color(0xFFE53935); // red
+    if (u.contains('RESOLV')) return const Color(0xFF43A047); // green
+    if (u.contains('CLOS')) return const Color(0xFF757575); // grey
     return const Color(0xFF1565C0); // default → blue
   }
 
@@ -1278,9 +1460,15 @@ class _TicketCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.06),
+              color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(16),
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  width: 1,
+                ),
               ),
             ),
             child: Row(
@@ -1393,7 +1581,8 @@ class _TicketCard extends StatelessWidget {
                             complaintId: item.ticketId,
                             customerName: item.name,
                             complaint: item.description,
-                            currentStatus: item.statusLabel ??
+                            currentStatus:
+                                item.statusLabel ??
                                 (item.status == _TicketStatus.assigned
                                     ? 'ASSIGNED'
                                     : 'INPROCESS'),
@@ -1443,16 +1632,22 @@ class _UnpaidCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = customer.pendingAmount; // already '₹…' from Customer.fromJson
-    final account = customer.altCustomerId.isEmpty ? 'NA' : customer.altCustomerId;
+    final t = AppThemeConst.of(context);
+    final pending =
+        customer.pendingAmount; // already '₹…' from Customer.fromJson
+    final account = customer.altCustomerId.isEmpty
+        ? 'NA'
+        : customer.altCustomerId;
     // "LCO Customer ID" = Android alt_custom_number (customer-facing LCO id), NOT
     // lcoCustomerId (== customer_id, the internal operation key).
-    final lcoId = customer.altCustomNumber.isEmpty ? 'NA' : customer.altCustomNumber;
+    final lcoId = customer.altCustomNumber.isEmpty
+        ? 'NA'
+        : customer.altCustomNumber;
 
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F7FF),
+        color: t.cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
       ),
@@ -1496,22 +1691,25 @@ class _UnpaidCard extends StatelessWidget {
                         customer.name.isEmpty ? 'NA' : customer.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
-                          color: Colors.black87,
+                          color: t.cardBodyText,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primary.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.25)),
+                          color: AppColors.primary.withValues(alpha: 0.25),
+                        ),
                       ),
                       child: Text(
                         pending,
@@ -1527,18 +1725,18 @@ class _UnpaidCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   'Account : $account',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black54,
+                    color: t.cardSubtitleText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'LCO Customer ID : $lcoId',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black45,
+                    color: t.cardSubtitleText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1559,101 +1757,121 @@ class _NearestCard extends StatelessWidget {
   final NearestCustomerItem item;
   final bool isLast;
   const _NearestCard({required this.item, required this.isLast});
+  //google maps direction to the customer's lat/lang
+  void _openDirections(BuildContext context) {
+    if (item.latitude == 0 && item.longitude == 0) return;
+    launchUrl(
+      Uri.parse(
+        'http://maps.google.com/maps?daddr=${item.latitude},${item.longitude}',
+      ),
+      mode: LaunchMode.externalApplication,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F7FF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 17,
+    final t = AppThemeConst.of(context);
+    return GestureDetector(
+      onTap: () => _openDirections(context),
+      child: Container(
+        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+        decoration: BoxDecoration(
+          color: t.cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Name + Account
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    item.name.isEmpty ? 'NA' : item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                      color: Colors.black87,
+              const SizedBox(width: 12),
+              // Name + Account
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.name.isEmpty ? 'NA' : item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: t.cardBodyText,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.altCustomNumber.isEmpty
-                        ? 'NA'
-                        : item.altCustomNumber,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black45,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 3),
+                    Text(
+                      item.altCustomNumber.isEmpty
+                          ? 'NA'
+                          : item.altCustomNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: t.cardSubtitleText,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Distance badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF43A047).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF43A047).withValues(alpha: 0.30),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Distance badge
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF43A047).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: const Color(0xFF43A047).withValues(alpha: 0.30)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Iconsax.location, size: 13,
-                      color: Color(0xFF43A047)),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${item.distance} km',
-                    style: const TextStyle(
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Iconsax.location,
+                      size: 13,
                       color: Color(0xFF43A047),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Text(
+                      '${item.distance} km',
+                      style: const TextStyle(
+                        color: Color(0xFF43A047),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1673,17 +1891,22 @@ class _PayLaterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = item.customerName.trim().isEmpty ? 'NA' : item.customerName.trim();
-    final date = item.scheduledDate.trim().isEmpty ? 'NA' : item.scheduledDate.trim();
+    final name = item.customerName.trim().isEmpty
+        ? 'NA'
+        : item.customerName.trim();
+    final date = item.scheduledDate.trim().isEmpty
+        ? 'NA'
+        : item.scheduledDate.trim();
     final status = item.status.trim();
     final crf = item.crfno.trim();
     final amount = item.amount.trim();
     final showAmount = amount.isNotEmpty && amount != '0' && amount != '0.0';
 
+    final t = AppThemeConst.of(context);
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F7FF),
+        color: t.cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
       ),
@@ -1722,25 +1945,25 @@ class _PayLaterCard extends StatelessWidget {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
-                      color: Colors.black87,
+                      color: t.cardBodyText,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.event, size: 13, color: Colors.black45),
+                      Icon(Icons.event, size: 13, color: t.cardSubtitleText),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           'Schedule: $date',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.black54,
+                            color: t.cardSubtitleText,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1756,9 +1979,9 @@ class _PayLaterCard extends StatelessWidget {
                       ].join('    '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black45,
+                        color: t.cardSubtitleText,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1770,12 +1993,16 @@ class _PayLaterCard extends StatelessWidget {
             if (showAmount) ...[
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(20),
-                  border:
-                      Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Text(
                   '₹$amount',
@@ -1815,111 +2042,136 @@ class _PremiumAppBar extends StatelessWidget {
   const _PremiumAppBar();
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1976D2)],
-          stops: [0.0, 0.6, 1.0],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
+    final t = AppThemeConst.of(context);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Status-bar icons (time/battery/wifi) must contrast the app bar: DARK on
+      // the light Premium-Light bar, LIGHT on the blue bar — else they vanish
+      // white-on-white (the issue seen vs the reference Uber light UI).
+      // (.dark = dark icons for a light bar; .light = light icons for a dark bar)
+      value: t.isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
+      child: Container(
+        decoration: BoxDecoration(
+          color: t.isLight ? t.appBarBg : null,
+          gradient: t.isLight
+              ? null
+              : const LinearGradient(
+                  colors: [
+                    Color(0xFF0D47A1),
+                    Color(0xFF1565C0),
+                    Color(0xFF1976D2),
+                  ],
+                  stops: [0.0, 0.6, 1.0],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+          boxShadow: [
+            BoxShadow(
+              color: t.isLight
+                  ? Colors.black.withValues(alpha: 0.08)
+                  : const Color(0xFF0D47A1).withValues(alpha: 0.45),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0D47A1).withValues(alpha: 0.45),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 58,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            child: Row(
-              children: [
-                // ── Hamburger — white pill, premium exclusive touch ────────
-                Builder(
-                  builder: (ctx) => GestureDetector(
-                    onTap: () => Scaffold.of(ctx).openDrawer(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(11),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.30),
-                          width: 1,
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 58,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              child: Row(
+                children: [
+                  // ── Hamburger — white pill, premium exclusive touch ────────
+                  Builder(
+                    builder: (ctx) => GestureDetector(
+                      onTap: () => Scaffold.of(ctx).openDrawer(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
                         ),
-                      ),
-                      child: const Icon(
-                        Iconsax.menu_1,
-                        color: Colors.white,
-                        size: 22,
+                        decoration: BoxDecoration(
+                          color: t.appBarFg.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: t.appBarFg.withValues(alpha: 0.30),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Iconsax.menu_1,
+                          color: t.appBarFg,
+                          size: 22,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                // ── Logo centred ───────────────────────────────────────────
-                const SizedBox(width: 8.0),
-                const Spacer(),
-                // Android parity (MainActivity toolbar_logo:384-408): tapping the
-                // logo returns to the Dashboard home. Flutter's logo lives only on
-                // the dashboard scaffold, so from a sub-tab this jumps back to the
-                // Dashboard tab (deep screens use their own back button).
-                GestureDetector(
-                  onTap: () => context
-                      .findAncestorStateOfType<DashboardScreenState>()
-                      ?.setTab(0),
-                  child: Image.asset(
-                    _appBarLogoAsset(),
-                    height: 42,
-                    fit: BoxFit.contain,
+                  // ── Logo centred ───────────────────────────────────────────
+                  const SizedBox(width: 8.0),
+                  const Spacer(),
+                  // Android parity (MainActivity toolbar_logo:384-408): tapping the
+                  // logo returns to the Dashboard home. Flutter's logo lives only on
+                  // the dashboard scaffold, so from a sub-tab this jumps back to the
+                  // Dashboard tab (deep screens use their own back button).
+                  GestureDetector(
+                    onTap: () => context
+                        .findAncestorStateOfType<DashboardScreenState>()
+                        ?.setTab(0),
+                    child: Image.asset(
+                      _appBarLogoAsset(),
+                      height: 42,
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                // ── Action icons with pill containers ────────────────────
-                _AppBarIcon(
-                  icon: Iconsax.search_normal,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SearchCustomerScreen()),
+                  const Spacer(),
+                  // ── Action icons with pill containers ────────────────────
+                  _AppBarIcon(
+                    icon: Iconsax.search_normal,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SearchCustomerScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                _AppBarIcon(
-                  icon: Iconsax.bluetooth,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BluetoothDevicesScreen()),
+                  const SizedBox(width: 4),
+                  _AppBarIcon(
+                    icon: Iconsax.bluetooth,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const BluetoothDevicesScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                _AppBarIcon(
-                  icon: Iconsax.calendar,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const EventManagementScreen()),
+                  const SizedBox(width: 4),
+                  _AppBarIcon(
+                    icon: Iconsax.calendar,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const EventManagementScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                _AppBarIcon(
-                  icon: Iconsax.scan_barcode,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ScanCustomerScreen()),
+                  const SizedBox(width: 4),
+                  _AppBarIcon(
+                    icon: Iconsax.scan_barcode,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ScanCustomerScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                // ── Language switcher ──────────────────────────────────────
-                _AppBarIcon(
-                  icon: Icons.language_rounded,
-                  onTap: () => showLanguagePicker(context),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  // ── Language switcher ──────────────────────────────────────
+                  _AppBarIcon(
+                    icon: Icons.language_rounded,
+                    onTap: () => showLanguagePicker(context),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1939,19 +2191,20 @@ class _AppBarIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(7),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.14),
+          color: t.appBarFg.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.22),
+            color: t.appBarFg.withValues(alpha: 0.22),
             width: 0.8,
           ),
         ),
-        child: Icon(icon, color: Colors.white, size: 20),
+        child: Icon(icon, color: t.appBarFg, size: 20),
       ),
     );
   }

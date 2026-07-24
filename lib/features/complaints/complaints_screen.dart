@@ -92,6 +92,7 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,
+        shape: Border(bottom: BorderSide(color: t.appBarBorderColor, width: 1)),
         centerTitle: true,
         // This screen is the dashboard's "Complaints" tab body (not a pushed
         // route), so it must NOT show a back arrow — popping here would pop the

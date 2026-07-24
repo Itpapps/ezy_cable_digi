@@ -482,6 +482,38 @@ class PackageOperationsRepository {
       return const PackageWriteResult(3, 'Could not connect to server.');
     }
   }
+  // ── serviceExtension (serext) — per-package Extend Service (the [+] inside
+  // Remove Services). VERIFIED (DeactiveAdapter_listview.java:200-289;
+  // configg serext=/packagelist/serviceExtension). POST params: dealer_id, imei,
+  // authtoken, customer_id, product_id (= package_id), quantity=1, box_id,
+  // act_type=1, pricing_structure_type.
+  Future<PackageWriteResult> serviceExtension({
+    required String customerId,
+    required String boxId,
+    required String productId,
+    required String pricingStructureType,
+  }) async {
+    try {
+      final data = await RestClient.instance.postForm(
+        _url('serviceExtension'),
+        {
+          ..._auth,
+          'customer_id': customerId,
+          'product_id': productId,
+          'quantity': '1',
+          'box_id': boxId,
+          'act_type': '1',
+          'pricing_structure_type': pricingStructureType,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+    } on TimeoutException {
+      return const PackageWriteResult(3, 'Request timed out.');
+    } catch (_) {
+      return const PackageWriteResult(3, 'Could not connect to server.');
+    }
+  }
 
   // ── updateMobileAndLCOCustID (upmoblcoid) — edit the customer's LCO id ───────
   // VERIFIED (CustomerOperations_Fragment:2976-3103; configg.properties

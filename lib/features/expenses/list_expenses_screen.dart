@@ -1,4 +1,4 @@
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
 import 'add_expenses_screen.dart';
 import 'data/expense_models.dart';

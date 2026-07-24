@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-import 'package:ezi_cable_digi/core/config/app_config.dart';
-import 'package:ezi_cable_digi/core/network/rest_client.dart';
-import 'package:ezi_cable_digi/core/network/server_url_resolver.dart';
-import 'package:ezi_cable_digi/core/network/soap_client.dart';
-import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
-import 'package:ezi_cable_digi/core/services/offline_mode_service.dart';
-import 'package:ezi_cable_digi/core/services/secure_storage_service.dart';
-import 'package:ezi_cable_digi/core/services/session_service.dart';
+import 'package:ezy_cable_digi/core/config/app_config.dart';
+import 'package:ezy_cable_digi/core/network/rest_client.dart';
+import 'package:ezy_cable_digi/core/network/server_url_resolver.dart';
+import 'package:ezy_cable_digi/core/network/soap_client.dart';
+import 'package:ezy_cable_digi/core/services/error_handler_service.dart';
+import 'package:ezy_cable_digi/core/services/offline_mode_service.dart';
+import 'package:ezy_cable_digi/core/services/secure_storage_service.dart';
+import 'package:ezy_cable_digi/core/services/session_service.dart';
 
 class AuthService {
   AuthService._();

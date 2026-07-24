@@ -1,10 +1,10 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
-import 'package:ezi_cable_digi/core/services/theme_service.dart';
-import 'package:ezi_cable_digi/features/expenses/list_expenses_screen.dart';
-import 'package:ezi_cable_digi/features/offline/offline_dashboard_screen.dart';
-import 'package:ezi_cable_digi/features/offline/sync_clear_screen.dart';
-import 'package:ezi_cable_digi/features/reports/reports_home_screen.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/core/services/theme_service.dart';
+import 'package:ezy_cable_digi/features/expenses/list_expenses_screen.dart';
+import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
+import 'package:ezy_cable_digi/features/offline/sync_clear_screen.dart';
+import 'package:ezy_cable_digi/features/reports/reports_home_screen.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
@@ -612,7 +612,8 @@ class AppDrawer extends StatelessWidget {
               title: Text(_s('about_us'), style: const TextStyle(fontSize: 14)),
               onTap: () {
                 Navigator.pop(context); // Close drawer
-                final state = context.findAncestorStateOfType<DashboardScreenState>();
+                final state = context
+                    .findAncestorStateOfType<DashboardScreenState>();
                 if (state != null) {
                   state.setTab(4);
                 } else {
@@ -655,18 +656,26 @@ class AppDrawer extends StatelessWidget {
             if (kDebugMode || kProfileMode)
               ListTile(
                 dense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 1),
-                leading: const Icon(Icons.bug_report,
-                    color: AppColors.primary, size: 20),
-                title: const Text('API Debug Console',
-                    style: TextStyle(fontSize: 14)),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 1,
+                ),
+                leading: const Icon(
+                  Icons.bug_report,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+                title: const Text(
+                  'API Debug Console',
+                  style: TextStyle(fontSize: 14),
+                ),
                 onTap: () {
                   Navigator.pop(context); // close drawer
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const DebugConsoleScreen()),
+                      builder: (_) => const DebugConsoleScreen(),
+                    ),
                   );
                 },
               ),
@@ -1004,6 +1013,17 @@ class _DrawerItem extends StatelessWidget {
     final label = AppStrings.get(labelKey);
 
     void handleTap() {
+      // Dashboard returns to the dashboard feed (tab 0) from ANY bottom-nav tab —
+      // Android parity (MainActivity nav_dashboard → DashboardHomeFragment). The
+      // DashboardScreenState must be resolved from THIS drawer context (a
+      // descendant), NOT the root-navigator context _closeDrawerThen passes back
+      // (an ancestor → would resolve null). Mirrors the About Us item's setTab(4).
+      if (labelKey == 'dashboard') {
+        final dash = context.findAncestorStateOfType<DashboardScreenState>();
+        Navigator.of(context).pop(); // close drawer
+        dash?.setTab(0);
+        return;
+      }
       _closeDrawerThen(context, (navCtx) {
         switch (labelKey) {
           case 'search_customer':
@@ -1045,9 +1065,7 @@ class _DrawerItem extends StatelessWidget {
             break;
           case 'calendar_event_list':
             Navigator.of(navCtx).push(
-              MaterialPageRoute(
-                builder: (_) => const EventManagementScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const EventManagementScreen()),
             );
             break;
           case 'employee_track':

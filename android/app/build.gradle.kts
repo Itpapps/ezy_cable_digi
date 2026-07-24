@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.ezi_cable_digi"
+    namespace = "com.example.ezy_cable_digi"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.ezi_cable_digi"
+        applicationId = "com.example.ezy_cable_digi"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = flutter.versionCode
@@ -45,16 +45,23 @@ android {
         }
     }
 
-    buildTypes {
+        buildTypes {
         release {
-            // Falls back to debug signing only if key.properties is missing, so a
-            // dev machine without the keystore can still build.
-            signingConfig = if (keystorePropertiesFile.exists())
-                signingConfigs.getByName("release")
-            else
-                signingConfigs.getByName("debug")
+            // Release is ALWAYS signed with the real production key — no silent debug
+            // fallback. If the key is missing, the release build fails loud (see the
+            // task-graph guard after the android { } block). Debug/profile unaffected.
+            signingConfig = signingConfigs.getByName("release")
+
+            // ── R8: shrink + obfuscate the Android (Java/Kotlin) half of the app ──
+            // Resource shrinking deliberately left OFF for now (one change at a time).
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
+
     flavorDimensions += "default"
 
     productFlavors {
@@ -69,6 +76,18 @@ android {
             applicationId = "com.magik.cable.digi"
             resValue("string", "app_name", "Magik Digi")
         }
+    }
+}
+
+// Fail LOUD only when a RELEASE build is actually requested and the signing key is
+// absent. Task-graph time, so debug/profile builds (and IDE sync) are never affected.
+gradle.taskGraph.whenReady {
+    val buildingRelease = allTasks.any { it.name.contains("Release") }
+    if (buildingRelease && !keystorePropertiesFile.exists()) {
+        throw GradleException(
+            "Release build requires android/key.properties (the real signing key). " +
+            "Debug and profile builds are unaffected."
+        )
     }
 }
 

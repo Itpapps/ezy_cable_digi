@@ -137,12 +137,7 @@ Future<bool> _tryAutoPrint(
         .timeout(const Duration(seconds: 40));
     if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ Printed Successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      showPremiumSnackBar(context, 'Printed Successfully', isSuccess: true);
     }
     return true;
   } catch (_) {
@@ -175,25 +170,16 @@ Future<void> _doThermalPrint(
         .printReceipt(mac: mac, lines: buildLines(fmt), batched: batched)
         .timeout(const Duration(seconds: 40));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✓ Printed Successfully'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    showPremiumSnackBar(context, 'Printed Successfully', isSuccess: true);
     Navigator.pop(context); // close sheet
   } on TimeoutException {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Print timed out — check the printer and try again.'),
-          backgroundColor: Colors.red),
-    );
+    showPremiumSnackBar(
+        context, 'Print timed out — check the printer and try again.',
+        isError: true);
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Print failed: $e'), backgroundColor: Colors.red),
-    );
+    showPremiumSnackBar(context, 'Print failed: $e', isError: true);
   }
 }
 
@@ -239,20 +225,18 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
       if (!granted) {
         if (!mounted) return;
         setState(() => _isScanning = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Bluetooth permission denied. Enable it in Settings.'),
-          backgroundColor: Colors.red,
-        ));
+        showPremiumSnackBar(
+            context, 'Bluetooth permission denied. Enable it in Settings.',
+            isError: true);
         return;
       }
       final btOn = await PrintBluetoothThermal.bluetoothEnabled;
       if (!btOn) {
         if (!mounted) return;
         setState(() => _isScanning = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Bluetooth is off. Turn it on and tap Rescan.'),
-          backgroundColor: Colors.red,
-        ));
+        showPremiumSnackBar(
+            context, 'Bluetooth is off. Turn it on and tap Rescan.',
+            isError: true);
         return;
       }
       final devices =
@@ -307,12 +291,7 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
       _isConnecting = false;
     });
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✗ Connection Failed'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showPremiumSnackBar(context, 'Connection Failed', isError: true);
     }
   }
 

@@ -348,9 +348,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 110,
+              Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
@@ -360,6 +360,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   ),
                 ),
               ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Row(
                   children: [

@@ -35,7 +35,7 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'ezi_cable_digi.db');
+    String path = join(await getDatabasesPath(), 'ezy_cable_digi.db');
     return await openDatabase(
       path,
       version: 7,

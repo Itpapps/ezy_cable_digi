@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/theme/theme_constants.dart';
 import 'data/employee_collection.dart';
 
 /// Employee operation-track map — Android parity (`MapsActivityEmp`): plots the
@@ -17,6 +18,7 @@ class EmployeeTrackMapScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     final located = points.where((p) => p.hasLocation).toList();
     final markers = <Marker>{
       for (var i = 0; i < located.length; i++)
@@ -34,8 +36,8 @@ class EmployeeTrackMapScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
         title: Text(title,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
       ),

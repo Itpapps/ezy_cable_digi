@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:ezi_cable_digi/main.dart';
+import 'package:ezy_cable_digi/main.dart';
 
 void main() {
   testWidgets('App builds without crashing', (WidgetTester tester) async {

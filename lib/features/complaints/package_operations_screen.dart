@@ -31,6 +31,7 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   CustomerBox? _selectedBox;
   bool _reactivating = false; // double-submit guard for rbox
   bool _extending = false; // double-submit guard for csews (Service Extension)
+  String _serviceExtension = '0'; // customer-level service_extension flag (gcb)
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
       _loading = false;
       if (r.statusCode == 0) {
         _boxes = r.boxes;
+        _serviceExtension = r.serviceExtension; // carry customer flag to Remove Services
         // Preserve the user's selected box across refresh (don't snap to first).
         final prevId = _selectedBox?.boxId;
         _selectedBox = r.boxes.isEmpty
@@ -258,8 +260,10 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
             final changed = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    RemoveServicesScreen(customer: widget.customer, box: box),
+                builder: (_) => RemoveServicesScreen(
+                    customer: widget.customer,
+                    box: box,
+                    serviceExtensionFlag: _serviceExtension),
               ),
             );
             if (changed == true && mounted) _loadBoxes();
@@ -1232,8 +1236,12 @@ class _ServicesScreenState extends State<_ServicesScreen>
 class RemoveServicesScreen extends StatefulWidget {
   final Customer customer;
   final CustomerBox box;
+  final String serviceExtensionFlag; // customer service_extension ("1" = on)
   const RemoveServicesScreen(
-      {super.key, required this.customer, required this.box});
+      {super.key,
+      required this.customer,
+      required this.box,
+      this.serviceExtensionFlag = '0'});
 
   @override
   State<RemoveServicesScreen> createState() => _RemoveServicesScreenState();
@@ -1562,6 +1570,18 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
                 : Text(price,
                     style:
                         const TextStyle(fontSize: 13, color: Colors.black87)),
+            // Android parity (DeactiveAdapter_listview.java:119): the per-package
+            // Extend Service [+] shows only when the customer flag AND the dealer's
+            // service_extension role permission are both on.
+            secondary: (widget.serviceExtensionFlag.trim() == '1' &&
+                    SessionService.instance.serviceExtension &&
+                    p.packageId.isNotEmpty)
+                ? IconButton(
+                    icon: const Icon(Icons.add_box, color: Color(0xFF0D47A1)),
+                    tooltip: 'Extend service',
+                    onPressed: () => _confirmExtend(p),
+                  )
+                : null,
           ),
         );
       },
@@ -1612,6 +1632,71 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
           r.statusMessage.isEmpty
               ? 'Could not complete the request.'
               : r.statusMessage);
+    }
+  }
+
+  Future<void> _confirmExtend(Package p) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Service Extension',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(
+          'Are you sure, You want to extend service for ${p.name}',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    await _doExtend(p);
+  }
+
+  Future<void> _doExtend(Package p) async {
+    if (_submitting) return; // reuse the screen's double-submit guard
+    setState(() => _submitting = true);
+    final r = await PackageOperationsRepository.instance.serviceExtension(
+      // Android uses the box's customer_id (Frag_Deactpack.getcustid); fall back.
+      customerId: widget.box.customerId.isNotEmpty
+          ? widget.box.customerId
+          : widget.customer.lcoCustomerId,
+      boxId: widget.box.boxId,
+      productId: p.packageId,
+      pricingStructureType: p.pricingStructureType,
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    // Android parity (DeactiveAdapter_listview.java:217-260): status 0 → success
+    // dialog (stay); status 1 → "No Details Found" → go home; error → "Failed".
+    if (r.statusCode == 0) {
+      await _resultDialog(
+          r.statusMessage.isEmpty ? 'Success!' : r.statusMessage,
+          r.statusMessage.isEmpty ? 'Service extended.' : r.statusMessage);
+    } else if (r.statusCode == 1) {
+      await _resultDialog(
+          r.statusMessage.isEmpty ? 'No Details Found!' : r.statusMessage,
+          'No Details Found');
+      if (!mounted) return;
+      Navigator.popUntil(context, (route) => route.isFirst);
+    } else {
+      await _resultDialog('Failed',
+          r.statusMessage.isEmpty ? 'Please try again.' : r.statusMessage);
     }
   }
 

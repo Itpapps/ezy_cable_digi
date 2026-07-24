@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -96,15 +97,33 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('MINI DAY REPORT'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.backBtnBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'MINI DAY REPORT',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
+              letterSpacing: 1.1, color: t.appBarFg),
+        ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -115,6 +134,13 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -139,12 +165,20 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
                         const Row(
                           children: [
                             Expanded(
+                              flex: 4,
                               child: Text(
                                 'MODE',
                                 style: TextStyle(
@@ -154,8 +188,10 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                               ),
                             ),
                             Expanded(
+                              flex: 2,
                               child: Text(
                                 'COUNT',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: AppColors.primary,
@@ -163,8 +199,10 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                               ),
                             ),
                             Expanded(
+                              flex: 3,
                               child: Text(
                                 'AMOUNT',
+                                textAlign: TextAlign.right,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   color: AppColors.primary,
@@ -190,16 +228,20 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                           child: Row(
                             children: [
                               const Expanded(
+                                flex: 6,
                                 child: Text(
                                   'TOTAL COLLECTION',
                                   style: TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ),
-                              Text(
-                                (_summary!['totalAmount'] as double)
-                                    .toStringAsFixed(1),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  '₹${(_summary!['totalAmount'] as double).toStringAsFixed(1)}',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ],
@@ -247,9 +289,11 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(mode)),
-          Expanded(child: Text(count)),
-          Expanded(child: Text(amount)),
+          Expanded(flex: 4, child: Text(mode)),
+          Expanded(
+              flex: 2, child: Text(count, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 3, child: Text(amount, textAlign: TextAlign.right)),
         ],
       ),
     );

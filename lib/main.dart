@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:ezi_cable_digi/core/services/connectivity_service.dart';
-import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
-import 'package:ezi_cable_digi/core/services/localization_service.dart';
-import 'package:ezi_cable_digi/core/services/theme_service.dart';
-import 'package:ezi_cable_digi/features/customers/customer_list_provider.dart';
-import 'package:ezi_cable_digi/features/search/search_provider.dart';
+import 'package:ezy_cable_digi/core/services/connectivity_service.dart';
+import 'package:ezy_cable_digi/core/services/error_handler_service.dart';
+import 'package:ezy_cable_digi/core/services/localization_service.dart';
+import 'package:ezy_cable_digi/core/services/theme_service.dart';
+import 'package:ezy_cable_digi/features/customers/customer_list_provider.dart';
+import 'package:ezy_cable_digi/features/search/search_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +55,7 @@ class EzyCableDigiApp extends StatelessWidget {
           listenable: ThemeService.instance,
           builder: (context, _) {
             final themeData = AppTheme.forIndex(ThemeService.instance.themeIndex)
-                .copyWith(textTheme: GoogleFonts.poppinsTextTheme());
+                .copyWith(textTheme: GoogleFonts.interTextTheme());
             return MaterialApp(
               title: AppConfig.instance.appName,
               debugShowCheckedModeBanner: false,

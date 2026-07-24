@@ -1,4 +1,4 @@
-package com.example.ezi_cable_digi
+package com.example.ezy_cable_digi
 
 import android.annotation.SuppressLint
 import android.content.Context

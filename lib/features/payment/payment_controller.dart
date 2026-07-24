@@ -137,7 +137,11 @@ class PaymentController extends ChangeNotifier {
         _billingId = result.billingId;      // billingId for mpay (from gpa)
         broadcasterPending = result.broadcasterPendingAmount; // broadband pending
         lastPaidAmount = result.lastPaidAmount; // Android last_paid_amount
-        amountCtrl.text = cablePending.toStringAsFixed(2);
+        // Android parity (CustomerMgmt_MakePayment_Fragment :1500-1507): prefill the
+        // STB amount box with the pending only when it is positive; a zero/negative
+        // pending (customer credit/advance) prefills "0", exactly like Android's
+        // `if (pendingAmount > 0) et_amount.setText(...) else et_amount.setText("0")`.
+        amountCtrl.text = cablePending > 0 ? cablePending.toStringAsFixed(2) : '0';
         // Android prefills the broadband field only when there is a broadband due.
         if (broadcasterPending > 0) {
           broadbandAmountCtrl.text = broadcasterPending.toStringAsFixed(2);

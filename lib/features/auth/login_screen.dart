@@ -1,7 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:ezi_cable_digi/core/services/auth_service.dart';
-import 'package:ezi_cable_digi/core/services/error_handler_service.dart';
-import 'package:ezi_cable_digi/features/dashboard/dashboard_screen.dart';
+import 'package:ezy_cable_digi/core/services/auth_service.dart';
+import 'package:ezy_cable_digi/core/services/error_handler_service.dart';
+import 'package:ezy_cable_digi/features/dashboard/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -325,7 +327,7 @@ DropdownButton<String>(
                                   child: SingleChildScrollView(
                                     physics: const BouncingScrollPhysics(),
                                     padding: EdgeInsets.only(
-                                      bottom: bottomInset > 0 ? 12 : 0,
+                                      bottom: bottomInset,
                                     ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -383,35 +385,10 @@ DropdownButton<String>(
                             ),
                           ),
                         ),
-                        Container(
-                          height: 78,
-                          width: 78,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            // Android-style: the logo fills the circle (no white
-                            // padding) inside a blue ring.
-                            border: Border.all(
-                              color: AppColors.primary,
-                              width: 3,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.14),
-                                blurRadius: 16,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              AppConfig.instance.flavor == Flavor.magik
-                                  ? 'assets/mainlogo.png'
-                                  : 'assets/ezy_digi_pics.png',
-                              width: 78,
-                              height: 78,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                        _GlowLogoRing(
+                          asset: AppConfig.instance.flavor == Flavor.magik
+                              ? 'assets/mainlogo.png'
+                              : 'assets/ezy_digi_pics.png',
                         ),
                       ],
                     ),
@@ -460,8 +437,30 @@ class _GlassTextField extends StatefulWidget {
   State<_GlassTextField> createState() => _GlassTextFieldState();
 }
 
-class _GlassTextFieldState extends State<_GlassTextField> {
+class _GlassTextFieldState extends State<_GlassTextField>
+    with SingleTickerProviderStateMixin {
   late bool _obscure = widget.obscureText;
+
+  // Drives the field's Lottie icon: it plays ONCE when the field gains focus
+  // (the user taps it) instead of looping forever. Purely decorative — it does
+  // not affect the text input in any way.
+  final FocusNode _focus = FocusNode();
+  late final AnimationController _lottieCtrl = AnimationController(vsync: this);
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (_focus.hasFocus) _lottieCtrl.forward(from: 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _lottieCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -493,6 +492,10 @@ class _GlassTextFieldState extends State<_GlassTextField> {
               child: Lottie.asset(
                 widget.lottieAsset,
                 fit: BoxFit.contain,
+                // Driven by our controller → no auto-loop; plays once on focus.
+                controller: _lottieCtrl,
+                onLoaded: (composition) =>
+                    _lottieCtrl.duration = composition.duration,
                 renderCache: RenderCache.raster,
               ),
             ),
@@ -501,6 +504,7 @@ class _GlassTextFieldState extends State<_GlassTextField> {
           Expanded(
             child: TextField(
               controller: widget.controller,
+              focusNode: _focus,
               obscureText: _obscure,
               enabled: widget.enabled,
               style: const TextStyle(
@@ -541,6 +545,78 @@ class _GlassTextFieldState extends State<_GlassTextField> {
             ),
           const SizedBox(width: 4),
         ],
+      ),
+    );
+  }
+}
+
+/// Circular logo with a red-neon ring whose bright spot sweeps one full lap
+/// around the ring on tap (same effect as the Sync/Clear buttons).
+/// Presentation only — tapping just plays the animation, no navigation.
+class _GlowLogoRing extends StatefulWidget {
+  final String asset;
+  const _GlowLogoRing({required this.asset});
+
+  @override
+  State<_GlowLogoRing> createState() => _GlowLogoRingState();
+}
+
+class _GlowLogoRingState extends State<_GlowLogoRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  );
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFFF3B5C);
+    return GestureDetector(
+      onTap: () => _c.forward(from: 0), // one light sweep around the ring
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) {
+          return Container(
+            height: 78,
+            width: 78,
+            padding: const EdgeInsets.all(3), // ring thickness
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                transform: GradientRotation(_c.value * 2 * math.pi),
+                colors: const [red, red, Colors.white, red, red],
+                stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.14),
+                  blurRadius: 16,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: red.withValues(alpha: 0.4),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: child,
+          );
+        },
+        child: ClipOval(
+          child: Image.asset(
+            widget.asset,
+            width: 72,
+            height: 72,
+            fit: BoxFit.cover,
+          ),
+        ),
       ),
     );
   }

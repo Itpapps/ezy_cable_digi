@@ -1,6 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_mode_service.dart';
@@ -125,51 +127,86 @@ class _SyncClearScreenState extends State<SyncClearScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('SYNC / CLEAR DATA'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: t.appBarBg,
+        foregroundColor: t.appBarFg,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.backBtnBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'SYNC / CLEAR DATA',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
+              letterSpacing: 1.1, color: t.appBarFg),
+        ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : Padding(
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _statRow('Downloaded records', '$_total'),
-                  _statRow('Payments made (pending sync)', '$_pending'),
-                  _statRow('Synced', '$_synced'),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _busy ? null : _sync,
-                    icon: const Icon(Icons.sync),
-                    label: const Text('SYNC DATA',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: t.cardBg,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        // Soft, diffuse "floating" shadow (premium card look).
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: 26,
+                          offset: const Offset(0, 12),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        _statRow(t, 'Downloaded records', '$_total'),
+                        _statRow(t, 'Payments made (pending sync)', '$_pending'),
+                        _statRow(t, 'Synced', '$_synced'),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 20),
+                  _NeonButton(
+                    color: const Color(0xFF22E37E),
+                    fill: t.scaffoldBg,
+                    textColor: t.appBarFg,
+                    icon: Icons.sync,
+                    label: 'SYNC DATA',
+                    onTap: _busy ? null : _sync,
+                  ),
                   const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    onPressed: _busy ? null : _clear,
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('CLEAR DATA',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
+                  _NeonButton(
+                    color: const Color(0xFFFF3B5C),
+                    fill: t.scaffoldBg,
+                    textColor: t.appBarFg,
+                    icon: Icons.delete_outline,
+                    label: 'CLEAR DATA',
+                    onTap: _busy ? null : _clear,
                   ),
                   if (_busy) ...[
                     const SizedBox(height: 20),
-                    const Center(
-                        child: CircularProgressIndicator(color: Colors.white)),
+                    const Center(child: CircularProgressIndicator()),
                   ],
                 ],
               ),
@@ -177,20 +214,137 @@ class _SyncClearScreenState extends State<SyncClearScreen> {
     );
   }
 
-  Widget _statRow(String label, String value) {
+  Widget _statRow(AppThemeConst t, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              style: TextStyle(color: t.cardSubtitleText, fontSize: 14)),
           Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
+              style: TextStyle(
+                  color: t.cardHeadingText,
                   fontSize: 16,
                   fontWeight: FontWeight.w800)),
         ],
+      ),
+    );
+  }
+}
+
+/// Neon action button whose glowing border sweeps one full rotation on tap.
+/// Presentation only — the tap just calls the handler passed in via [onTap].
+class _NeonButton extends StatefulWidget {
+  final Color color; // neon border/glow colour
+  final Color fill; // fill — matches the page so the button blends
+  final Color textColor;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _NeonButton({
+    required this.color,
+    required this.fill,
+    required this.textColor,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  State<_NeonButton> createState() => _NeonButtonState();
+}
+
+class _NeonButtonState extends State<_NeonButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _c.forward(from: 0); // one light rotation around the border
+    widget.onTap?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onTap != null;
+    const radius = 30.0;
+    const borderW = 1.8;
+
+    final inner = Container(
+      decoration: BoxDecoration(
+        color: widget.fill,
+        borderRadius: BorderRadius.circular(radius - borderW),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? _handleTap : null,
+          borderRadius: BorderRadius.circular(radius - borderW),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(widget.icon, color: widget.textColor, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: widget.textColor,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.6,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.all(borderW),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              gradient: SweepGradient(
+                transform: GradientRotation(_c.value * 2 * math.pi),
+                colors: [
+                  widget.color.withValues(alpha: 0.30),
+                  widget.color,
+                  Colors.white,
+                  widget.color,
+                  widget.color.withValues(alpha: 0.30),
+                ],
+                stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.color.withValues(alpha: 0.55),
+                  blurRadius: 16,
+                  spreadRadius: 0.5,
+                ),
+              ],
+            ),
+            child: child,
+          );
+        },
+        child: inner,
       ),
     );
   }

@@ -71,6 +71,7 @@ class _CustomerListScreenState extends State<CustomerListScreen>
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,
+        shape: Border(bottom: BorderSide(color: t.appBarBorderColor, width: 1)),
         centerTitle: true,
         leading: IconButton(
           icon: Container(
@@ -379,8 +380,11 @@ class _CustomerTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
             decoration: const BoxDecoration(
-              color: Color(0xFFF4F7FF), // Exact match to reference photo light header
+              color: Color(0xFFE2E9F4), // visible light-blue header (was near-white)
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFD5DFF0), width: 1),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,

@@ -72,9 +72,14 @@ class ComplaintCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.06),
+              color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border(
+                bottom: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    width: 1),
+              ),
             ),
             child: Text(
               complaintId,

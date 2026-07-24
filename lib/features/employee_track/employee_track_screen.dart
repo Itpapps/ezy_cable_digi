@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/employee_collection.dart';
 import 'data/employee_track_repository.dart';
@@ -113,7 +114,10 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
   /// points for [opName] → map (status 0), "No Tracking Details Found!" (1), or
   /// "Failed." (transport). Uses Android's "Loading...Please wait..." blocker.
   Future<void> _fetchTrack(
-      EmployeeCollection e, String label, String opName) async {
+    EmployeeCollection e,
+    String label,
+    String opName,
+  ) async {
     showPremiumLoading(context, message: 'Loading...Please wait...');
     final r = await EmployeeTrackRepository.instance.getEmployeeTrackInfo(
       employeeId: e.employeeId,
@@ -138,7 +142,9 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
           content: const Text('No Tracking Details Found!'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
           ],
         ),
       );
@@ -149,10 +155,11 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
+        backgroundColor: t.appBarBg,
         elevation: 0,
         centerTitle: true,
         leading: GestureDetector(
@@ -160,53 +167,123 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: t.backBtnBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.arrow_back_ios_new,
-                size: 16, color: Colors.white),
+            child: Icon(
+              Icons.arrow_back_ios_new,
+              size: 16,
+              color: t.backBtnIcon,
+            ),
           ),
         ),
-        title: const Text('EMPLOYEE TRACK',
-            style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 1)),
+        title: Text(
+          'EMPLOYEE TRACK',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: t.appBarFg,
+            letterSpacing: 1,
+          ),
+        ),
       ),
       body: Column(
         children: [
+          // Filter card — a floating rounded card (was a flat edge-to-edge white
+          // strip). Only the LOOK changes: the date pickers (_pick) and the Search
+          // action (_load) are byte-for-byte the same.
           Container(
-            color: Colors.white,
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
             padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(child: _dateField('From', _from, () => _pick(true))),
-                const SizedBox(width: 10),
-                Expanded(child: _dateField('To', _to, () => _pick(false))),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _loading ? null : _load,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1565C0),
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: t.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: t.isLight
+                  ? Border.all(color: t.inputBorderColor.withValues(alpha: 0.6))
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha: t.isLight ? 0.05 : 0.12,
                   ),
-                  child: const Text('Search',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  blurRadius: t.isLight ? 12 : 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _dateField('From', _from, () => _pick(true)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: _dateField('To', _to, () => _pick(false))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _loading ? null : _load,
+                    icon: const Icon(Icons.search_rounded, size: 18),
+                    label: const Text(
+                      'Search',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: t.accent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
           if (!_loading && !_error && _items.isNotEmpty)
             Container(
-              width: double.infinity,
-              color: const Color(0xFF0D47A1),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Text('Total — ₹${_total.toStringAsFixed(2)}',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: Colors.white, fontSize: 13)),
+              margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: t.accent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Total Collected',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '₹${_total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
             ),
           Expanded(child: _body()),
         ],
@@ -215,8 +292,9 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
   }
 
   Widget _body() {
+    final t = AppThemeConst.of(context);
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_error) {
       return Center(
@@ -225,20 +303,25 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded,
-                  color: Colors.white70, size: 44),
+              Icon(
+                Icons.error_outline_rounded,
+                color: t.subtitleText,
+                size: 44,
+              ),
               const SizedBox(height: 12),
-              Text(_message.isEmpty ? 'Could not load collections' : _message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+              Text(
+                _message.isEmpty ? 'Could not load collections' : _message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: t.bodyText, fontSize: 15),
+              ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _load,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF0D47A1),
+                  backgroundColor: t.accent,
+                  foregroundColor: Colors.white,
                 ),
               ),
             ],
@@ -247,9 +330,18 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
       );
     }
     if (_items.isEmpty) {
-      return const Center(
-        child: Text('No collections found',
-            style: TextStyle(color: Colors.white70, fontSize: 15)),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.people_outline_rounded, color: t.subtitleText, size: 46),
+            const SizedBox(height: 12),
+            Text(
+              'No collections found',
+              style: TextStyle(color: t.subtitleText, fontSize: 15),
+            ),
+          ],
+        ),
       );
     }
     return ListView.builder(
@@ -258,63 +350,123 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
       itemBuilder: (_, i) {
         final e = _items[i];
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            color: t.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            // Theme-gated depth: hairline border on light bg (defines the card
+            // without a harsh line), softer/heavier shadow on the blue theme.
+            border: t.isLight
+                ? Border.all(color: t.inputBorderColor.withValues(alpha: 0.5))
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: t.isLight ? 0.05 : 0.12),
+                blurRadius: t.isLight ? 12 : 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
+              // Employee avatar (initial) — visual only, no data change.
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: t.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: t.accent,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(e.name.isEmpty ? '-' : e.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF0D47A1))),
+                    Text(
+                      e.name.isEmpty ? '-' : e.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: t.cardHeadingText,
+                      ),
+                    ),
                     if (e.dealerName.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(e.dealerName,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.black54)),
+                      Text(
+                        e.dealerName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: t.cardSubtitleText,
+                        ),
+                      ),
                     ],
                   ],
                 ),
               ),
               const SizedBox(width: 12),
-              Text('₹${e.amount.isEmpty ? '0' : e.amount}',
+              // Collection amount as a semantic (money-green) pill — visual only.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF43A047).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF43A047).withValues(alpha: 0.30),
+                  ),
+                ),
+                child: Text(
+                  '₹${e.amount.isEmpty ? '0' : e.amount}',
                   style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0D47A1))),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF2E7D32),
+                  ),
+                ),
+              ),
               const SizedBox(width: 8),
               // Android parity (row tv_track): per-employee operation GPS track.
               InkWell(
                 onTap: () => _openTrackDialog(e),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D47A1).withValues(alpha: 0.10),
+                    color: t.accent.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.location_on,
-                          size: 15, color: Color(0xFF0D47A1)),
-                      SizedBox(width: 4),
-                      Text('Track',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF0D47A1))),
+                      Icon(Icons.location_on, size: 15, color: t.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Track',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: t.accent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -327,23 +479,46 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
   }
 
   Widget _dateField(String label, DateTime value, VoidCallback onTap) {
+    final t = AppThemeConst.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFCBD5F5)),
-          borderRadius: BorderRadius.circular(8),
+          color: t.accent.withValues(alpha: 0.06),
+          border: Border.all(color: t.inputBorderColor.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(label,
-                style: const TextStyle(fontSize: 10, color: Colors.black45)),
-            const SizedBox(height: 2),
-            Text(_fmt(value),
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            Icon(Icons.calendar_month_rounded, size: 18, color: t.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: t.cardSubtitleText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    _fmt(value),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: t.cardBodyText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

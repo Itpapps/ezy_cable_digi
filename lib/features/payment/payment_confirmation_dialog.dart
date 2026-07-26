@@ -59,11 +59,11 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
       ),
       backgroundColor: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -78,7 +78,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
@@ -90,7 +90,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               _infoRow('Current Month\nPayments Count', _currentMonthPayments.toString()),
               _infoRow('Current Month\nAdjustments Count', _currentMonthAdjustments.toString()),
               
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
               // ── Confirmation Prompt (Android showDialog :2823-2834) ──
               Text(
@@ -104,7 +104,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // ── Action Buttons ──
               Row(
@@ -116,9 +116,9 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                         backgroundColor: const Color(0xFFC60000), // Red
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(2), // Sharp corners
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         elevation: 0,
                       ),
                       child: const Text('CANCEL',
@@ -133,9 +133,9 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                         backgroundColor: const Color(0xFF333399), // Navy Blue
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(2), // Sharp corners
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         elevation: 0,
                       ),
                       child: const Text('CONFIRM',
@@ -168,31 +168,52 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
     return 'Are you sure you want to continue Digital TV\nPayment ${money(stb)}?';
   }
 
+  // Decorative row icon chosen by the LABEL only — presentation metadata; does
+  // NOT touch the label, value, or any logic. Unknown labels fall back safely.
+  IconData _confIcon(String label) {
+    if (label.contains('Amount')) return Icons.payments_outlined;
+    if (label.contains('Date')) return Icons.event_outlined;
+    if (label.contains('Payments')) return Icons.receipt_long_outlined;
+    if (label.contains('Adjustments')) return Icons.tune_outlined;
+    return Icons.info_outline;
+  }
+
   Widget _infoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Decorative leading icon chip — presentation only (no onTap, no data).
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: const Color(0xFF333399).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(_confIcon(label), size: 15, color: const Color(0xFF333399)),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             flex: 6,
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: Colors.black87,
                 height: 1.2,
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             flex: 4,
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
                 color: Colors.black,
               ),

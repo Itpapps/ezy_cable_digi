@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:ezy_cable_digi/core/services/connectivity_service.dart';
 import 'package:ezy_cable_digi/core/services/error_handler_service.dart';
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:ezy_cable_digi/core/services/theme_service.dart';
 import 'package:ezy_cable_digi/features/customers/customer_list_provider.dart';
 import 'package:ezy_cable_digi/features/search/search_provider.dart';
@@ -24,8 +23,6 @@ Future<void> mainEntry() async {
 
   await runZonedGuarded(() async {
     await NotificationService.init();
-    // Restore saved language before the first frame — zero perceived lag
-    await LocalizationService.init();
     // Restore saved theme before the first frame
     await ThemeService.init();
     // Start connectivity listener for offline auto-sync
@@ -41,31 +38,26 @@ class EzyCableDigiApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // LocalizationScope (InheritedNotifier) sits ABOVE MaterialApp.
-    // Any widget that calls AppStrings.of(context, key) registers a rebuild
-    // dependency here — when the language changes, only those widgets rebuild.
     // MultiProvider sits above everything — providers survive full navigation.
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => CustomerListProvider()),
       ],
-      child: LocalizationScope(
-        child: ListenableBuilder(
-          listenable: ThemeService.instance,
-          builder: (context, _) {
-            final themeData = AppTheme.forIndex(ThemeService.instance.themeIndex)
-                .copyWith(textTheme: GoogleFonts.interTextTheme());
-            return MaterialApp(
-              title: AppConfig.instance.appName,
-              debugShowCheckedModeBanner: false,
-              themeMode: ThemeMode.light,
-              theme: themeData,
-              navigatorObservers: [routeObserver],
-              home: const LoginScreen(),
-            );
-          },
-        ),
+      child: ListenableBuilder(
+        listenable: ThemeService.instance,
+        builder: (context, _) {
+          final themeData = AppTheme.forIndex(ThemeService.instance.themeIndex)
+              .copyWith(textTheme: GoogleFonts.interTextTheme());
+          return MaterialApp(
+            title: AppConfig.instance.appName,
+            debugShowCheckedModeBanner: false,
+            themeMode: ThemeMode.light,
+            theme: themeData,
+            navigatorObservers: [routeObserver],
+            home: const LoginScreen(),
+          );
+        },
       ),
     );
   }

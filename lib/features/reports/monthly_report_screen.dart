@@ -236,26 +236,46 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
     );
   }
 
+  // Date field — matches the Employee Track filter design: tappable soft card
+  // with a leading calendar icon + label/value. Presentation only; the tap still
+  // calls the same _pickDate and shows the same _fmt-formatted date.
   Widget _dateButton(
       String label, DateTime date, bool isStart, AppThemeConst t) {
-    return OutlinedButton(
-      onPressed: () => _pickDate(isStart: isStart),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: t.cardHeadingText,
-        side: BorderSide(color: t.inputBorderColor),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Column(
-        children: [
-          Text(label,
-              style: TextStyle(fontSize: 11, color: t.cardSubtitleText)),
-          const SizedBox(height: 2),
-          Text(_fmt.format(date),
-              style: TextStyle(
-                  fontWeight: FontWeight.w800, color: t.cardHeadingText)),
-        ],
+    return GestureDetector(
+      onTap: () => _pickDate(isStart: isStart),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: t.accent.withValues(alpha: 0.06),
+          border: Border.all(color: t.inputBorderColor.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_month_rounded, size: 18, color: t.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: t.cardSubtitleText,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 1),
+                  Text(_fmt.format(date),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: t.cardBodyText)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -311,6 +331,9 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
           ),
           child: Row(
             children: [
+              const Icon(Icons.account_balance_wallet_outlined,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text('Total — ₹${_total.toStringAsFixed(2)}',
                     overflow: TextOverflow.ellipsis,
@@ -347,6 +370,15 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: t.accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.person_outline, color: t.accent, size: 20),
+                  ),
                   title: Text(e.name.isEmpty ? '-' : e.name,
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
@@ -538,11 +570,19 @@ class _MonthlyReportDetailScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.employeeName,
-                      style: TextStyle(
-                          color: t.cardHeadingText,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800)),
+                  Row(
+                    children: [
+                      Icon(Icons.badge_outlined, size: 18, color: t.accent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(widget.employeeName,
+                            style: TextStyle(
+                                color: t.cardHeadingText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   // Android parity (Employee_Collection_Details): the employee's
                   // total amount (reclf_amt) + the record count ("Total - N").
@@ -633,6 +673,31 @@ class _MonthlyReportDetailScreenState
     );
   }
 
+  // Decorative leading icon chosen by the row LABEL only — presentation
+  // metadata; does NOT touch the label, value, or any logic.
+  IconData _kvIcon(String label) {
+    switch (label) {
+      case 'Name':
+        return Icons.person_outline;
+      case 'Acc. No.':
+        return Icons.tag;
+      case 'LCO Customer ID':
+        return Icons.badge_outlined;
+      case 'CRF No':
+        return Icons.description_outlined;
+      case 'NickName':
+        return Icons.sentiment_satisfied_outlined;
+      case 'Address':
+        return Icons.location_on_outlined;
+      case 'Payment Date':
+        return Icons.event_outlined;
+      case 'Amount':
+        return Icons.payments_outlined;
+      default:
+        return Icons.info_outline;
+    }
+  }
+
   Widget _kv(String label, String value, {bool bold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -640,12 +705,20 @@ class _MonthlyReportDetailScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 130,
-            child: Text('$label:',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                    fontSize: 12.5)),
+            width: 138,
+            child: Row(
+              children: [
+                Icon(_kvIcon(label), size: 14, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text('$label:',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                          fontSize: 12.5)),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: Text(value,

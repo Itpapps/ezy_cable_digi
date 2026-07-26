@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:glassmorphism/glassmorphism.dart';
 import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/location_sync_service.dart';
@@ -18,7 +19,6 @@ import '../../core/network/server_url_resolver.dart';
 import '../offline/offline_dashboard_screen.dart';
 import '../../widgets/primary_button.dart';
 import '../../core/config/app_config.dart';
-import '../../core/utils/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -39,12 +39,19 @@ class _LoginScreenState extends State<LoginScreen> {
   // Android disables the username/password EditTexts when offline
   // (LoginActivity.java:248-251). Mirrored via the field `enabled` flag.
   bool _isOffline = false;
+  // Device last-known location captured once at login-screen open (Android
+  // parity: GPSTracker in LoginActivity.onCreate). Sent with the login request;
+  // stays 0.0/0.0 when permission/GPS/last-known are unavailable — login never
+  // blocks on location.
+  double _loginLat = 0.0;
+  double _loginLng = 0.0;
 
   @override
   void initState() {
     super.initState();
     LocationSyncService.instance.onScreenOpened(TrackingScreen.login);
     _requestPermissions();
+    _captureLoginLocation();
     _resolveServerUrl();
     _loadRememberedCredentials();
     _refreshOfflineState();
@@ -99,6 +106,22 @@ class _LoginScreenState extends State<LoginScreen> {
     ].request();
   }
 
+  /// Capture the device's LAST-KNOWN location once (Android parity: GPSTracker —
+  /// cached, non-blocking, never a fresh GPS fix). Stored for the login request.
+  /// Does NOT prompt for permission (getLastKnownPosition returns null when not
+  /// granted). Any failure → keep 0.0/0.0 and login proceeds normally.
+  Future<void> _captureLoginLocation() async {
+    try {
+      final pos = await Geolocator.getLastKnownPosition();
+      if (pos != null && mounted) {
+        _loginLat = pos.latitude;
+        _loginLng = pos.longitude;
+      }
+    } catch (_) {
+      // Location unavailable → keep 0.0/0.0; never block login (Android parity).
+    }
+  }
+
   Future<void> _handleLogin() async {
     // Re-check connectivity at press time (Android: isNetworkAvailable()).
     final connectivity = await Connectivity().checkConnectivity();
@@ -132,6 +155,8 @@ class _LoginScreenState extends State<LoginScreen> {
         username: username,
         password: password,
         rememberMe: _rememberMe,
+        lat: _loginLat,
+        lang: _loginLng,
       );
 
       if (!mounted) return;
@@ -228,22 +253,6 @@ class _LoginScreenState extends State<LoginScreen> {
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
-DropdownButton<String>(
-  value: AppStrings.currentLang,
-  items: const [
-    DropdownMenuItem(value: 'en', child: Text('English')),
-    DropdownMenuItem(value: 'hi', child: Text('Hindi')),
-    DropdownMenuItem(value: 'te', child: Text('Telugu')),
-    DropdownMenuItem(value: 'ta', child: Text('Tamil')),
-    DropdownMenuItem(value: 'or', child: Text('Odia')),
-    DropdownMenuItem(value: 'bn', child: Text('Bengali')),
-    DropdownMenuItem(value: 'ml', child: Text('Malayalam')),
-  ],
-  onChanged: (value) {
-    AppStrings.currentLang = value!;
-    setState(() {});
-  },
-),
           Container(
             
             decoration: const BoxDecoration(

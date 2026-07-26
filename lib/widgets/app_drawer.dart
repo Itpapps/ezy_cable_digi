@@ -1,5 +1,4 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:ezy_cable_digi/core/services/theme_service.dart';
 import 'package:ezy_cable_digi/features/expenses/list_expenses_screen.dart';
 import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
@@ -67,133 +66,6 @@ Future<void> showIdMismatch(BuildContext ctx) async {
   );
 }
 
-// ── Language Picker bottom-sheet (theme-aware) ────────────────────────────────
-void showLanguagePicker(BuildContext context) {
-  final service = LocalizationService.instance;
-  var isLoading = false;
-
-  showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
-    builder: (sheetCtx) {
-      final cs = Theme.of(sheetCtx).colorScheme;
-      final isLight = ThemeService.instance.isPremiumLight;
-      return StatefulBuilder(
-        builder: (sheetCtx, setSheetState) {
-          return Container(
-            decoration: BoxDecoration(
-              color: isLight ? Colors.white : const Color(0xFF0A1628),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
-                  blurRadius: 20,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Drag handle
-                Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 4),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isLight
-                        ? Colors.grey.shade300
-                        : Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // Title row
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.language_rounded, color: cs.primary, size: 22),
-                      const SizedBox(width: 10),
-                      Text(
-                        AppStrings.get('select_language'),
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: cs.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(
-                  height: 1,
-                  color: isLight
-                      ? Colors.grey.shade200
-                      : Colors.white.withValues(alpha: 0.08),
-                ),
-                if (isLoading)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                        SizedBox(width: 12),
-                        Text('Applying...'),
-                      ],
-                    ),
-                  ),
-                // Language list
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: AppLanguage.all.length,
-                  itemBuilder: (_, index) {
-                    final lang = AppLanguage.all[index];
-                    return _LanguageTile(
-                      language: lang,
-                      isSelected: service.currentLanguage.code == lang.code,
-                      isPremiumLight: isLight,
-                      primaryColor: cs.primary,
-                      isEnabled: !isLoading,
-                      onTap: () async {
-                        if (isLoading) return;
-                        setSheetState(() => isLoading = true);
-                        try {
-                          await service.setLanguage(lang);
-                          if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                        } finally {
-                          if (sheetCtx.mounted) {
-                            setSheetState(() {
-                              isLoading = false;
-                            });
-                          }
-                        }
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
 // ── Theme Picker — premium dialog ────────────────────────────────────────────
 void showThemePicker(BuildContext context) {
   int selected = ThemeService.instance.themeIndex;
@@ -227,7 +99,7 @@ void showThemePicker(BuildContext context) {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      AppStrings.get('select_theme'),
+                      'Select Theme',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -245,7 +117,7 @@ void showThemePicker(BuildContext context) {
                   activeColor: AppColors.primary,
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    AppStrings.get('Theme 1'),
+                    'Theme 1',
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -264,7 +136,7 @@ void showThemePicker(BuildContext context) {
                   activeColor: AppColors.primary,
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    AppStrings.get('Theme 2'),
+                    'Theme 2',
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -307,7 +179,7 @@ void showThemePicker(BuildContext context) {
                           ),
                         ),
                         child: Text(
-                          AppStrings.get('cancel'),
+                          'Cancel',
                           style: const TextStyle(
                             color: Colors.black54,
                             fontWeight: FontWeight.w700,
@@ -343,7 +215,7 @@ void showThemePicker(BuildContext context) {
                           ),
                         ),
                         child: Text(
-                          AppStrings.get('apply'),
+                          'Apply',
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -361,14 +233,9 @@ void showThemePicker(BuildContext context) {
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
-  static String _s(String key) => AppStrings.get(key);
+
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: LocalizationService.instance,
-      builder: (context, _) => _buildDrawer(context),
-    );
-  }
+  Widget build(BuildContext context) => _buildDrawer(context);
 
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
@@ -400,7 +267,7 @@ class AppDrawer extends StatelessWidget {
               lastLogin: SessionService.instance.lastLogin.isNotEmpty
                   ? SessionService.instance.lastLogin
                   : '2026-03-16  12:37:59',
-              lastLoginLabel: _s('last_login'),
+              lastLoginLabel: 'Last Login',
             ),
 
             const Divider(height: 1, thickness: 0.5),
@@ -431,38 +298,12 @@ class AppDrawer extends StatelessWidget {
               labelKey: 'calendar_event_list',
             ),
 
-            // ── Language picker ───────────────────────────────────────────
-            ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 1,
-              ),
-              leading: const Icon(
-                Icons.language,
-                color: AppColors.primary,
-                size: 20,
-              ),
-              title: Text(
-                _s('language'),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              trailing: Text(
-                LocalizationService.instance.currentLanguage.flag,
-                style: const TextStyle(fontSize: 18),
-              ),
-              onTap: () => showLanguagePicker(context),
-            ),
             const Divider(height: 12, thickness: 0.5),
             // ── Offline Options ───────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
               child: Text(
-                _s('offline_options'),
+                'OFFLINE OPTIONS',
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.primary,
@@ -483,7 +324,7 @@ class AppDrawer extends StatelessWidget {
                 size: 20,
               ),
               title: Text(
-                _s('switch_offline'),
+                'Switch to Offline Mode',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.primary,
@@ -533,7 +374,7 @@ class AppDrawer extends StatelessWidget {
                 size: 20,
               ),
               title: Text(
-                _s('download_data'),
+                'Download Data (OFFLINE)',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.primary,
@@ -564,7 +405,7 @@ class AppDrawer extends StatelessWidget {
                 size: 20,
               ),
               title: Text(
-                _s('sync_clear'),
+                'Sync / Clear Data',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.primary,
@@ -594,7 +435,7 @@ class AppDrawer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
               child: Text(
-                _s('other'),
+                'Other',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade600,
@@ -609,7 +450,7 @@ class AppDrawer extends StatelessWidget {
                 horizontal: 20,
                 vertical: 1,
               ),
-              title: Text(_s('about_us'), style: const TextStyle(fontSize: 14)),
+              title: Text('About Us', style: const TextStyle(fontSize: 14)),
               onTap: () {
                 Navigator.pop(context); // Close drawer
                 final state = context
@@ -636,7 +477,7 @@ class AppDrawer extends StatelessWidget {
                 vertical: 1,
               ),
               title: Text(
-                _s('privacy_policy'),
+                'Privacy Policy',
                 style: const TextStyle(fontSize: 14),
               ),
               onTap: () {
@@ -682,74 +523,6 @@ class AppDrawer extends StatelessWidget {
             const SizedBox(height: 12),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _LanguageTile
-// ─────────────────────────────────────────────────────────────────────────────
-class _LanguageTile extends StatelessWidget {
-  final AppLanguage language;
-  final bool isSelected;
-  final bool isPremiumLight;
-  final bool isEnabled;
-  final Color primaryColor;
-  final VoidCallback onTap;
-
-  const _LanguageTile({
-    required this.language,
-    required this.isSelected,
-    required this.onTap,
-    this.isPremiumLight = false,
-    this.isEnabled = true,
-    this.primaryColor = AppColors.primary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = isPremiumLight
-        ? (isSelected ? primaryColor : const Color(0xFF1B1F3B))
-        : (isSelected ? Colors.white : Colors.white70);
-    final subtitleColor = isPremiumLight
-        ? Colors.grey.shade500
-        : Colors.white.withValues(alpha: 0.5);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? primaryColor.withValues(alpha: isPremiumLight ? 0.08 : 0.15)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: isSelected
-            ? Border.all(
-                color: primaryColor.withValues(alpha: 0.35),
-                width: 1.2,
-              )
-            : null,
-      ),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Text(language.flag, style: const TextStyle(fontSize: 26)),
-        title: Text(
-          language.name,
-          style: TextStyle(
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-            color: textColor,
-            fontSize: 15,
-          ),
-        ),
-        subtitle: Text(
-          language.englishName,
-          style: TextStyle(fontSize: 12, color: subtitleColor),
-        ),
-        trailing: isSelected
-            ? Icon(Icons.check_circle_rounded, color: primaryColor, size: 22)
-            : null,
-        enabled: isEnabled,
-        onTap: isEnabled ? onTap : null,
       ),
     );
   }
@@ -1000,7 +773,7 @@ class _PremiumDrawerHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _DrawerItem — compact nav tiles with localised labels
+// _DrawerItem — compact nav tiles
 // ─────────────────────────────────────────────────────────────────────────────
 class _DrawerItem extends StatelessWidget {
   final IconData icon;
@@ -1008,9 +781,25 @@ class _DrawerItem extends StatelessWidget {
 
   const _DrawerItem({required this.icon, required this.labelKey});
 
+  // labelKey also drives the routing switch below — keep both in sync.
+  static const Map<String, String> _labels = {
+    'dashboard': 'Dashboard',
+    'search_customer': 'Search Customer',
+    'reports': 'Reports',
+    'employee_track': 'Employee Track',
+    'settings': 'Settings',
+    'select_theme': 'Select Theme',
+    'customer_list': 'Customer List',
+    'paid_customers': 'Paid Customers',
+    'nearest_customer': 'Nearest Customer',
+    'list_expenses': 'List Expenses',
+    'collection_schedule': 'Collection Schedule',
+    'calendar_event_list': 'Calendar Event List',
+  };
+
   @override
   Widget build(BuildContext context) {
-    final label = AppStrings.get(labelKey);
+    final label = _labels[labelKey] ?? labelKey;
 
     void handleTap() {
       // Dashboard returns to the dashboard feed (tab 0) from ANY bottom-nav tab —

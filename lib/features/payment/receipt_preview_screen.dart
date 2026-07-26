@@ -516,6 +516,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       decoration: BoxDecoration(
         color: t.cardBg,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
+        border: t.isLight ? Border.all(color: t.dividerColor) : null,
         boxShadow: [
           // Match the info-card elevation (16 / (0,4)) for consistent card depth.
           BoxShadow(
@@ -594,7 +595,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                       Text(
                         '₹${p.amount.toStringAsFixed(2)}',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 24,
                           fontWeight: FontWeight.w900,
                           color: t.accent,
                         ),
@@ -618,13 +619,22 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          dateStr,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: t.cardHeadingText,
-                          ),
+                        Row(
+                          children: [
+                            Icon(Icons.event_outlined,
+                                size: 14, color: t.accent),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                dateStr,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: t.cardHeadingText,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -648,6 +658,7 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       decoration: BoxDecoration(
         color: t.cardBg,
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
+        border: t.isLight ? Border.all(color: t.dividerColor) : null,
         boxShadow: [
           BoxShadow(
             color: t.cardShadowColor,
@@ -684,14 +695,18 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Column(
-              children: rows
-                  .map((r) => _ReceiptRow(
-                label: r.$1,
-                value: r.$2,
-                t: t,
-                accentRight: accentRight,
-              ))
-                  .toList(),
+              children: [
+                for (var i = 0; i < rows.length; i++) ...[
+                  if (i > 0)
+                    Divider(height: 1, thickness: 0.6, color: t.dividerColor),
+                  _ReceiptRow(
+                    label: rows[i].$1,
+                    value: rows[i].$2,
+                    t: t,
+                    accentRight: accentRight,
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -733,9 +748,19 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                     borderRadius: BorderRadius.circular(AppSizes.radiusM),
                   ),
                 ),
-                child: const Text('PREV',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, letterSpacing: 1)),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.arrow_back_rounded, size: 16),
+                      SizedBox(width: 6),
+                      Text('PREV',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, letterSpacing: 1)),
+                    ],
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -754,9 +779,19 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                     borderRadius: BorderRadius.circular(AppSizes.radiusM),
                   ),
                 ),
-                child: const Text('NEXT CUSTOMER',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('NEXT CUSTOMER',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                      SizedBox(width: 6),
+                      Icon(Icons.arrow_forward_rounded, size: 16),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -887,6 +922,57 @@ class _ShareTile extends StatelessWidget {
 // Small reusable widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Decorative row icon chosen by the LABEL only — presentation metadata that does
+// NOT touch the row's value/data/condition. Unknown/new labels fall back to a
+// neutral icon so nothing can break.
+IconData _rowIcon(String label) {
+  switch (label) {
+    case 'Account No':
+      return Icons.badge_outlined;
+    case 'Customer Type':
+      return Icons.category_outlined;
+    case 'Customer Name':
+      return Icons.person_outline;
+    case 'NickName':
+      return Icons.sentiment_satisfied_outlined;
+    case 'Mobile No':
+      return Icons.phone_outlined;
+    case 'LCO Customer Id':
+      return Icons.apartment_outlined;
+    case 'Address':
+      return Icons.location_on_outlined;
+    case 'Last Paid Date':
+      return Icons.event_outlined;
+    case 'Bill For':
+      return Icons.description_outlined;
+    case 'Bill Amount':
+      return Icons.receipt_long_outlined;
+    case 'Total Due':
+      return Icons.account_balance_wallet_outlined;
+    case 'Out Amount':
+      return Icons.file_download_outlined;
+    case 'Discount Amount':
+      return Icons.local_offer_outlined;
+    case 'Broadband User Id':
+    case 'Broadband Paid':
+      return Icons.wifi_outlined;
+    case 'STB Paid':
+      return Icons.tv_outlined;
+    case 'Total Paid':
+      return Icons.payments_outlined;
+    case 'Bank Name':
+      return Icons.account_balance_outlined;
+    case 'Cheque/DD':
+      return Icons.receipt_outlined;
+    case 'Branch':
+      return Icons.location_city_outlined;
+    case 'Instr. Date':
+      return Icons.event_outlined;
+    default:
+      return Icons.info_outline;
+  }
+}
+
 class _ReceiptRow extends StatelessWidget {
   final String label;
   final String value;
@@ -903,8 +989,18 @@ class _ReceiptRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Decorative icon container — presentation only (no onTap, no data).
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: t.accent.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(_rowIcon(label), size: 15, color: t.accent),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             flex: 4,
             child: Text(label,
@@ -913,15 +1009,14 @@ class _ReceiptRow extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: t.cardSubtitleText)),
           ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 5,
             child: Text(value,
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: accentRight
-                        ? t.accent
-                        : t.cardBodyText)),
+                    color: accentRight ? t.accent : t.cardBodyText)),
           ),
         ],
       ),
@@ -950,14 +1045,14 @@ class _ReceiptIconBtn extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: color.withValues(alpha: 0.25)),
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(height: 3),
           Text(label,

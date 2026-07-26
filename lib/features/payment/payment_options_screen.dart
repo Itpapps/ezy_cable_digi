@@ -986,17 +986,17 @@ class _CustomerInfoCard extends StatelessWidget {
           // Tinted header strip (complaints-card style) — avatar + name/id + type.
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
             color: t.accent.withValues(alpha: 0.08),
             child: Row(
               children: [
                 Container(
-                  width: 38, height: 38,
+                  width: 30, height: 30,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(colors: t.headerGradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(9),
                   ),
-                  child: const Icon(Iconsax.user, color: Colors.white, size: 18),
+                  child: const Icon(Iconsax.user, color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1004,7 +1004,6 @@ class _CustomerInfoCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(customer.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: t.cardHeadingText)),
-                      Text(customer.lcoCustomerId, style: TextStyle(fontSize: 11, color: t.cardSubtitleText, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -1023,7 +1022,7 @@ class _CustomerInfoCard extends StatelessWidget {
           ),
           // Body: the detail grid (Mobile / Total Due / Payable / …).
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
             child: _infoGrid(customer, t),
           ),
         ],
@@ -1043,14 +1042,22 @@ class _CustomerInfoCard extends StatelessWidget {
     return Column(
       children: items
           .map((e) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2.5),
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: [
                     Expanded(
                       flex: 4,
-                      child: Text(
-                        e.$1,
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: t.cardSubtitleText),
+                      child: Row(
+                        children: [
+                          Icon(_rowIcon(e.$1), size: 14, color: t.cardSubtitleText),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              e.$1,
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: t.cardSubtitleText),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -1065,6 +1072,18 @@ class _CustomerInfoCard extends StatelessWidget {
               ))
           .toList(),
     );
+  }
+
+  // Presentation-only: pick a small leading glyph from the row label. Reads the
+  // label text only — never touches the value or any payment logic.
+  IconData _rowIcon(String label) {
+    if (label.startsWith('Mobile')) return Iconsax.call;
+    if (label.startsWith('Total')) return Iconsax.wallet_3;
+    if (label.startsWith('Payable')) return Iconsax.money_send;
+    if (label.startsWith('Last')) return Iconsax.calendar_tick;
+    if (label.startsWith('Bill')) return Iconsax.calendar;
+    if (label.startsWith('Type')) return Iconsax.box;
+    return Iconsax.document_text;
   }
 }
 
@@ -1153,9 +1172,18 @@ class _CompactField extends StatelessWidget {
       onChanged: onChanged,
       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: t.cardBodyText),
       decoration: InputDecoration(
-        hintText: hint,
+        // Floating label: the placeholder rests inside the empty field and animates
+        // up to a small label on focus/fill (Material default). Presentation-only —
+        // the controller/value/callbacks are untouched; outlined field keeps a
+        // constant height (label sits on the border, no layout shift).
+        labelText: hint,
         errorText: errorText,
-        hintStyle: TextStyle(color: t.inputHintColor, fontWeight: FontWeight.w400, fontSize: 12),
+        labelStyle: TextStyle(color: t.inputHintColor, fontWeight: FontWeight.w400, fontSize: 13),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith((states) => TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: states.contains(WidgetState.focused) ? borderColor : t.inputHintColor,
+            )),
         filled: true,
         fillColor: enabled ? t.inputBg : t.inputBg.withValues(alpha: 0.5),
         isDense: true,

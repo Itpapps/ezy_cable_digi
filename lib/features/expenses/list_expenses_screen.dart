@@ -1,4 +1,3 @@
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
 import 'add_expenses_screen.dart';
 import 'data/expense_models.dart';
@@ -82,7 +81,7 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(AppStrings.of(context, 'list_expenses'))),
+      appBar: AppBar(title: const Text('List Expenses')),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAdd,
         backgroundColor: const Color(0xFF0D47A1),
@@ -154,7 +153,7 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
       );
     }
     if (_items.isEmpty) {
-      return Center(child: Text(AppStrings.of(context, 'no_expenses_found')));
+      return const Center(child: Text('No Expenses Found'));
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),

@@ -190,22 +190,46 @@ class _OfflineCollectionsReportScreenState
     );
   }
 
+  // Date field — same design as the Employee Track filter (tappable card with a
+  // leading calendar icon + label/value), themed white-on-blue for this screen.
+  // Presentation only; the tap still calls the same _pickDate / shows _fmt date.
   Widget _dateButton(String label, DateTime date, bool isStart) {
-    return OutlinedButton(
-      onPressed: () => _pickDate(isStart: isStart),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white70),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-      ),
-      child: Column(
-        children: [
-          Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.white70)),
-          const SizedBox(height: 2),
-          Text(_fmt.format(date),
-              style: const TextStyle(fontWeight: FontWeight.w800)),
-        ],
+    return GestureDetector(
+      onTap: () => _pickDate(isStart: isStart),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.10),
+          border: Border.all(color: Colors.white70),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_month_rounded,
+                size: 18, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 1),
+                  Text(_fmt.format(date),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import '../../core/constants/app_colors.dart';
 import 'data/pay_later.dart';
 import 'data/pay_later_repository.dart';
@@ -128,9 +127,9 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
         backgroundColor: const Color(0xFF0D47A1),
         elevation: 0,
         centerTitle: true,
-        title: Text(
-          AppStrings.of(context, 'collection_schedule').toUpperCase(),
-          style: const TextStyle(
+        title: const Text(
+          'COLLECTION SCHEDULE',
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
             color: Colors.white,
@@ -151,9 +150,9 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    AppStrings.of(context, 'collection_schedule'),
-                    style: const TextStyle(
+                  const Text(
+                    'Collection Schedule',
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
@@ -163,12 +162,12 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _dateField(AppStrings.of(context, 'start_date'),
+                        child: _dateField('Start Date',
                             _fmt(_startDate), _pickStart),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _dateField(AppStrings.of(context, 'end_date'),
+                        child: _dateField('End Date',
                             _fmt(_endDate), _pickEnd),
                       ),
                     ],
@@ -180,7 +179,7 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _textField(
-                            AppStrings.of(context, 'customer_name'),
+                            'Customer Name',
                             _customerNameCtrl),
                       ),
                     ],
@@ -190,7 +189,7 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
                     children: [
                       Expanded(
                         child: _textField(
-                            AppStrings.of(context, 'account_number'),
+                            'Account Number',
                             _accountCtrl),
                       ),
                       const SizedBox(width: 10),
@@ -210,8 +209,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: Text(AppStrings.of(context, 'search'),
-                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                          child: const Text('Search',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -223,8 +222,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: Text(AppStrings.of(context, 'clear'),
-                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                          child: const Text('Clear',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
                         ),
                       ),
                     ],
@@ -238,7 +237,7 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             color: const Color(0xFF0D47A1),
             child: Text(
-              '${AppStrings.of(context, 'total_count')} - ${_results.length}',
+              'Total Count - ${_results.length}',
               textAlign: TextAlign.right,
               style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
@@ -282,9 +281,9 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
       );
     }
     if (_results.isEmpty) {
-      return Center(
-        child: Text(AppStrings.of(context, 'no_schedules_found'),
-            style: const TextStyle(color: Colors.white70, fontSize: 15)),
+      return const Center(
+        child: Text('No schedules found',
+            style: TextStyle(color: Colors.white70, fontSize: 15)),
       );
     }
     return ListView.builder(
@@ -332,8 +331,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
 
   Widget _statusDropdown() {
     final items = <DropdownMenuItem<String>>[
-      DropdownMenuItem(
-          value: '', child: Text(AppStrings.of(context, 'select_status'))),
+      const DropdownMenuItem(
+          value: '', child: Text('Select Status')),
       ..._statuses
           .where((s) => s.isNotEmpty)
           .map((s) => DropdownMenuItem(value: s, child: Text(s))),
@@ -341,8 +340,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(AppStrings.of(context, 'select_status'),
-            style: const TextStyle(
+        const Text('Select Status',
+            style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w600)),
@@ -369,16 +368,16 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
 
   Widget _employeeDropdown() {
     final items = <DropdownMenuItem<String>>[
-      DropdownMenuItem(
-          value: '', child: Text(AppStrings.of(context, 'select_employee'))),
+      const DropdownMenuItem(
+          value: '', child: Text('Select Employee')),
       ..._employees.map(
           (e) => DropdownMenuItem(value: e.id, child: Text(e.name))),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(AppStrings.of(context, 'select_employee'),
-            style: const TextStyle(
+        const Text('Select Employee',
+            style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w600)),

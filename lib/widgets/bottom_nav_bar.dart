@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../core/constants/app_colors.dart';
-import '../core/services/localization_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PREMIUM BOTTOM NAVIGATION BAR
@@ -21,10 +20,10 @@ class BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavItem(icon: Iconsax.element_3,  activeIcon: Iconsax.element_3,  label: AppStrings.of(context, 'dashboard')),
-      _NavItem(icon: Iconsax.message_question, activeIcon: Iconsax.message_question, label: AppStrings.of(context, 'complaints')),
-      _NavItem(icon: Iconsax.graph,       activeIcon: Iconsax.graph,      label: AppStrings.of(context, 'analytics')),
-      _NavItem(icon: Iconsax.wallet_3,    activeIcon: Iconsax.wallet_3,   label: AppStrings.of(context, 'expenses')),
+      _NavItem(icon: Iconsax.element_3,  activeIcon: Iconsax.element_3,  label: 'Dashboard'),
+      _NavItem(icon: Iconsax.message_question, activeIcon: Iconsax.message_question, label: 'Complaints'),
+      _NavItem(icon: Iconsax.graph,       activeIcon: Iconsax.graph,      label: 'Analytics'),
+      _NavItem(icon: Iconsax.wallet_3,    activeIcon: Iconsax.wallet_3,   label: 'Expenses'),
     ];
 
     return Container(

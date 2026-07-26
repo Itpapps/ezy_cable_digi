@@ -331,6 +331,36 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
   }
 
+  // Decorative leading icon chosen by the row's LABEL only — presentation
+  // metadata; does NOT touch the label, value, condition, or callback. Unknown
+  // labels fall back to a neutral icon so nothing can break.
+  IconData _custRowIcon(String label) {
+    switch (label) {
+      case 'Customer Name':
+        return Icons.person_outline;
+      case 'Nick Name':
+        return Icons.sentiment_satisfied_outlined;
+      case 'Mobile Number':
+        return Icons.phone_outlined;
+      case 'Total Due':
+        return Icons.account_balance_wallet_outlined;
+      case 'Amount Payable':
+        return Icons.payments_outlined;
+      case 'Customer Type':
+        return Icons.category_outlined;
+      case 'CRF Number':
+        return Icons.badge_outlined;
+      case 'Group Name':
+        return Icons.groups_outlined;
+      case 'Area Name':
+        return Icons.map_outlined;
+      case 'Address':
+        return Icons.location_on_outlined;
+      default:
+        return Icons.info_outline;
+    }
+  }
+
   Widget _infoRow(
     String label,
     String value,
@@ -346,10 +376,21 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Decorative leading icon (presentation only — no onTap, no data).
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: t.accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_custRowIcon(label), size: 15, color: t.accent),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   label,
@@ -434,7 +475,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ],
           ),
           Divider(color: t.accent, thickness: 1.2),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
@@ -446,7 +487,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   t: t,
                 ),
               ),
-              _locDivider(t),
+              const SizedBox(width: 8),
               Expanded(
                 child: _locCell(
                   _customer.billMonth.trim().isEmpty ? 'NA' : _customer.billMonth,
@@ -454,7 +495,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   t: t,
                 ),
               ),
-              _locDivider(t),
+              const SizedBox(width: 8),
               Expanded(
                 child: _locCell(
                   _lcoId,
@@ -466,7 +507,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
@@ -478,7 +519,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                   copyable: true,
                 ),
               ),
-              _locDivider(t),
+              const SizedBox(width: 8),
               Expanded(
                 child: _locCell(
                   _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
@@ -491,7 +532,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               const Expanded(child: SizedBox()),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
         ],
       ),
     );
@@ -510,13 +551,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         behavior: SnackBarBehavior.floating,
       ));
   }
-
-  Widget _locDivider(AppThemeConst t) => Container(
-        width: 1,
-        height: 40,
-        color: t.dividerColor,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-      );
 
   Widget _locCell(
     String value,
@@ -541,7 +575,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
+                  height: 1.1,
                   fontWeight: FontWeight.w800,
                   color: valueColor ?? t.accent,
                 ),
@@ -561,30 +596,38 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ],
       ],
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Android parity: the LCO id value is itself tappable to open the edit
-        // dialog (tv_lcocustomerno.setOnClickListener). Cells without onEditTap
-        // stay non-interactive.
-        onEditTap != null
-            ? GestureDetector(
-                onTap: onEditTap,
-                behavior: HitTestBehavior.opaque,
-                child: valueRow,
-              )
-            : valueRow,
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: t.cardSubtitleText,
-            fontWeight: FontWeight.w500,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: t.accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Android parity: the LCO id value is itself tappable to open the edit
+          // dialog (tv_lcocustomerno.setOnClickListener). Cells without onEditTap
+          // stay non-interactive.
+          onEditTap != null
+              ? GestureDetector(
+                  onTap: onEditTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: valueRow,
+                )
+              : valueRow,
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: t.cardSubtitleText,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
-        ),
-      ],
+        ],
+      ),
     );
   }
 

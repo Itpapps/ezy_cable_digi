@@ -130,7 +130,7 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
@@ -147,7 +147,14 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                       children: [
                         TextButton.icon(
                           onPressed: _printReport,
-                          icon: const Icon(Icons.print, color: Colors.red),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            minimumSize: const Size(0, 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.print,
+                              color: Colors.red, size: 20),
                           label: const Text(
                             'PRINT',
                             style: TextStyle(
@@ -227,11 +234,20 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                           padding: const EdgeInsets.only(top: 8),
                           child: Row(
                             children: [
-                              const Expanded(
+                              Expanded(
                                 flex: 6,
-                                child: Text(
-                                  'TOTAL COLLECTION',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.account_balance_wallet_outlined,
+                                        size: 16, color: AppColors.primary),
+                                    SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'TOTAL COLLECTION',
+                                        style: TextStyle(fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               Expanded(
@@ -285,11 +301,24 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
   }
 
   Widget _row(String mode, String count, String amount) {
+    // Icon picked from the mode label only — presentation, no data/logic.
+    final icon = mode.toUpperCase().startsWith('CASH')
+        ? Icons.payments_outlined
+        : Icons.account_balance_outlined;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(flex: 4, child: Text(mode)),
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Icon(icon, size: 14, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Expanded(child: Text(mode)),
+              ],
+            ),
+          ),
           Expanded(
               flex: 2, child: Text(count, textAlign: TextAlign.center)),
           Expanded(

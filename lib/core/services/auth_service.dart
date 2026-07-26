@@ -32,6 +32,11 @@ class AuthService {
     required String username,
     required String password,
     bool rememberMe = false,
+    // Device last-known location, captured by the login UI (Android parity:
+    // GPSTracker → userInfo.lat/lang). Defaults to 0.0/0.0 when unavailable so
+    // existing callers and location-failure paths behave exactly as before.
+    double lat = 0.0,
+    double lang = 0.0,
   }) async {
     final url = ServerUrlResolver.instance.loginServerUrl; // NAMESPACE + "/wsController" (or BMS override)
     final ns = ServerUrlResolver.instance.namespace;
@@ -63,8 +68,8 @@ class AuthService {
           // (LoginActivity.java:492-497) — production log confirms 0/0.
           'appTypeId': 0,
           'appTypeAutoId': 0,
-          'lat': '0.0',
-          'lang': '0.0',
+          'lat': lat.toString(),
+          'lang': lang.toString(),
         },
       );
 

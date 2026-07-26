@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
@@ -53,7 +52,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     if (!mounted) return;
     _amountFilter.text = amt.toString();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppStrings.get('printer_settings_saved'))),
+      const SnackBar(content: Text('Printer settings saved')),
     );
   }
 
@@ -111,7 +110,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          AppStrings.of(context, 'settings').toUpperCase(),
+          'SETTINGS',
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
               letterSpacing: 1.2, color: t.appBarFg),
         ),
@@ -149,7 +148,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        AppStrings.of(context, 'printer_settings_title'),
+                        'PRINTER SETTINGS',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w800,
@@ -159,13 +158,13 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: AppSizes.paddingL),
-                  _textField(context, AppStrings.of(context, 'header1'), _header1, t),
+                  _textField(context, 'Header 1', _header1, t),
                   const SizedBox(height: AppSizes.paddingS),
-                  _textField(context, AppStrings.of(context, 'header2'), _header2, t),
+                  _textField(context, 'Header 2', _header2, t),
                   const SizedBox(height: AppSizes.paddingS),
-                  _textField(context, AppStrings.of(context, 'footer1'), _footer1, t),
+                  _textField(context, 'Footer 1', _footer1, t),
                   const SizedBox(height: AppSizes.paddingS),
-                  _textField(context, AppStrings.of(context, 'footer2'), _footer2, t),
+                  _textField(context, 'Footer 2', _footer2, t),
                 ],
               ),
             ),
@@ -195,7 +194,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        AppStrings.of(context, 'amount_filter_settings'),
+                        'AMOUNT FILTER SETTINGS',
                         style: TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w800, color: t.cardHeadingText,
                         ),
@@ -205,7 +204,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   const SizedBox(height: AppSizes.paddingM),
                   _textField(
                     context,
-                    AppStrings.of(context, 'enter_amount_filter'),
+                    'Enter Amount to set filter',
                     _amountFilter, t,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
@@ -228,8 +227,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: Text(AppStrings.of(context, 'submit'),
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text('SUBMIT',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
                 const SizedBox(width: AppSizes.paddingS),
@@ -250,8 +249,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
-                    child: Text(AppStrings.of(context, 'clear'),
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text('Clear',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],

@@ -1,5 +1,4 @@
 import 'package:ezy_cable_digi/bluetooth/bluetooth_devices_screen.dart';
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:ezy_cable_digi/features/event/event_management_screen.dart';
 import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezy_cable_digi/features/offline/download_records_screen.dart';
@@ -418,10 +417,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                           children: [
                                             Expanded(
                                               child: _GradientSummaryCard(
-                                                title: AppStrings.of(
-                                                  context,
-                                                  'due_amount',
-                                                ),
+                                                title: 'Due Amount',
                                                 amount: _dash.dueAmountText,
                                                 subtitle: '',
                                                 gradient: const LinearGradient(
@@ -440,15 +436,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: _GradientSummaryCard(
-                                                title: AppStrings.of(
-                                                  context,
-                                                  'month_billing',
-                                                ),
+                                                title: 'Month Billing',
                                                 amount: _dash.monthBillingText,
-                                                subtitle: AppStrings.of(
-                                                  context,
-                                                  'this_month',
-                                                ),
+                                                subtitle: 'This month',
                                                 gradient: const LinearGradient(
                                                   colors: [
                                                     Color(0xFFEA580C),
@@ -465,16 +455,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: _GradientSummaryCard(
-                                                title: AppStrings.of(
-                                                  context,
-                                                  'onetime_charges',
-                                                ),
+                                                title: 'Onetime Ch...',
                                                 amount:
                                                     _dash.onetimeChargesText,
-                                                subtitle: AppStrings.of(
-                                                  context,
-                                                  'installations',
-                                                ),
+                                                subtitle: 'Installations',
                                                 gradient: const LinearGradient(
                                                   colors: [
                                                     Color(0xFF0277BD),
@@ -507,15 +491,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                             if (_dash.showLcoWallet) ...[
                                               Expanded(
                                                 child: _LottieHighlightCard(
-                                                  title: AppStrings.of(
-                                                    context,
-                                                    'lco_wallet',
-                                                  ),
+                                                  title: 'LCO Wallet',
                                                   amount: _dash.lcoWalletText,
-                                                  subtitle: AppStrings.of(
-                                                    context,
-                                                    'available',
-                                                  ),
+                                                  subtitle: 'Available',
                                                   gradient:
                                                       const LinearGradient(
                                                         colors: [
@@ -535,15 +513,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                             ],
                                             Expanded(
                                               child: _LottieHighlightCard(
-                                                title: AppStrings.of(
-                                                  context,
-                                                  'collections',
-                                                ),
+                                                title: 'Collections',
                                                 amount: _dash.collectionsText,
-                                                subtitle: AppStrings.of(
-                                                  context,
-                                                  'today',
-                                                ),
+                                                subtitle: 'Today',
                                                 gradient: const LinearGradient(
                                                   colors: [
                                                     Color(0xFFEC4899),
@@ -609,10 +581,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                 children: [
                                   _QuickActionTile(
                                     icon: Iconsax.user_tag,
-                                    label: AppStrings.of(
-                                      context,
-                                      'customer_list',
-                                    ),
+                                    label: 'Customer List',
                                     onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
@@ -622,10 +591,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                   _QuickActionTile(
                                     icon: Iconsax.document_download,
-                                    label: AppStrings.of(
-                                      context,
-                                      'download_data_btn',
-                                    ),
+                                    label: 'Download Data',
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -636,10 +602,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                   _QuickActionTile(
                                     icon: Iconsax.search_status,
-                                    label: AppStrings.of(
-                                      context,
-                                      'offline_search',
-                                    ),
+                                    label: 'Offline Search',
                                     onTap: () async {
                                       if (!await offlineDataMatchesDealer()) {
                                         if (!context.mounted) return;
@@ -658,10 +621,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                   _QuickActionTile(
                                     icon: Iconsax.calendar_1,
-                                    label: AppStrings.of(
-                                      context,
-                                      'miniday_report_btn',
-                                    ),
+                                    label: 'Miniday Report',
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -674,10 +634,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                   _QuickActionTile(
                                     icon: Iconsax.chart_2,
-                                    label: AppStrings.of(
-                                      context,
-                                      'monthly_report_btn',
-                                    ),
+                                    label: 'Monthly Report',
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -690,10 +647,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                   _QuickActionTile(
                                     icon: Iconsax.setting_2,
-                                    label: AppStrings.of(
-                                      context,
-                                      'settings_btn',
-                                    ),
+                                    label: 'Settings',
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -763,7 +717,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
               child: Row(
                 children: [
                   _FeedChip(
-                    label: AppStrings.of(context, 'complaints'),
+                    label: 'Complaints',
                     selected: _feed == _FeedType.complaints,
                     onTap: () {
                       setState(() {
@@ -775,7 +729,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   ),
                   const SizedBox(width: 8),
                   _FeedChip(
-                    label: AppStrings.of(context, 'unpaid'),
+                    label: 'Unpaid',
                     selected: _feed == _FeedType.unpaid,
                     onTap: () {
                       setState(() {
@@ -790,7 +744,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   ),
                   const SizedBox(width: 8),
                   _FeedChip(
-                    label: AppStrings.of(context, 'nearest'),
+                    label: 'Nearest',
                     selected: _feed == _FeedType.nearest,
                     onTap: () {
                       setState(() {
@@ -802,7 +756,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   ),
                   const SizedBox(width: 8),
                   _FeedChip(
-                    label: AppStrings.of(context, 'pay_later'),
+                    label: 'PayLater',
                     selected: _feed == _FeedType.payLater,
                     onTap: () {
                       setState(() {
@@ -1609,7 +1563,7 @@ class _TicketCard extends StatelessWidget {
                         letterSpacing: 0.3,
                       ),
                     ),
-                    label: Text(AppStrings.get('update_status')),
+                    label: const Text('Update Status'),
                   ),
                 ),
               ],
@@ -2163,12 +2117,6 @@ class _PremiumAppBar extends StatelessWidget {
                         builder: (_) => const ScanCustomerScreen(),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  // ── Language switcher ──────────────────────────────────────
-                  _AppBarIcon(
-                    icon: Icons.language_rounded,
-                    onTap: () => showLanguagePicker(context),
                   ),
                 ],
               ),

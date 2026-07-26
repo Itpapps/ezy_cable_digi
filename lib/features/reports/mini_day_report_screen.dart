@@ -1,4 +1,3 @@
-import 'package:ezy_cable_digi/core/services/localization_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -124,7 +123,7 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          AppStrings.of(context, 'mini_day_report').toUpperCase(),
+          'MINI DAY REPORT',
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800,
               letterSpacing: 1.1, color: t.appBarFg),
         ),
@@ -155,7 +154,7 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                       const Icon(Icons.print, color: Colors.red, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        AppStrings.of(context, 'print'),
+                        'PRINT',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -191,20 +190,20 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                     children: [
                       Expanded(
                         flex: 4,
-                        child: Text(AppStrings.of(context, 'mode'),
+                        child: Text('MODE',
                             style: TextStyle(fontWeight: FontWeight.w800,
                                 fontSize: 13, color: t.cardHeadingText)),
                       ),
                       Expanded(
                         flex: 2,
-                        child: Text(AppStrings.of(context, 'count'),
+                        child: Text('COUNT',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontWeight: FontWeight.w800,
                                 fontSize: 13, color: t.cardHeadingText)),
                       ),
                       Expanded(
                         flex: 3,
-                        child: Text(AppStrings.of(context, 'amount'),
+                        child: Text('AMOUNT',
                             textAlign: TextAlign.right,
                             style: TextStyle(fontWeight: FontWeight.w800,
                                 fontSize: 13, color: t.cardHeadingText)),
@@ -225,7 +224,7 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                   else ...[
                     // Cash row (STB)
                     _ReportRow(
-                      label: AppStrings.of(context, 'cash_stb'),
+                      label: 'CASH(STB)',
                       count: _data.cashCount, amount: _data.cashAmount, t: t,
                     ),
 
@@ -233,7 +232,7 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
 
                     // Bank row (STB)
                     _ReportRow(
-                      label: AppStrings.of(context, 'bank_stb'),
+                      label: 'BANK(STB)',
                       count: _data.bankCount, amount: _data.bankAmount, t: t,
                     ),
 
@@ -260,10 +259,19 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
                       children: [
                         Expanded(
                           flex: 6,
-                          child: Text(
-                            AppStrings.of(context, 'total_collection'),
-                            style: TextStyle(fontWeight: FontWeight.w800,
-                                fontSize: 14, color: t.accent),
+                          child: Row(
+                            children: [
+                              Icon(Icons.account_balance_wallet_outlined,
+                                  size: 16, color: t.accent),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'TOTAL COLLECTION',
+                                  style: TextStyle(fontWeight: FontWeight.w800,
+                                      fontSize: 14, color: t.accent),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         Expanded(
@@ -303,12 +311,24 @@ class _ReportRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Icon picked from the mode label only — presentation, no data/logic.
+    final icon = label.toLowerCase().startsWith('cash')
+        ? Icons.payments_outlined
+        : Icons.account_balance_outlined;
     return Row(
       children: [
         Expanded(
           flex: 4,
-          child: Text(label,
-              style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+          child: Row(
+            children: [
+              Icon(icon, size: 14, color: t.accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(label,
+                    style: TextStyle(fontSize: 13, color: t.cardBodyText, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
         ),
         Expanded(
           flex: 2,

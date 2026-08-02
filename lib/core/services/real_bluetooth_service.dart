@@ -86,7 +86,23 @@ class RealBluetoothService {
 
   Future<void> disconnectPrinter() async {
     try {
-      await PrintBluetoothThermal.disconnect;
+      // iOS: the plugin's `disconnect` branch force-unwraps a nil
+      // `connectedPeripheral` (SwiftPrintBluetoothThermalPlugin.swift:244,
+      // declared `CBPeripheral!`), trapping with EXC_BREAKPOINT whenever
+      // disconnect runs before anything was ever connected — which is every
+      // screen `dispose()` and the first line of connectPrinter. Android
+      // null-guards the same path (`if (outputStream != null)`), so this only
+      // ever bit iOS. `connectionStatus` uses optional chaining natively and is
+      // safe to call at any time, so gate on it.
+      final connected = await PrintBluetoothThermal.connectionStatus
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      if (!connected) return;
+
+      // The plugin never answers `disconnect` synchronously — it replies from
+      // the didDisconnectPeripheral delegate — so an unbounded await can hang
+      // forever if that delegate never fires.
+      await PrintBluetoothThermal.disconnect
+          .timeout(const Duration(seconds: 5), onTimeout: () => false);
     } catch (_) {}
   }
 
@@ -111,6 +127,12 @@ class RealBluetoothService {
 
   // 🔹 Format MAC address
   String _formatMacAddress(String mac) {
+    // iOS/CoreBluetooth identifies peripherals by UUID, never by MAC. This
+    // Android-style reformatting can only ever corrupt a UUID, and the plugin
+    // force-unwraps `UUID(uuidString:)` (SwiftPrintBluetoothThermalPlugin.swift:110)
+    // — a corrupted value would trap there. Pass iOS addresses through as-is.
+    if (!Platform.isAndroid) return mac;
+
     if (mac.contains(':') && mac.length == 17) {
       return mac.toUpperCase();
     }

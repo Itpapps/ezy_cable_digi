@@ -76,6 +76,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# App-icon generation. Source: assets/magikios.png (2304x2304, 24-bit RGB, no
+# alpha — App Store requires an opaque 1024x1024, ITMS-90717 rejects alpha).
+# iOS only: the Android launcher icons are flavour-specific (src/magik/res/...)
+# and are deliberately NOT regenerated here.
+# Regenerate with:  dart run flutter_launcher_icons
+flutter_launcher_icons:
+  ios: true
+  android: false
+  image_path: "assets/magikios.png"
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

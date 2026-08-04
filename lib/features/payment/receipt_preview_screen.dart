@@ -15,6 +15,7 @@ import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/payment.dart';
+import '../../core/utils/share_origin.dart';
 import '../../core/theme/theme_constants.dart';
 import 'printer_launcher.dart';
 import '../search/data/search_repository.dart';
@@ -817,6 +818,26 @@ class _ShareSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // iOS needs a non-empty anchor rect or share_plus rejects the share before
+    // presenting anything. Capture it — and the messenger — from the live sheet
+    // context BEFORE popping, since the context is dead afterwards. Android
+    // ignores sharePositionOrigin entirely.
+    Future<void> shareReceipt({String? subject}) async {
+      final origin = shareOriginFrom(context);
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      try {
+        await Share.shareXFiles([XFile(filePath)],
+            subject: subject,
+            text: 'Receipt $transactionId',
+            sharePositionOrigin: origin);
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Share failed: $e')),
+        );
+      }
+    }
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -850,32 +871,19 @@ class _ShareSheet extends StatelessWidget {
             icon: Icons.email_rounded,
             color: Colors.red,
             label: 'Gmail',
-            onTap: () async {
-              Navigator.pop(context);
-              await Share.shareXFiles([XFile(filePath)],
-                  subject: 'Payment Receipt',
-                  text: 'Receipt $transactionId');
-            },
+            onTap: () => shareReceipt(subject: 'Payment Receipt'),
           ),
           _ShareTile(
             icon: Icons.chat_rounded,
             color: const Color(0xFF25D366),
             label: 'WhatsApp',
-            onTap: () async {
-              Navigator.pop(context);
-              await Share.shareXFiles([XFile(filePath)],
-                  text: 'Receipt $transactionId');
-            },
+            onTap: () => shareReceipt(),
           ),
           _ShareTile(
             icon: Icons.business_center_rounded,
             color: Colors.teal,
             label: 'WhatsApp Business',
-            onTap: () async {
-              Navigator.pop(context);
-              await Share.shareXFiles([XFile(filePath)],
-                  text: 'Receipt $transactionId');
-            },
+            onTap: () => shareReceipt(),
           ),
         ],
       ),

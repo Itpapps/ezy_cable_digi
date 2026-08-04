@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/customer.dart';
+import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
@@ -117,7 +118,10 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
         buildLines: (fmt) => _buildPrintLines(inv, fmt),
       );
 
-  Future<void> _shareInvoice(InvoiceRecord inv) async {
+  /// [originContext] is the tapped invoice card's context — iOS needs it to
+  /// anchor the share sheet (see [shareOriginFrom]).
+  Future<void> _shareInvoice(BuildContext originContext, InvoiceRecord inv) async {
+    final origin = shareOriginFrom(originContext);
     try {
       final lines = _buildShareLines(inv);
       final doc = pw.Document();
@@ -144,7 +148,8 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
       await File(path).writeAsBytes(bytes);
       if (!mounted) return;
       await Share.shareXFiles([XFile(path)],
-          subject: 'Invoice History of ${widget.customer.name}');
+          subject: 'Invoice History of ${widget.customer.name}',
+          sharePositionOrigin: origin);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -208,13 +213,13 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
       itemCount: _invoices.length,
-      itemBuilder: (_, i) {
+      itemBuilder: (cardCtx, i) {
         final inv = _invoices[i];
         return _InvoiceCard(
           invoice: inv,
           shareVisible: SessionService.instance.shareOption,
           onPrint: () => _printInvoice(inv),
-          onShare: () => _shareInvoice(inv),
+          onShare: () => _shareInvoice(cardCtx, inv),
         );
       },
     );

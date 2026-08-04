@@ -39,5 +39,48 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # ── permission_handler (iOS) ────────────────────────────────────────────
+    # Every permission in permission_handler_apple is gated behind a
+    # compile-time macro that DEFAULTS TO 0 (see PermissionHandlerEnums.h).
+    # With the macro off, the real strategy is replaced at compile time by
+    # UnknownPermissionStrategy, whose requestPermission returns
+    # PermissionStatusPermanentlyDenied WITHOUT ever calling the iOS API — so
+    # no system dialog appears and the permission never shows up in Settings.
+    #
+    # Only the permissions this app actually requests are enabled; every other
+    # macro is left at its 0 default so unused APIs stay out of the binary
+    # (keeps App Review surface minimal).
+    #
+    # Reference: https://github.com/Baseflow/flutter-permission-handler/blob/master/permission_handler_apple/ios/Classes/PermissionHandlerEnums.h
+    target.build_configurations.each do |config|
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+      defs = [defs] unless defs.is_a?(Array)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs + [
+        ## dart: PermissionGroup.camera
+        # Info.plist: NSCameraUsageDescription
+        # Used by: lib/features/scan/scan_customer_screen.dart (mobile_scanner)
+        'PERMISSION_CAMERA=1',
+
+        ## dart: [PermissionGroup.location, .locationAlways, .locationWhenInUse]
+        # Info.plist: NSLocationWhenInUseUsageDescription,
+        #             NSLocationAlwaysAndWhenInUseUsageDescription
+        # Used by: lib/features/auth/login_screen.dart,
+        #          lib/core/services/real_bluetooth_service.dart
+        'PERMISSION_LOCATION=1',
+
+        ## dart: PermissionGroup.notification
+        # Used by: lib/core/services/notification_service.dart,
+        #          lib/features/auth/login_screen.dart
+        'PERMISSION_NOTIFICATIONS=1',
+
+        ## dart: PermissionGroup.bluetooth
+        # Info.plist: NSBluetoothAlwaysUsageDescription,
+        #             NSBluetoothPeripheralUsageDescription
+        # Thermal-printer pairing. NOTE: does NOT affect Permission.bluetoothScan
+        # / .bluetoothConnect, which are Android-only permission groups.
+        'PERMISSION_BLUETOOTH=1',
+      ]
+    end
   end
 end

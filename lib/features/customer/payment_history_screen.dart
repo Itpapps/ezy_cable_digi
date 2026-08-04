@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/customer.dart';
+import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
@@ -517,7 +518,10 @@ class _PaymentHistoryDetailScreenState
         buildLines: _buildPrintLines,
       );
 
-  Future<void> _share() async {
+  /// [originContext] is the Share button's own context — iOS needs it to anchor
+  /// the share sheet (see [shareOriginFrom]).
+  Future<void> _share(BuildContext originContext) async {
+    final origin = shareOriginFrom(originContext);
     try {
       final lines = _buildShareLines();
       final doc = pw.Document();
@@ -544,7 +548,8 @@ class _PaymentHistoryDetailScreenState
       await File(path).writeAsBytes(bytes);
       if (!mounted) return;
       await Share.shareXFiles([XFile(path)],
-          subject: 'Payment History of ${widget.customer.name}');
+          subject: 'Payment History of ${widget.customer.name}',
+          sharePositionOrigin: origin);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -650,11 +655,13 @@ class _PaymentHistoryDetailScreenState
                       onTap: _print),
                   if (SessionService.instance.shareOption) ...[
                     const SizedBox(width: 20),
-                    _DetailActionButton(
-                        icon: Icons.share,
-                        label: 'Share',
-                        color: const Color(0xFF2E7D32),
-                        onTap: _share),
+                    Builder(
+                      builder: (btnCtx) => _DetailActionButton(
+                          icon: Icons.share,
+                          label: 'Share',
+                          color: const Color(0xFF2E7D32),
+                          onTap: () => _share(btnCtx)),
+                    ),
                   ],
                 ],
               ),

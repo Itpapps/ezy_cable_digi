@@ -12,6 +12,7 @@ import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/payment.dart';
 import '../../core/database/database_helper.dart';
+import '../../core/utils/share_origin.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'receipt_preview_screen.dart';
@@ -92,9 +93,11 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
       ),
       actions: [
         if (_payment != null) ...[
-          IconButton(
-            icon: const Icon(Iconsax.share, size: 20),
-            onPressed: _shareReceipt,
+          Builder(
+            builder: (btnCtx) => IconButton(
+              icon: const Icon(Iconsax.share, size: 20),
+              onPressed: () => _shareReceipt(btnCtx),
+            ),
           ),
           IconButton(
             icon: const Icon(Iconsax.printer, size: 20),
@@ -250,8 +253,12 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
   }
 
   // ── Share / Print ─────────────────────────────────────────────────────────
-  Future<void> _shareReceipt() async {
+  /// [originContext] is the Share button's own context — iOS needs it to anchor
+  /// the share sheet (see [shareOriginFrom]). Captured before the loading
+  /// dialog goes up so the rect is that of the button, not the dialog.
+  Future<void> _shareReceipt(BuildContext originContext) async {
     if (_payment == null) return;
+    final origin = shareOriginFrom(originContext);
     showPremiumLoading(context, message: 'Generating PDF...');
     try {
       final pdf  = await _generatePdfReceipt();
@@ -259,7 +266,8 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
       await file.writeAsBytes(pdf);
       if (!mounted) return;
       Navigator.of(context).pop();
-      await Share.shareXFiles([XFile(file.path)]);
+      await Share.shareXFiles([XFile(file.path)],
+          sharePositionOrigin: origin);
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();

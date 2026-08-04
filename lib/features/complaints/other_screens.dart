@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/data/customer.dart';
+import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
@@ -602,7 +603,11 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
         buildLines: (fmt) => _buildOneTimePrintLines(it, fmt),
       );
 
-  Future<void> _shareOneTime(OnetimeChargeItem it) async {
+  /// [originContext] is the tapped one-time card's context — iOS needs it to
+  /// anchor the share sheet (see [shareOriginFrom]).
+  Future<void> _shareOneTime(
+      BuildContext originContext, OnetimeChargeItem it) async {
+    final origin = shareOriginFrom(originContext);
     try {
       final lines = _buildOneTimeShareLines(it);
       final doc = pw.Document();
@@ -629,7 +634,8 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
       await File(path).writeAsBytes(bytes);
       if (!mounted) return;
       await Share.shareXFiles([XFile(path)],
-          subject: 'Onetime History of ${widget.customer.name}');
+          subject: 'Onetime History of ${widget.customer.name}',
+          sharePositionOrigin: origin);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -708,12 +714,12 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       itemCount: _items.length,
-      itemBuilder: (_, i) {
+      itemBuilder: (cardCtx, i) {
         final item = _items[i];
         return _OneTimeCard(
           record: _toCard(item),
           shareVisible: SessionService.instance.shareOption,
-          onShare: () => _shareOneTime(item),
+          onShare: () => _shareOneTime(cardCtx, item),
           onEdit: () => _editOneTime(item),
           onPrint: () => _printOneTime(item),
         );

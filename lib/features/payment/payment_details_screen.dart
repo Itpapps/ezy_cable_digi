@@ -258,7 +258,16 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
   /// dialog goes up so the rect is that of the button, not the dialog.
   Future<void> _shareReceipt(BuildContext originContext) async {
     if (_payment == null) return;
-    final origin = shareOriginFrom(originContext);
+    // Must stay ahead of the loading dialog (see doc above), so it gets its own
+    // guard rather than moving into the try — a failure here must be visible,
+    // not swallowed as an unhandled async error.
+    final Rect origin;
+    try {
+      origin = shareOriginFrom(originContext);
+    } catch (e) {
+      if (mounted) showPremiumSnackBar(context, 'Share failed: $e', isError: true);
+      return;
+    }
     showPremiumLoading(context, message: 'Generating PDF...');
     try {
       final pdf  = await _generatePdfReceipt();

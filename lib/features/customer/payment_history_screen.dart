@@ -521,8 +521,10 @@ class _PaymentHistoryDetailScreenState
   /// [originContext] is the Share button's own context — iOS needs it to anchor
   /// the share sheet (see [shareOriginFrom]).
   Future<void> _share(BuildContext originContext) async {
-    final origin = shareOriginFrom(originContext);
     try {
+      // Inside the try: a failure here must surface as "Share failed", not die
+      // as an unhandled async error (the callback discards this Future).
+      final origin = shareOriginFrom(originContext);
       final lines = _buildShareLines();
       final doc = pw.Document();
       final mono = pw.Font.courier();

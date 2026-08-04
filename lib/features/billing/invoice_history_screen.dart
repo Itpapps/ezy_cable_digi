@@ -121,8 +121,10 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
   /// [originContext] is the tapped invoice card's context — iOS needs it to
   /// anchor the share sheet (see [shareOriginFrom]).
   Future<void> _shareInvoice(BuildContext originContext, InvoiceRecord inv) async {
-    final origin = shareOriginFrom(originContext);
     try {
+      // Inside the try: a failure here must surface as "Share failed", not die
+      // as an unhandled async error (the callback discards this Future).
+      final origin = shareOriginFrom(originContext);
       final lines = _buildShareLines(inv);
       final doc = pw.Document();
       final mono = pw.Font.courier();
@@ -219,7 +221,7 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
           invoice: inv,
           shareVisible: SessionService.instance.shareOption,
           onPrint: () => _printInvoice(inv),
-          onShare: () => _shareInvoice(cardCtx, inv),
+          onShare: (btnCtx) => _shareInvoice(btnCtx, inv),
         );
       },
     );
@@ -251,7 +253,8 @@ class _InvoiceCard extends StatelessWidget {
   final InvoiceRecord invoice;
   final bool shareVisible;   // Android hides Share when share_option == "0"
   final VoidCallback onPrint;
-  final VoidCallback onShare;
+  /// Receives the share button's own context — needed to anchor the iOS sheet.
+  final void Function(BuildContext) onShare;
   const _InvoiceCard({
     required this.invoice,
     required this.shareVisible,
@@ -319,15 +322,20 @@ class _InvoiceCard extends StatelessWidget {
                     ),
                     if (shareVisible) ...[
                       const SizedBox(width: 12),
-                      GestureDetector(
-                        onTap: onShare,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                              color: Color(0xFF1565C0), shape: BoxShape.circle),
-                          child: const Icon(Icons.share,
-                              color: Colors.white, size: 20),
+                      // Builder so the tap handler gets THIS button's context —
+                      // a ListView.builder itemBuilder context resolves to the
+                      // enclosing sliver, which cannot anchor the iOS share sheet.
+                      Builder(
+                        builder: (btnCtx) => GestureDetector(
+                          onTap: () => onShare(btnCtx),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                                color: Color(0xFF1565C0), shape: BoxShape.circle),
+                            child: const Icon(Icons.share,
+                                color: Colors.white, size: 20),
+                          ),
                         ),
                       ),
                     ],

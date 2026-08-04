@@ -48,9 +48,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
 
-  // OTT boxes (Android: getCustomerBoxes `ott_boxes_list`, fetched on load for
-  // non-broadband customers). Drives the OTT tile; empty = tile hidden.
+  // OTT boxes (Android: getCustomerBoxes `ott_boxes_list`). Drives the OTT tile;
+  // empty = tile hidden.
   List<CustomerBox> _ottBoxes = const [];
+
+  // Regular STB boxes from the same getCustomerBoxes call. Each carries
+  // `boxStatus`, which drives the per-box Box/VC colouring below (Android
+  // CustomerOperations_Fragment:2664-2691). Empty = fall back to the flat
+  // `_customer.boxNumber` / `.vcNumber` string in a single colour.
+  List<CustomerBox> _boxes = const [];
 
   // Displayed/editable LCO id (Android `lco_cust_no`). The edit updates ONLY this
   // for display; the stable key `_customer.lcoCustomerId` (== customersidd) is
@@ -64,7 +70,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     // "LCO Customer id" shows Android's alt_custom_number (customer-facing LCO id),
     // NOT lcoCustomerId (== customer_id, the internal operation key).
     _lcoId = _customer.altCustomNumber;
-    _loadOttBoxes();
+    _loadCustomerBoxes();
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
@@ -72,18 +78,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   }
 
   /// Android parity: `CustomerOperations` calls `packageoperations(0)` →
-  /// `getCustomerBoxes` on load for non-broadband customers, which supplies
-  /// `ott_boxes_list` → the OTT tile. Fire-and-forget; the grid rebuilds when it
-  /// returns. Broadband customers use the Renew BroadBand branch instead.
-  Future<void> _loadOttBoxes() async {
-    if (_customer.broadbandUserId.trim().isNotEmpty) return;
+  /// `getCustomerBoxes` on load, which supplies `ott_boxes_list` (→ the OTT tile)
+  /// and the regular box list (→ per-box Box/VC colouring).
+  ///
+  /// NOT gated on broadband: Android renders the coloured box list for
+  /// "STB & BroadBand" customers too (verified against a production device —
+  /// a customer with a BroadBand User Id still shows red/green box numbers).
+  /// Fire-and-forget; the grid rebuilds when it returns.
+  Future<void> _loadCustomerBoxes() async {
     try {
       final r = await PackageOperationsRepository.instance
           .getCustomerBoxes(_customer.lcoCustomerId);
-      if (!mounted || r.ottBoxes.isEmpty) return;
-      setState(() => _ottBoxes = r.ottBoxes);
+      if (!mounted) return;
+      if (r.ottBoxes.isEmpty && r.boxes.isEmpty) return;
+      setState(() {
+        _ottBoxes = r.ottBoxes;
+        _boxes = r.boxes;
+      });
     } catch (_) {
-      // Non-fatal — the OTT tile simply won't show.
+      // Non-fatal — the OTT tile stays hidden and Box/VC fall back to the flat
+      // single-colour string.
     }
   }
 
@@ -508,30 +522,62 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: _locCell(
-                  _customer.boxNumber.trim().isEmpty ? 'NA' : _customer.boxNumber,
-                  'Box Number',
-                  t: t,
-                  valueColor: Colors.green.shade600,
-                  copyable: true,
+          Builder(builder: (_) {
+            final boxSpans = _boxSpans((b) => b.boxNumber);
+            final vcSpans = _boxSpans((b) => b.vcNumber);
+            // Cap the line count so three cells can never overflow the row on a
+            // narrow phone, while still showing the common 1-4 box case.
+            final lines = _boxes.isEmpty ? 2 : _boxes.length.clamp(2, 4);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _locCell(
+                    _customer.boxNumber.trim().isEmpty
+                        ? 'NA'
+                        : _customer.boxNumber,
+                    'Box Number',
+                    t: t,
+                    // Flat fallback stays green until the per-box list arrives.
+                    valueColor: Colors.green.shade600,
+                    valueSpans: boxSpans,
+                    maxLines: lines,
+                    copyable: true,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _locCell(
-                  _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
-                  'VC Number',
-                  t: t,
-                  valueColor: Colors.green.shade600,
-                  copyable: true,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _locCell(
+                    _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
+                    'VC Number',
+                    t: t,
+                    valueColor: Colors.green.shade600,
+                    valueSpans: vcSpans,
+                    maxLines: lines,
+                    copyable: true,
+                  ),
                 ),
-              ),
-              const Expanded(child: SizedBox()),
-            ],
-          ),
+                const SizedBox(width: 8),
+                // Android puts CRF No. in this third slot (layout
+                // activity_customeroperations.xml: ll_crf next to box/vc) and
+                // hides it with INVISIBLE — i.e. the column keeps its width —
+                // when use_caf != 1. An empty Expanded reproduces that exactly.
+                Expanded(
+                  child: SessionService.instance.useCaf == 1
+                      ? _locCell(
+                          _customer.crfNumber.trim().isEmpty
+                              ? 'NA'
+                              : _customer.crfNumber,
+                          'CRF No.',
+                          t: t,
+                          maxLines: lines,
+                          copyable: true,
+                        )
+                      : const SizedBox(),
+                ),
+              ],
+            );
+          }),
           const SizedBox(height: 2),
         ],
       ),
@@ -552,6 +598,32 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       ));
   }
 
+  // Exact Android colours (CustomerOperations_Fragment:2673/2680).
+  static const Color _boxActive = Color(0xFF76BE2F); // #76be2f
+  static const Color _boxInactive = Color(0xFFFF554F); // #ff554f
+
+  /// One span per box, coloured by that box's own `boxStatus` — Android's rule
+  /// is `box_status == "1"` → green, anything else → red, and the VC number is
+  /// coloured by the SAME box's status (CustomerOperations_Fragment:2669-2684).
+  /// Newline-separated so each box gets its own line, matching Android's wrapped
+  /// TextView. Returns null when there is no per-box data, so the caller falls
+  /// back to the flat single-colour string.
+  List<TextSpan>? _boxSpans(String Function(CustomerBox) pick) {
+    if (_boxes.isEmpty) return null;
+    final spans = <TextSpan>[];
+    for (final b in _boxes) {
+      final text = pick(b).trim();
+      if (text.isEmpty) continue;
+      spans.add(TextSpan(
+        text: spans.isEmpty ? text : '\n$text',
+        style: TextStyle(
+          color: b.boxStatus.trim() == '1' ? _boxActive : _boxInactive,
+        ),
+      ));
+    }
+    return spans.isEmpty ? null : spans;
+  }
+
   Widget _locCell(
     String value,
     String label, {
@@ -560,6 +632,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     bool copyable = false,
     VoidCallback? onEditTap,
     required AppThemeConst t,
+    /// When supplied, the value is rendered as rich text instead of a single
+    /// coloured string — used by Box/VC to colour each box by its own status
+    /// (Android does the same with `<font>` tags + Html.fromHtml).
+    List<TextSpan>? valueSpans,
+    /// Line cap before ellipsis. Grows with the number of boxes so 3-4 boxes
+    /// still fit, while staying bounded so the row can never overflow.
+    int maxLines = 2,
   }) {
     final canCopy =
         copyable && value.trim().isNotEmpty && value.trim() != 'N/A';
@@ -569,9 +648,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             // Flexible + ellipsis so long values (VC/Box numbers, dates) never
             // overflow the column on narrow screens — responsive on all sizes.
             Flexible(
-              child: Text(
-                value,
-                maxLines: 2,
+              child: Text.rich(
+                valueSpans == null
+                    ? TextSpan(text: value)
+                    : TextSpan(children: valueSpans),
+                maxLines: maxLines,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: TextStyle(

@@ -29,7 +29,12 @@ Rect shareOriginFrom(BuildContext context) {
   final screen = Offset.zero & (screenSize ?? const Size(1, 1));
   final fallback = Rect.fromCenter(center: screen.center, width: 1, height: 1);
 
-  final box = context.findRenderObject() as RenderBox?;
+  // NOT `as RenderBox?` — a ListView.builder itemBuilder context resolves to the
+  // enclosing RenderSliverList, and `as RenderBox?` THROWS on a non-null wrong
+  // type instead of yielding null, so the guard below never ran and the share
+  // died silently. `is` returns false, letting the fallback do its job.
+  final renderObject = context.findRenderObject();
+  final box = renderObject is RenderBox ? renderObject : null;
   if (box == null || !box.hasSize) return fallback;
 
   // A button scrolled partly off-screen would otherwise yield a rect iOS

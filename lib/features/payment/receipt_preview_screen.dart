@@ -823,8 +823,18 @@ class _ShareSheet extends StatelessWidget {
     // context BEFORE popping, since the context is dead afterwards. Android
     // ignores sharePositionOrigin entirely.
     Future<void> shareReceipt({String? subject}) async {
-      final origin = shareOriginFrom(context);
       final messenger = ScaffoldMessenger.of(context);
+      // Must stay ahead of the pop (see note above), so it gets its own guard
+      // rather than moving into the try — a failure here must be visible, not
+      // swallowed as an unhandled async error.
+      final Rect origin;
+      try {
+        origin = shareOriginFrom(context);
+      } catch (e) {
+        Navigator.pop(context);
+        messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+        return;
+      }
       Navigator.pop(context);
       try {
         await Share.shareXFiles([XFile(filePath)],

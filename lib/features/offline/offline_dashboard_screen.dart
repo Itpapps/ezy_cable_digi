@@ -152,24 +152,14 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 14),
-              _actionCard(
-                t,
-                icon: Icons.people_alt_rounded,
-                tint: const Color(0xFF1565C0),
-                title: 'Unpaid Customers',
-                subtitle: 'View all un-paid customers',
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const OfflineUnpaidListScreen(),
-                    ),
-                  );
-                  _refresh();
-                },
-              ),
               const SizedBox(height: 18),
+              // Android parity: the offline dashboard has exactly THREE entries —
+              // search customer, reports, and the Payments Collected card
+              // (offline_dashboard.xml :84 / :124 / :145). The unpaid list is
+              // reached ONLY through that card (Offline_Dashboard.java :160 and
+              // :171, both -> Offline_Tabs_Fragment). A separate "Unpaid
+              // Customers" tile existed here from commit 389da11 but has no
+              // Android counterpart, so it has been removed.
               _paymentsCollectedCard(t),
             ],
           ),

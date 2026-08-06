@@ -525,56 +525,69 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
           Builder(builder: (_) {
             final boxSpans = _boxSpans((b) => b.boxNumber);
             final vcSpans = _boxSpans((b) => b.vcNumber);
-            // Cap the line count so three cells can never overflow the row on a
-            // narrow phone, while still showing the common 1-4 box case.
-            final lines = _boxes.isEmpty ? 2 : _boxes.length.clamp(2, 4);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // Generous line budget: the cells below are wide enough that each
+            // box/VC number normally occupies ONE line, so this only comes into
+            // play if a value is unusually long — in which case it wraps rather
+            // than being silently ellipsised. Still bounded.
+            final lines = _boxes.isEmpty ? 2 : (_boxes.length * 2).clamp(2, 8);
+            // Android keeps Box | VC | CRF on one row, but on a phone-width
+            // screen three columns give each cell ~98pt while a 10-digit box
+            // number needs 120pt and the CRF needs 132pt — so a third of the row
+            // cannot show them without truncating. Box/VC therefore share a
+            // 2-column row (~141pt of text each, one line per box, matching
+            // Android's stacked red/green look) and CRF takes the full-width row
+            // beneath. Field order (Box -> VC -> CRF) and every value are kept.
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: _locCell(
-                    _customer.boxNumber.trim().isEmpty
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _locCell(
+                        _customer.boxNumber.trim().isEmpty
+                            ? 'NA'
+                            : _customer.boxNumber,
+                        'Box Number',
+                        t: t,
+                        // Flat fallback stays green until the per-box list arrives.
+                        valueColor: Colors.green.shade600,
+                        valueSpans: boxSpans,
+                        maxLines: lines,
+                        copyable: true,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _locCell(
+                        _customer.vcNumber.trim().isEmpty
+                            ? 'NA'
+                            : _customer.vcNumber,
+                        'VC Number',
+                        t: t,
+                        valueColor: Colors.green.shade600,
+                        valueSpans: vcSpans,
+                        maxLines: lines,
+                        copyable: true,
+                      ),
+                    ),
+                  ],
+                ),
+                // Android gates CRF on use_caf == 1 (CustomerOperations_Fragment
+                // :274-278). On its own row there is no neighbouring column whose
+                // width depends on it, so it is omitted entirely when hidden.
+                if (SessionService.instance.useCaf == 1) ...[
+                  const SizedBox(height: 6),
+                  _locCell(
+                    _customer.crfNumber.trim().isEmpty
                         ? 'NA'
-                        : _customer.boxNumber,
-                    'Box Number',
+                        : _customer.crfNumber,
+                    'CRF No.',
                     t: t,
-                    // Flat fallback stays green until the per-box list arrives.
-                    valueColor: Colors.green.shade600,
-                    valueSpans: boxSpans,
                     maxLines: lines,
                     copyable: true,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _locCell(
-                    _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
-                    'VC Number',
-                    t: t,
-                    valueColor: Colors.green.shade600,
-                    valueSpans: vcSpans,
-                    maxLines: lines,
-                    copyable: true,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Android puts CRF No. in this third slot (layout
-                // activity_customeroperations.xml: ll_crf next to box/vc) and
-                // hides it with INVISIBLE — i.e. the column keeps its width —
-                // when use_caf != 1. An empty Expanded reproduces that exactly.
-                Expanded(
-                  child: SessionService.instance.useCaf == 1
-                      ? _locCell(
-                          _customer.crfNumber.trim().isEmpty
-                              ? 'NA'
-                              : _customer.crfNumber,
-                          'CRF No.',
-                          t: t,
-                          maxLines: lines,
-                          copyable: true,
-                        )
-                      : const SizedBox(),
-                ),
+                ],
               ],
             );
           }),

@@ -688,6 +688,31 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   // extracted verbatim from the dashboard body — behaviour is UNCHANGED. Step 2
   // will place this inside an Expanded so only the feed scrolls under a fixed
   // header (the KPI cards + quick actions), matching Android's dashboard.
+  /// True while the CURRENTLY SELECTED feed is re-fetching after its first
+  /// successful load — i.e. a refresh, not the initial load.
+  ///
+  /// Read-only: derived purely from the loading/loaded flags the controller
+  /// already maintains and already broadcasts via notifyListeners(). It adds no
+  /// state, and deliberately ignores loadKpis()/loadWallet() — those run
+  /// concurrently but render in the cards above this one, so letting them drive
+  /// this bar would point it at content it does not describe.
+  ///
+  /// The `loaded` half is what preserves the first-load experience: on the very
+  /// first fetch `loaded` is false, so this stays false and _FeedSkeleton owns
+  /// the feedback exactly as before.
+  bool get _selectedFeedRefreshing {
+    switch (_feed) {
+      case _FeedType.complaints:
+        return _dash.complaintsLoading && _dash.complaintsLoaded;
+      case _FeedType.unpaid:
+        return _dash.unpaidLoading && _dash.unpaidLoaded;
+      case _FeedType.nearest:
+        return _dash.nearestLoading && _dash.nearestLoaded;
+      case _FeedType.payLater:
+        return _dash.payLaterLoading && _dash.payLaterLoaded;
+    }
+  }
+
   Widget _buildFeedSection() {
     return Container(
       width: double.infinity,
@@ -770,7 +795,24 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
               ),
             ),
           ),
-          const Divider(height: 1, thickness: 0.6, indent: 12, endIndent: 12),
+          // Refresh feedback. The divider slot is reused so the layout height is
+          // IDENTICAL in both states (1px) — the list never moves. Driven only by
+          // the SELECTED feed's own loading flag, so KPI/wallet requests (which
+          // run concurrently and render in the cards above) can never show or
+          // hide it. Shown for refreshes only; first load still gets the
+          // existing _FeedSkeleton, which is untouched.
+          SizedBox(
+            height: 1,
+            child: _selectedFeedRefreshing
+                ? LinearProgressIndicator(
+                    minHeight: 1, // default is 4.0 — would shift the list by 3px
+                    backgroundColor: AppThemeConst.of(context).dividerColor,
+                    color: AppThemeConst.of(context).accent,
+                    semanticsLabel: 'Refreshing',
+                  )
+                : const Divider(
+                    height: 1, thickness: 0.6, indent: 12, endIndent: 12),
+          ),
           // The feed fills the remaining card height and is the ONLY thing that
           // scrolls (the tab chips above stay fixed). LayoutBuilder + a viewport
           // min-height keeps the empty/error messages vertically CENTERED (restored)

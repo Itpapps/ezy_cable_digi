@@ -21,11 +21,23 @@ class OttScreen extends StatefulWidget {
 class _OttScreenState extends State<OttScreen> {
   bool _busy = false;
 
+  // Owned by the State, NOT by _showChangeDialog. showPremiumDialog has a 260ms
+  // exit transition, so the TextFields stay mounted after Navigator.pop returns.
+  // A controller disposed inside the method is therefore used after disposal.
+  final TextEditingController _valueCtrl = TextEditingController();
+  final TextEditingController _confirmCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _valueCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _showChangeDialog(CustomerBox box) async {
     var mode = 'UserName'; // Android spinner: UserName | Password
-    final valueCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-
+    _valueCtrl.clear();
+    _confirmCtrl.clear();
     final submitted = await showPremiumDialog<bool>(
       context: context,
       child: PremiumDialogShell(
@@ -55,13 +67,13 @@ class _OttScreenState extends State<OttScreen> {
                     ],
                     onChanged: (v) => setDlg(() {
                       mode = v ?? 'UserName';
-                      valueCtrl.clear();
-                      confirmCtrl.clear();
+                      _valueCtrl.clear();
+                      _confirmCtrl.clear();
                     }),
                   ),
                   const SizedBox(height: 10),
                   TextField(
-                    controller: valueCtrl,
+                    controller: _valueCtrl,
                     obscureText: !isUser,
                     decoration: InputDecoration(
                       isDense: true,
@@ -71,7 +83,7 @@ class _OttScreenState extends State<OttScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextField(
-                    controller: confirmCtrl,
+                    controller: _confirmCtrl,
                     obscureText: !isUser,
                     decoration: InputDecoration(
                       isDense: true,
@@ -97,8 +109,8 @@ class _OttScreenState extends State<OttScreen> {
                           ),
                           onPressed: () {
                             // Android validation: len >= 4 and value == confirm.
-                            final v = valueCtrl.text;
-                            final c = confirmCtrl.text;
+                            final v = _valueCtrl.text;
+                            final c = _confirmCtrl.text;
                             final noun = isUser ? 'UserName' : 'Password';
                             if (v.length < 4) {
                               showPremiumSnackBar(
@@ -133,10 +145,8 @@ class _OttScreenState extends State<OttScreen> {
       ),
     );
 
-    final value = valueCtrl.text;
+    final value = _valueCtrl.text;
     final isUser = mode == 'UserName';
-    valueCtrl.dispose();
-    confirmCtrl.dispose();
     if (submitted != true || !mounted) return;
 
     setState(() => _busy = true);

@@ -190,7 +190,7 @@ class _OttScreenState extends State<OttScreen> {
                 style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 16)),
+                    fontSize: 16,),),
           ),
           Expanded(
             child: widget.ottBoxes.isEmpty

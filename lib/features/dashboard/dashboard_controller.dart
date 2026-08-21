@@ -2,10 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
-import '../../core/network/rest_client.dart';
-import '../../core/network/server_url_resolver.dart';
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
 import '../../features/collections/data/pay_later.dart';
@@ -88,27 +85,11 @@ class DashboardController extends ChangeNotifier {
   bool get showLcoWallet => SessionService.instance.useLcoDeposit == 1;
 
   Future<void> loadWallet() async {
-    // Android calls getLCODepositAmount only in the DEALER/ADMIN branch.
     final ut = SessionService.instance.userType.toUpperCase();
     if (ut != 'DEALER' && ut != 'ADMIN') return;
     try {
-      final url =
-          '${ServerUrlResolver.instance.namespace}/packagelist/getLCODepositAmount';
-      final data = await RestClient.instance.postForm(url, {
-        'dealer_id': SessionService.instance.dealerId,
-        'imei': AppConfig.deviceImei,
-        'authtoken': SessionService.instance.authToken,
-      });
-      // Android: status_code 0 → show lco_deposit_amount; else ₹0.
-      if ('${data['status_code']}' == '0') {
-        final v = data['lco_deposit_amount'];
-        lcoDeposit =
-            (v is num) ? v.toDouble() : (double.tryParse('$v') ?? 0);
-      } else {
-        lcoDeposit = 0;
-      }
+      lcoDeposit = await DashboardRepository.instance.fetchWalletBalance();
     } catch (e, s) {
-      // Android: Volley error → toast "Failed", card keeps default. Keep ₹0.
       lcoDeposit = 0;
       ErrorHandlerService.recordError(e, s,
           reason: 'DashboardController.loadWallet');

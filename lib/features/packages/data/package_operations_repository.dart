@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
@@ -82,23 +82,6 @@ class PackageOperationsRepository {
         'authtoken': SessionService.instance.authToken,
       };
 
-  /// Backend double-encodes nested arrays/objects as JSON strings; decode safely.
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
-
-  static int _statusOf(Map<String, dynamic> data) {
-    final v = data['status_code'];
-    return v is int ? v : (int.tryParse('$v') ?? 3);
-  }
-
   // ── getCustomerBoxes (gcb) ──────────────────────────────────────────────────
   Future<CustomerBoxesResult> getCustomerBoxes(String customerId) async {
     try {
@@ -107,13 +90,13 @@ class PackageOperationsRepository {
         {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
-      final status = _statusOf(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final ext = '${data['service_extension'] ?? ''}';
       final boxes = <CustomerBox>[];
       final ottBoxes = <CustomerBox>[];
       if (status == 0) {
-        final list = _decode(data['customer_boxes']);
+        final list = decodeDynamic(data['customer_boxes']);
         if (list is List) {
           for (final b in list) {
             if (b is Map) {
@@ -122,7 +105,7 @@ class PackageOperationsRepository {
           }
         }
         // ott_boxes_list drives the OTT operation (Android CustomerOperations:2733).
-        final ott = _decode(data['ott_boxes_list']);
+        final ott = decodeDynamic(data['ott_boxes_list']);
         if (ott is List) {
           for (final b in ott) {
             if (b is Map) {
@@ -158,13 +141,13 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      final status = _statusOf(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final base = <Package>[];
       final addOn = <Package>[];
       final ala = <Package>[];
       if (status == 0) {
-        final obj = _decode(data['customer_packages']);
+        final obj = decodeDynamic(data['customer_packages']);
         if (obj is Map) {
           _fill(obj['is_base'], PackageCategory.base, base);
           _fill(obj['is_add_on'], PackageCategory.addOn, addOn);
@@ -181,7 +164,7 @@ class PackageOperationsRepository {
   }
 
   static void _fill(dynamic raw, PackageCategory cat, List<Package> out) {
-    final list = _decode(raw);
+    final list = decodeDynamic(raw);
     if (list is List) {
       for (final p in list) {
         if (p is Map) {
@@ -211,11 +194,11 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      final code = _statusOf(data);
+      final code = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final packages = <ActivePackage>[];
       if (code == 0) {
-        final list = _decode(data['total_packages_list']);
+        final list = decodeDynamic(data['total_packages_list']);
         if (list is List) {
           for (final p in list) {
             if (p is Map) {
@@ -262,7 +245,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -282,11 +265,11 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      final code = _statusOf(data);
+      final code = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final reasons = <DeactivateReason>[];
       if (code == 0) {
-        final list = _decode(data['deactive_reasons']);
+        final list = decodeDynamic(data['deactive_reasons']);
         if (list is List) {
           for (final r in list) {
             if (r is Map) {
@@ -330,7 +313,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -363,7 +346,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -384,7 +367,7 @@ class PackageOperationsRepository {
         {..._auth, 'customer_id': customerId, 'box_id': boxId},
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -405,7 +388,7 @@ class PackageOperationsRepository {
         {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -425,7 +408,7 @@ class PackageOperationsRepository {
         {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -448,7 +431,7 @@ class PackageOperationsRepository {
         {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -475,7 +458,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -507,7 +490,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -541,7 +524,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {
@@ -617,7 +600,7 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return PackageWriteResult(_statusOf(data), '${data['status_msg'] ?? ''}');
+      return PackageWriteResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const PackageWriteResult(3, 'Request timed out.');
     } catch (_) {

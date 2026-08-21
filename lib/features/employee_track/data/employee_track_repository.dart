@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
@@ -178,11 +179,11 @@ class EmployeeTrackRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      final status = _statusOf(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final points = <EmployeeTrackPoint>[];
       if (status == 0) {
-        final list = _decode(data['employeeTrackInfoList']);
+        final list = decodeDynamic(data['employeeTrackInfoList']);
         if (list is List) {
           for (final e in list) {
             if (e is Map) {
@@ -200,19 +201,4 @@ class EmployeeTrackRepository {
     }
   }
 
-  static int _statusOf(Map<String, dynamic> data) {
-    final v = data['status_code'];
-    return v is int ? v : (int.tryParse('$v') ?? 3);
-  }
-
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
 }

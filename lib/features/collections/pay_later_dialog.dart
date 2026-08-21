@@ -239,10 +239,7 @@ Future<void> showPayLaterScheduleDialog(
     ),
   );
 
-  if (ok != true || !context.mounted) {
-    remarksCtrl.dispose();
-    return;
-  }
+  if (ok != true || !context.mounted) return;
 
   showPremiumLoading(context, message: 'Scheduling collection...');
   final res = await PayLaterRepository.instance.submitPayLater(
@@ -254,7 +251,6 @@ Future<void> showPayLaterScheduleDialog(
     remarks: remarksCtrl.text.trim(),
     isEdited: record.isEditable,
   );
-  remarksCtrl.dispose();
   if (!context.mounted) return;
   Navigator.of(context).pop(); // dismiss loading
   await _resultDialog(context, res.success, res.message);

@@ -6,12 +6,10 @@ import 'package:iconsax/iconsax.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
 import '../../core/database/database_helper.dart';
-import '../../core/network/server_url_resolver.dart';
-import '../../core/network/soap_client.dart';
 import '../../core/services/session_service.dart';
+import 'data/customer_location_repository.dart';
 import '../../core/theme/theme_constants.dart';
 import 'customer_operations.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -58,6 +56,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   // `_customer.boxNumber` / `.vcNumber` string in a single colour.
   List<CustomerBox> _boxes = const [];
 
+  int _selectedBoxIndex = 0;
+  CustomerBox? get _selectedBox =>
+      _boxes.length > 1 ? _boxes[_selectedBoxIndex] : null;
+
   // Displayed/editable LCO id (Android `lco_cust_no`). The edit updates ONLY this
   // for display; the stable key `_customer.lcoCustomerId` (== customersidd) is
   // kept untouched so every operation keeps using the correct customer id.
@@ -94,6 +96,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       setState(() {
         _ottBoxes = r.ottBoxes;
         _boxes = r.boxes;
+        _selectedBoxIndex = 0;
       });
     } catch (_) {
       // Non-fatal — the OTT tile stays hidden and Box/VC fall back to the flat
@@ -124,6 +127,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_boxes.length > 1) ...[
+                      _buildSelectBoxCard(t),
+                      const SizedBox(height: 12),
+                    ],
                     _buildCustomerInfoCard(t),
                     const SizedBox(height: 12),
                     _buildLocationCard(t),
@@ -529,7 +536,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             // box/VC number normally occupies ONE line, so this only comes into
             // play if a value is unusually long — in which case it wraps rather
             // than being silently ellipsised. Still bounded.
-            final lines = _boxes.isEmpty ? 2 : (_boxes.length * 2).clamp(2, 8);
+            final boxCount = _selectedBox != null ? 1 : _boxes.length;
+            final lines = _boxes.isEmpty ? 2 : (boxCount * 2).clamp(2, 8);
             // Android keeps Box | VC | CRF on one row, but on a phone-width
             // screen three columns give each cell ~98pt while a 10-digit box
             // number needs 120pt and the CRF needs 132pt — so a third of the row
@@ -618,11 +626,24 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   /// One span per box, coloured by that box's own `boxStatus` — Android's rule
   /// is `box_status == "1"` → green, anything else → red, and the VC number is
   /// coloured by the SAME box's status (CustomerOperations_Fragment:2669-2684).
-  /// Newline-separated so each box gets its own line, matching Android's wrapped
-  /// TextView. Returns null when there is no per-box data, so the caller falls
-  /// back to the flat single-colour string.
+  /// When multi-box with a selected box, shows ONLY the selected box's value
+  /// (Android parity: updateSelectedBox sets tv_boxnum/tv_vcnum to the single
+  /// selected box). When single-box or no selection, shows all boxes
+  /// newline-separated so each gets its own line.
   List<TextSpan>? _boxSpans(String Function(CustomerBox) pick) {
     if (_boxes.isEmpty) return null;
+    if (_selectedBox != null) {
+      final text = pick(_selectedBox!).trim();
+      if (text.isEmpty) return null;
+      return [
+        TextSpan(
+          text: text,
+          style: TextStyle(
+            color: _selectedBox!.isActive ? _boxActive : _boxInactive,
+          ),
+        ),
+      ];
+    }
     final spans = <TextSpan>[];
     for (final b in _boxes) {
       final text = pick(b).trim();
@@ -725,13 +746,120 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
   }
 
+  // ── Select Box Card (multi-box only) ────────────────────────────────────
+  Widget _buildSelectBoxCard(AppThemeConst t) {
+    final box = _boxes[_selectedBoxIndex];
+    final active = box.isActive;
+    final statusColor = active ? const Color(0xFF76BE2F) : const Color(0xFFFF554F);
+    return _WhiteCard(
+      t: t,
+      child: InkWell(
+        onTap: () => _showBoxSelectionSheet(t),
+        borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Iconsax.box_1, size: 20, color: t.accent),
+                const SizedBox(width: 8),
+                Text('SELECT BOX',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: t.accent, letterSpacing: 0.4)),
+              ],
+            ),
+            Divider(color: t.accent, thickness: 1.2),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    box.boxNumber.isNotEmpty ? box.boxNumber : box.vcNumber,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: statusColor),
+                  ),
+                ),
+                Icon(Icons.keyboard_arrow_down, color: t.cardSubtitleText),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBoxSelectionSheet(AppThemeConst t) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 12),
+              Text('Select Box', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: t.cardHeadingText)),
+              const Divider(),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _boxes.length,
+                  itemBuilder: (_, i) {
+                    final b = _boxes[i];
+                    final isSelected = i == _selectedBoxIndex;
+                    final active = b.isActive;
+                    return ListTile(
+                      leading: Icon(
+                        isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                        color: isSelected ? t.accent : Colors.grey,
+                      ),
+                      title: Text(
+                        b.boxNumber.isNotEmpty ? b.boxNumber : b.vcNumber,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                      subtitle: Text('VC: ${b.vcNumber}', style: TextStyle(fontSize: 12, color: t.cardSubtitleText)),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: active ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          b.stateLabel.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: active ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+                          ),
+                        ),
+                      ),
+                      onTap: () {
+                        setState(() => _selectedBoxIndex = i);
+                        Navigator.pop(ctx);
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // ── Operations Card ────────────────────────────────────────────────────
   Widget _buildOperationsCard(AppThemeConst t) {
     // Android parity: computed once from the current customer + session flags
     // (CustomerOperations_Fragment). Entry-driven — rebuilds on next open, not
     // in place (Android navigates away after state-changing operations).
     final ops = buildCustomerOperations(_customer, SessionService.instance,
-        hasOttBoxes: _ottBoxes.isNotEmpty);
+        hasOttBoxes: _ottBoxes.isNotEmpty,
+        selectedBox: _selectedBox);
 
     return _WhiteCard(
       t: t,
@@ -801,7 +929,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceHistoryScreen(customer: _customer)));
         break;
       case 'Package Operations':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => PackageOperationsScreen(customer: _customer)));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => PackageOperationsScreen(customer: _customer, preSelectedBox: _selectedBox)));
         break;
       case 'Deactivate STB':
         Navigator.push(context, MaterialPageRoute(builder: (_) => DeactivateStbScreen(customer: _customer)));
@@ -1364,7 +1492,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     if (confirmed != true) return;
     final areaName = controller.text.trim();
     if (areaName.isEmpty) return;
-    controller.dispose();
 
     // ── GPS fetch ────────────────────────────────────────────────────────
     // mounted is guaranteed here — no await has occurred in this code path yet.
@@ -1433,31 +1560,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         longitude: lng,
       );
 
-      // ── Server SOAP (Android: updateCustomerlocation via wsController) ──
-      // Android sends customerid as int (altCustId = getCustomerId()).
-      // Flutter lcoCustomerId holds the same numeric value as a String.
-      bool soapFailed = false;
-      try {
-        final ns = ServerUrlResolver.instance.namespace;
-        await SoapClient.instance.call(
-          url: ServerUrlResolver.instance.loginServerUrl,
-          namespace: ns,
-          soapAction: '$ns/updateCustomerlocation',
-          methodName: 'updateCustomerlocation',
-          wrapper: 'updateCustomerlocationInfo',
-          wrapperType: 'updateCustomerlocationInfo',
-          fields: {
-            'authToken': SessionService.instance.authToken,
-            'imei': AppConfig.deviceImei,
-            'customerid': int.tryParse(_customer.lcoCustomerId) ?? 0,
-            'lat': lat.toString(),
-            'lang': lng.toString(),
-          },
-        );
-      } catch (_) {
-        // Server sync failed — local save is still good.
-        soapFailed = true;
-      }
+      // ── Server SOAP (fire-and-forget — local save already done above) ──
+      final soapFailed = !await CustomerLocationRepository.instance.update(
+        lcoCustomerId: _customer.lcoCustomerId,
+        latitude: lat,
+        longitude: lng,
+      );
 
       if (!mounted) return;
       nav2.pop();

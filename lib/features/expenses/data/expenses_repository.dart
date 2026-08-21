@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/services/session_service.dart';
@@ -47,17 +47,6 @@ class ExpensesRepository {
         'request_from': 'FromDigiApp',
       };
 
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
-
   // ── expense_dashboard (master data: categories, tax types, payment modes) ───
   Future<ExpenseMasterResult> getMasterData() async {
     try {
@@ -70,19 +59,19 @@ class ExpensesRepository {
         return ExpenseMasterResult(
             1, '${data['Error_Message'] ?? 'Failed'}', const ExpenseMasterData());
       }
-      final fields = _decode(data['create_required_data_fields']);
+      final fields = decodeDynamic(data['create_required_data_fields']);
       if (fields is! Map) {
         return const ExpenseMasterResult(0, '', ExpenseMasterData());
       }
       final modes = <String>[];
-      final pm = _decode(fields['payment_modes']);
+      final pm = decodeDynamic(fields['payment_modes']);
       if (pm is List) {
         for (final m in pm) {
           modes.add(m.toString());
         }
       }
       final categories = <ExpenseCategory>[];
-      final ct = _decode(fields['category_types']);
+      final ct = decodeDynamic(fields['category_types']);
       if (ct is List) {
         for (final c in ct) {
           if (c is Map) {
@@ -91,7 +80,7 @@ class ExpensesRepository {
         }
       }
       final taxTypes = <ExpenseTaxType>[];
-      final tt = _decode(fields['tax_types']);
+      final tt = decodeDynamic(fields['tax_types']);
       if (tt is List) {
         for (final t in tt) {
           if (t is Map) {
@@ -137,7 +126,7 @@ class ExpensesRepository {
             1, '${data['Error_Message'] ?? 'No records'}', const []);
       }
       final items = <ExpenseListItem>[];
-      final list = _decode(data['expenses_list']);
+      final list = decodeDynamic(data['expenses_list']);
       if (list is List) {
         for (final e in list) {
           if (e is Map) {

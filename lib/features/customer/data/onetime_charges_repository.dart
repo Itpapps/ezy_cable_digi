@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/services/session_service.dart';
@@ -98,22 +98,6 @@ class OnetimeChargesRepository {
         'authtoken': SessionService.instance.authToken,
       };
 
-  static int _status(Map data) {
-    final v = data['status_code'];
-    return v is int ? v : (int.tryParse('$v') ?? 3);
-  }
-
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
-
   // ── chargeTypes (dynamic dropdown) ──────────────────────────────────────────
   Future<ChargeTypesResult> fetchChargeTypes(String customerId) async {
     try {
@@ -129,11 +113,11 @@ class OnetimeChargesRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      final status = _status(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final types = <ChargeType>[];
       if (status == 0) {
-        final list = _decode(data['charge_types']);
+        final list = decodeDynamic(data['charge_types']);
         if (list is List) {
           for (final e in list) {
             if (e is Map) {
@@ -195,7 +179,7 @@ class OnetimeChargesRepository {
         body,
         timeout: const Duration(seconds: 70),
       );
-      return OnetimeSaveResult(_status(data), '${data['status_msg'] ?? ''}');
+      return OnetimeSaveResult(statusCodeOf(data), '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return const OnetimeSaveResult(3, 'Request timed out.');
     } catch (_) {
@@ -211,11 +195,11 @@ class OnetimeChargesRepository {
         {..._auth, 'customer_id': customerId},
         timeout: const Duration(seconds: 70),
       );
-      final status = _status(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final items = <OnetimeChargeItem>[];
       if (status == 0) {
-        final list = _decode(data['onetime_charges']);
+        final list = decodeDynamic(data['onetime_charges']);
         if (list is List) {
           for (final e in list) {
             if (e is Map) {

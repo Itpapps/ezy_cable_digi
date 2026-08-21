@@ -3,6 +3,7 @@ import 'package:iconsax/iconsax.dart';
 
 import '../../core/data/customer.dart';
 import '../../core/services/session_service.dart';
+import '../packages/data/customer_box.dart';
 
 /// One Customer Operations tile: icon + label + gradient.
 class CustomerOperation {
@@ -34,6 +35,7 @@ List<CustomerOperation> buildCustomerOperations(
   // OTT boxes from getCustomerBoxes (fetched on the details screen). Drives the
   // OTT branch of Android's `editcustomer` button. Default false = tile hidden.
   bool hasOttBoxes = false,
+  CustomerBox? selectedBox,
 }) {
   final ops = <CustomerOperation>[
     // Always-visible (canonical slots 1–6).
@@ -51,27 +53,38 @@ List<CustomerOperation> buildCustomerOperations(
         [Color(0xFF7B1FA2), Color(0xFFAB47BC)]),
   ];
 
-  // Canonical slot 7 — Package Operations. Android hides it when the customer
-  // is temporarily deactivated (`tmp_activation != 0`); Temporary Activation
-  // (Phase 3) then occupies this slot.
-  if (customer.tmpActivation == 0) {
-    ops.add(const CustomerOperation(Iconsax.box, 'Package Operations',
-        [Color(0xFFE65100), Color(0xFFFF8C42)]));
-  }
-  // Canonical slot 8 — Temporary Activation. Android shows it exactly when the
-  // customer is temporarily deactivated (`tmp_activation != 0`), taking the slot
-  // Package Operations vacates (CustomerOperations_Fragment:1314-1320).
-  if (customer.tmpActivation != 0) {
-    ops.add(const CustomerOperation(Icons.play_circle_outline,
-        'Temporary Activation', [Color(0xFF2E7D32), Color(0xFF66BB6A)]));
-  }
-  // Canonical slot 9 — Unpaid Customer Activation. Android shows it when the
-  // customer is unpaid-activation-eligible AND the dealer has the role
-  // (CustomerOperations_Fragment:1322). unpaid_act is a per-customer searchCustomer
-  // field (unpaid_customer_activation, SearchCustomer_Fragment_Newdesign:978).
-  if (customer.unpaidAct == 1 && session.unpaidCustomerActivation) {
-    ops.add(const CustomerOperation(Icons.person_add_alt_1,
-        'Unpaid Customer Activation', [Color(0xFF00838F), Color(0xFF26C6DA)]));
+  // Canonical slots 7–9 — mutually exclusive priority chain.
+  // When selectedBox is non-null (multi-box), decision is per-box:
+  //   active box → Package Operations (always, ignores customer-level flags)
+  //   deactivated box → unpaid_act > tmp_activation > fallback Package Ops
+  // When null (single-box / no boxes), original customer-level logic preserved.
+  if (selectedBox != null) {
+    if (selectedBox.isActive) {
+      ops.add(const CustomerOperation(Iconsax.box, 'Package Operations',
+          [Color(0xFFE65100), Color(0xFFFF8C42)]));
+    } else {
+      if (customer.unpaidAct == 1 && session.unpaidCustomerActivation) {
+        ops.add(const CustomerOperation(Icons.person_add_alt_1,
+            'Unpaid Customer Activation', [Color(0xFF00838F), Color(0xFF26C6DA)]));
+      } else if (customer.tmpActivation != 0) {
+        ops.add(const CustomerOperation(Icons.play_circle_outline,
+            'Temporary Activation', [Color(0xFF2E7D32), Color(0xFF66BB6A)]));
+      } else {
+        ops.add(const CustomerOperation(Iconsax.box, 'Package Operations',
+            [Color(0xFFE65100), Color(0xFFFF8C42)]));
+      }
+    }
+  } else {
+    if (customer.unpaidAct == 1 && session.unpaidCustomerActivation) {
+      ops.add(const CustomerOperation(Icons.person_add_alt_1,
+          'Unpaid Customer Activation', [Color(0xFF00838F), Color(0xFF26C6DA)]));
+    } else if (customer.tmpActivation != 0) {
+      ops.add(const CustomerOperation(Icons.play_circle_outline,
+          'Temporary Activation', [Color(0xFF2E7D32), Color(0xFF66BB6A)]));
+    } else {
+      ops.add(const CustomerOperation(Iconsax.box, 'Package Operations',
+          [Color(0xFFE65100), Color(0xFFFF8C42)]));
+    }
   }
 
   // Canonical slot 10 — Deactivate STB (Android gates on unpaid_customer_deactivation).

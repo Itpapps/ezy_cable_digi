@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/services/session_service.dart';
@@ -36,22 +36,6 @@ class CustomPackagesRepository {
         'authtoken': SessionService.instance.authToken,
       };
 
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
-
-  static int _statusOf(Map<String, dynamic> data) {
-    final v = data['status_code'];
-    return v is int ? v : (int.tryParse('$v') ?? 3);
-  }
-
   /// [actType] "1" = activation list, "2" = deactivation list (Android
   /// CustomPackages_Activation/Deactivation).
   Future<CustomPackagesListResult> getDigiDealerPackages({
@@ -64,11 +48,11 @@ class CustomPackagesRepository {
         {..._auth, 'customer_id': customerId, 'act_type': actType},
         timeout: const Duration(seconds: 70),
       );
-      final status = _statusOf(data);
+      final status = statusCodeOf(data);
       final msg = '${data['status_msg'] ?? ''}';
       final packages = <CustomPackage>[];
       if (status == 0) {
-        final list = _decode(data['digi_dealer_packages']);
+        final list = decodeDynamic(data['digi_dealer_packages']);
         if (list is List) {
           for (final p in list) {
             if (p is Map) {
@@ -113,7 +97,7 @@ class CustomPackagesRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return (statusCode: _statusOf(data), message: '${data['status_msg'] ?? ''}');
+      return (statusCode: statusCodeOf(data), message: '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return (statusCode: 3, message: 'Request timed out.');
     } catch (_) {
@@ -140,7 +124,7 @@ class CustomPackagesRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return (statusCode: _statusOf(data), message: '${data['status_msg'] ?? ''}');
+      return (statusCode: statusCodeOf(data), message: '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return (statusCode: 3, message: 'Request timed out.');
     } catch (_) {
@@ -170,7 +154,7 @@ class CustomPackagesRepository {
         },
         timeout: const Duration(seconds: 70),
       );
-      return (statusCode: _statusOf(data), message: '${data['status_msg'] ?? ''}');
+      return (statusCode: statusCodeOf(data), message: '${data['status_msg'] ?? ''}');
     } on TimeoutException {
       return (statusCode: 3, message: 'Request timed out.');
     } catch (_) {

@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:ezy_cable_digi/core/config/app_config.dart';
-import 'package:http/http.dart' as http;
 
 import '../../core/data/customer.dart';
+import 'data/directions_repository.dart';
 
 class CustomerMapScreen extends StatefulWidget {
   final Customer customer;
@@ -40,8 +38,6 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
 
   GoogleMapController? _mapController;
   DateTime? _lastCameraMoveAt;
-
-  static String get _googleMapsApiKey => AppConfig.instance.googleMapsApiKey;
 
   @override
   void initState() {
@@ -120,7 +116,6 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
         });
 
         // Update road route only occasionally to keep it smooth.
-        if (_googleMapsApiKey.isEmpty) return;
 
         final lastOrigin = _lastRouteOrigin;
         final lastFetchAt = _lastRouteFetchAt;
@@ -156,7 +151,6 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
   }
 
   Future<void> _tryFetchRoutePolylineOnce() async {
-    if (_googleMapsApiKey.isEmpty) return;
     await _fetchRouteIfNeeded(force: true);
   }
 
@@ -184,38 +178,11 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
 
       _isRouteLoading = true;
 
-      final origin = '${_current.latitude},${_current.longitude}';
-      final destination = '${_customerPoint.latitude},${_customerPoint.longitude}';
-
-      final url = Uri.https(
-        'maps.googleapis.com',
-        '/maps/api/directions/json',
-        <String, String>{
-          'origin': origin,
-          'destination': destination,
-          'mode': 'driving',
-          'key': _googleMapsApiKey,
-        },
+      final decoded = await DirectionsRepository.instance.fetchRoute(
+        origin: _current,
+        destination: _customerPoint,
       );
-
-      final res =
-          await http.get(url).timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return;
-
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['status'] != 'OK') return;
-
-      final routes = (data['routes'] as List<dynamic>?) ?? [];
-      if (routes.isEmpty) return;
-
-      final route = routes.first as Map<String, dynamic>;
-      final overview =
-          (route['overview_polyline'] as Map<String, dynamic>?) ?? {};
-      final encoded = overview['points'] as String?;
-      if (encoded == null || encoded.isEmpty) return;
-
-      final decoded = _decodeGooglePolyline(encoded);
-      if (!mounted) return;
+      if (decoded.isEmpty || !mounted) return;
 
       setState(() {
         _routePolyline = decoded;
@@ -226,45 +193,9 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
     } catch (error, stackTrace) {
       debugPrint('CustomerMapScreen: route fetch failed: $error');
       debugPrint(stackTrace.toString());
-      // Keep straight polyline if route fails.
     } finally {
       _isRouteLoading = false;
     }
-  }
-
-  // Google polyline decoding algorithm.
-  List<LatLng> _decodeGooglePolyline(String encoded) {
-    final List<LatLng> poly = [];
-    int index = 0;
-    int lat = 0;
-    int lng = 0;
-
-    while (index < encoded.length) {
-      int shift = 0;
-      int result = 0;
-      int b;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      final dlat = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      final dlng = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
-      lng += dlng;
-
-      poly.add(LatLng(lat / 1e5, lng / 1e5));
-    }
-
-    return poly;
   }
 
   @override

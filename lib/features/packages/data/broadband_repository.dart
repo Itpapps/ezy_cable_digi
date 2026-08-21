@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/services/session_service.dart';
@@ -31,20 +31,9 @@ class BroadbandRepository {
   String _url(String method) =>
       '${ServerUrlResolver.instance.namespace}/digi_rest_api/$method';
 
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
-
   static List<BroadBandPlan> _parseList(dynamic raw) {
     final out = <BroadBandPlan>[];
-    final list = _decode(raw);
+    final list = decodeDynamic(raw);
     if (list is List) {
       for (final e in list) {
         if (e is Map) {

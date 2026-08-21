@@ -1,4 +1,5 @@
 import '../../../core/config/app_config.dart';
+import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
 import '../../../core/services/session_service.dart';
@@ -72,5 +73,20 @@ class DashboardRepository {
       employeeCollectionAmount: num('employeeCollectionAmount'),
       onetimeChargeAmount: num('onetimeChargeAmount'),
     );
+  }
+
+  Future<double> fetchWalletBalance() async {
+    final url =
+        '${ServerUrlResolver.instance.namespace}/packagelist/getLCODepositAmount';
+    final data = await RestClient.instance.postForm(url, {
+      'dealer_id': SessionService.instance.dealerId,
+      'imei': _imei,
+      'authtoken': SessionService.instance.authToken,
+    });
+    if ('${data['status_code']}' == '0') {
+      final v = data['lco_deposit_amount'];
+      return (v is num) ? v.toDouble() : (double.tryParse('$v') ?? 0);
+    }
+    return 0;
   }
 }

@@ -358,10 +358,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       ),
     );
 
-    if (ok != true || !mounted) {
-      remarksCtrl.dispose();
-      return;
-    }
+    if (ok != true || !mounted) return;
 
     showPremiumLoading(context, message: 'Scheduling collection...');
     final res = await _ctrl.submitPayLater(
@@ -371,7 +368,6 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       remarks: remarksCtrl.text.trim(),
       isEdited: record.isEditable,
     );
-    remarksCtrl.dispose();
     if (!mounted) return;
     Navigator.of(context).pop(); // dismiss loading
     // Android shows a "Success" / "Fail!" dialog with the server message.

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/response_helpers.dart';
 import '../../../core/network/rest_client.dart';
 import '../../../core/network/server_url_resolver.dart';
 import '../../../core/services/session_service.dart';
@@ -44,17 +44,6 @@ class PayLaterRepository {
         'imei': _imei,
         'authtoken': SessionService.instance.authToken,
       };
-
-  static dynamic _decode(dynamic raw) {
-    if (raw is String) {
-      try {
-        return jsonDecode(raw);
-      } catch (_) {
-        return null;
-      }
-    }
-    return raw;
-  }
 
   // ── scheduled_collection_create (Android updatepaylater) ────────────────────
   // VERIFIED (CustomerMgmt_MakePayment_Fragment:2507-2531,2767-2799): employee_id =
@@ -139,7 +128,7 @@ class PayLaterRepository {
             1, '${data['Error_Message'] ?? 'No records'}', const [], const [], const []);
       }
       final schedules = <PayLaterSchedule>[];
-      final list = _decode(data['customer_data']);
+      final list = decodeDynamic(data['customer_data']);
       if (list is List) {
         for (final r in list) {
           if (r is Map) {
@@ -148,7 +137,7 @@ class PayLaterRepository {
         }
       }
       final employees = <PayLaterEmployee>[];
-      final emp = _decode(data['emp_details']);
+      final emp = decodeDynamic(data['emp_details']);
       if (emp is List) {
         for (final e in emp) {
           if (e is Map) {
@@ -157,9 +146,9 @@ class PayLaterRepository {
         }
       }
       final statuses = <String>[];
-      final settings = _decode(data['setting_values']);
+      final settings = decodeDynamic(data['setting_values']);
       if (settings is Map) {
-        final dd = _decode(settings['status_drop_down']);
+        final dd = decodeDynamic(settings['status_drop_down']);
         if (dd is List) {
           for (final s in dd) {
             statuses.add(s.toString());

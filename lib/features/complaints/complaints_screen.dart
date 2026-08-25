@@ -128,38 +128,39 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
                         fontWeight: FontWeight.w700,
                         color: t.subtitleText)),
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: t.inputBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: t.inputBorderColor),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<ComplaintOption>(
-                      value: _selectedDealer,
-                      isExpanded: true,
-                      menuMaxHeight: 360,
-                      icon: Icon(Icons.keyboard_arrow_down_rounded,
-                          color: t.subtitleText),
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: t.cardBodyText),
-                      items: _dealers
-                          .map((d) => DropdownMenuItem<ComplaintOption>(
-                                value: d,
-                                child: Text(d.name,
-                                    overflow: TextOverflow.ellipsis),
-                              ))
-                          .toList(),
-                      onChanged: (_dealersLoading || _loading)
-                          ? null
-                          : (d) {
-                              if (d == null || d == _selectedDealer) return;
-                              setState(() => _selectedDealer = d);
-                              _load();
-                            },
+                InkWell(
+                  onTap: (_dealersLoading || _loading)
+                      ? null
+                      : () async {
+                          final result = await _showDealerDialog(t);
+                          if (result == null || result == _selectedDealer) return;
+                          setState(() => _selectedDealer = result);
+                          _load();
+                        },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: t.inputBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: t.inputBorderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _selectedDealer.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: t.cardBodyText),
+                          ),
+                        ),
+                        Icon(Icons.keyboard_arrow_down_rounded,
+                            color: t.subtitleText),
+                      ],
                     ),
                   ),
                 ),
@@ -233,6 +234,89 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Future<ComplaintOption?> _showDealerDialog(AppThemeConst t) {
+    return showGeneralDialog<ComplaintOption>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dealer',
+      barrierColor: Colors.black38,
+      transitionDuration: const Duration(milliseconds: 200),
+      transitionBuilder: (ctx, anim, _, child) {
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+                CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (ctx, _, _) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(ctx).size.width * 0.85,
+              constraints: const BoxConstraints(maxWidth: 400, maxHeight: 360),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _dealers.length,
+                  itemBuilder: (_, i) {
+                    final dealer = _dealers[i];
+                    final isSelected = dealer == _selectedDealer;
+                    return InkWell(
+                      onTap: () => Navigator.pop(ctx, dealer),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                        color: isSelected
+                            ? const Color(0xFF0D47A1).withValues(alpha: 0.06)
+                            : Colors.transparent,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                dealer.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check,
+                                  size: 20, color: Color(0xFF0D47A1)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

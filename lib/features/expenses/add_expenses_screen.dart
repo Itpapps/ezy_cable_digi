@@ -468,22 +468,16 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
     required ValueChanged<String?> onChanged,
   }) {
     return _dropdownShell(
-      label,
-      DropdownButton<String>(
-        value: value,
-        isExpanded: true,
-        isDense: true,
-        underline: const SizedBox.shrink(),
-        items: items
-            .map((e) => DropdownMenuItem(
-                value: e,
-                child: Text(e,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600))))
-            .toList(),
-        onChanged: onChanged,
-      ),
+      label: label,
+      displayText: value ?? '',
+      onTap: () async {
+        final result = await _showDropdownDialog<String>(
+          items: items,
+          selected: value,
+          itemLabel: (s) => s,
+        );
+        if (result != null) onChanged(result);
+      },
     );
   }
 
@@ -495,26 +489,24 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     return _dropdownShell(
-      label,
-      DropdownButton<T>(
-        value: value,
-        isExpanded: true,
-        isDense: true,
-        underline: const SizedBox.shrink(),
-        items: items
-            .map((e) => DropdownMenuItem(
-                value: e,
-                child: Text(itemLabel(e),
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600))))
-            .toList(),
-        onChanged: onChanged,
-      ),
+      label: label,
+      displayText: value != null ? itemLabel(value) : '',
+      onTap: () async {
+        final result = await _showDropdownDialog<T>(
+          items: items,
+          selected: value,
+          itemLabel: itemLabel,
+        );
+        if (result != null) onChanged(result);
+      },
     );
   }
 
-  Widget _dropdownShell(String label, Widget child) {
+  Widget _dropdownShell({
+    required String label,
+    required String displayText,
+    required VoidCallback onTap,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -524,17 +516,117 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
                 fontWeight: FontWeight.w800,
                 color: Colors.black54)),
         const SizedBox(height: 6),
-        Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(displayText,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600)),
+                ),
+                Icon(Icons.keyboard_arrow_down,
+                    size: 20, color: Colors.grey.shade500),
+              ],
+            ),
           ),
-          child: child,
         ),
       ],
+    );
+  }
+
+  Future<T?> _showDropdownDialog<T>({
+    required List<T> items,
+    required T? selected,
+    required String Function(T) itemLabel,
+  }) {
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dropdown',
+      barrierColor: Colors.black38,
+      transitionDuration: const Duration(milliseconds: 200),
+      transitionBuilder: (ctx, anim, _, child) {
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+                CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (ctx, _, _) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(ctx).size.width * 0.85,
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    final isSelected = item == selected;
+                    return InkWell(
+                      onTap: () => Navigator.pop(ctx, item),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                        color: isSelected
+                            ? const Color(0xFF0D47A1).withValues(alpha: 0.06)
+                            : Colors.transparent,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                itemLabel(item),
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check,
+                                  size: 20, color: Color(0xFF0D47A1)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -37,6 +37,13 @@
 				<key>NSIncludesSubdomains</key>
 				<true/>
 			</dict>
+			<key>digiv2.kccl.tv</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
 			<key>ezybms.itpworld.com</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>

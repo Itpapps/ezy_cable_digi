@@ -204,10 +204,11 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     final ok = await showPremiumDialog<bool>(
       context: context,
       child: PremiumDialogShell(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-          child: StatefulBuilder(
-            builder: (ctx, setD) {
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            child: StatefulBuilder(
+              builder: (ctx, setD) {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,6 +303,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                   TextField(
                     controller: remarksCtrl,
                     maxLines: 2,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       hintText: 'Remarks (optional)',
@@ -324,7 +328,10 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => Navigator.pop(ctx, false),
+                          onPressed: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.pop(ctx, false);
+                          },
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 11),
                             side: BorderSide(color: Colors.grey.shade300),
@@ -336,7 +343,10 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
+                          onPressed: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.pop(ctx, true);
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -354,6 +364,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
               );
             },
           ),
+        ),
         ),
       ),
     );

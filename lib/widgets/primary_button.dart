@@ -107,17 +107,20 @@ class _PrimaryButtonState extends State<PrimaryButton>
               padding: const EdgeInsets.all(borderW),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(radius),
-                gradient: SweepGradient(
-                  transform: GradientRotation(_c.value * 2 * math.pi),
-                  colors: const [
-                    accentColor,
-                    accentColor,
-                    Colors.white,
-                    accentColor,
-                    accentColor
-                  ],
-                  stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
-                ),
+                color: _c.isDismissed ? accentColor : null,
+                gradient: _c.isDismissed
+                    ? null
+                    : SweepGradient(
+                        transform: GradientRotation(_c.value * 2 * math.pi),
+                        colors: const [
+                          accentColor,
+                          accentColor,
+                          Colors.white,
+                          accentColor,
+                          accentColor
+                        ],
+                        stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
+                      ),
                 boxShadow: [
                   BoxShadow(
                     color: accentColor.withValues(alpha: 0.3),

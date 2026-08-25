@@ -597,11 +597,14 @@ class _GlowLogoRingState extends State<_GlowLogoRing>
             padding: const EdgeInsets.all(3), // ring thickness
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: SweepGradient(
-                transform: GradientRotation(_c.value * 2 * math.pi),
-                colors: const [red, red, Colors.white, red, red],
-                stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
-              ),
+              color: _c.isDismissed ? red : null,
+              gradient: _c.isDismissed
+                  ? null
+                  : SweepGradient(
+                      transform: GradientRotation(_c.value * 2 * math.pi),
+                      colors: const [red, red, Colors.white, red, red],
+                      stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
+                    ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.14),

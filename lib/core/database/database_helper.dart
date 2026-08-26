@@ -715,6 +715,23 @@ Future<List<Customer>> getFilteredCustomersPaginated({
     return db.insert(_tblOfflineCustomers, map);
   }
 
+  // ── ATOMIC replace: delete all offline data + insert new customers ──
+  Future<int> replaceAllOfflineCustomers(List<OfflineCustomer> customers) async {
+    final db = await database;
+    int inserted = 0;
+    await db.transaction((txn) async {
+      await txn.delete(_tblOfflineCustomers);
+      await txn.delete(_tblOfflinePayments);
+      for (final c in customers) {
+        final map = c.toMap();
+        map.remove('id');
+        await txn.insert(_tblOfflineCustomers, map);
+        inserted++;
+      }
+    });
+    return inserted;
+  }
+
   // ── INSERT payment queue record ──
   Future<int> insertOfflinePayment(OfflineCustomer c) async {
     final db = await database;

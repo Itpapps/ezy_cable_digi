@@ -18,6 +18,7 @@ class OfflineDataService {
 
   final DatabaseHelper _db = DatabaseHelper();
   final RestClient _rest = RestClient.instance;
+  bool _downloading = false;
 
   String get _baseUrl => ServerUrlResolver.instance.namespace;
   String get _downloadUrl => '$_baseUrl/GetRequest';
@@ -63,56 +64,62 @@ class OfflineDataService {
   /// Step 2: Download all records and insert into DB.
   /// [totalCount] from Step 1. Returns number of records inserted.
   Future<int> downloadRecords(int totalCount) async {
-    final endCount = totalCount.toString().padLeft(5, '0');
-    final scrNo = _padRight(_machineId, 11) +
-        _padRight('019', 3) +
-        _padRight(':70', 3) +
-        _padRight('', 4) + // startcount (4 spaces)
-        _padRight(endCount, 5);
-
-    final response = await _rest.postRaw(_downloadUrl, {'ScrNo': scrNo});
-
-    if (!response.contains('@:71')) {
-      throw OfflineDataException('Error downloading data. Please try again.');
+    if (_downloading) {
+      throw OfflineDataException('Download already in progress.');
     }
+    _downloading = true;
+    try {
+      final endCount = totalCount.toString().padLeft(5, '0');
+      final scrNo = _padRight(_machineId, 11) +
+          _padRight('019', 3) +
+          _padRight(':70', 3) +
+          _padRight('', 4) + // startcount (4 spaces)
+          _padRight(endCount, 5);
 
-    // Parse: first 9 chars are status code, rest is data
-    String data = response.substring(9);
-    data = data.replaceAll('#', '');
+      final response = await _rest.postRaw(_downloadUrl, {'ScrNo': scrNo});
 
-    if (data.isEmpty) {
-      throw OfflineDataException('No data received from server.');
+      if (!response.contains('@:71')) {
+        throw OfflineDataException('Error downloading data. Please try again.');
+      }
+
+      // Parse: first 9 chars are status code, rest is data
+      String data = response.substring(9);
+      data = data.replaceAll('#', '');
+
+      if (data.isEmpty) {
+        throw OfflineDataException('No data received from server.');
+      }
+
+      // Split into 332-char records
+      final records = <String>[];
+      for (var i = 0; i + 332 <= data.length; i += 332) {
+        records.add(data.substring(i, i + 332));
+      }
+
+      if (records.isEmpty) {
+        throw OfflineDataException('No valid records in download.');
+      }
+
+      // Parse all records in memory before touching the database
+      final customers = records.map(_parseRecord).toList();
+
+      // Atomic replacement: delete + insert all in one transaction.
+      // If any insert fails, the entire transaction rolls back and
+      // the previous valid dataset is preserved.
+      final inserted = await _db.replaceAllOfflineCustomers(customers);
+
+      // Save prefs (only reached after successful commit)
+      await OfflineModeService.instance.recordDownload(
+        totalRecords: inserted,
+        machineId: _machineId,
+        userCode: SessionService.instance.offlineUserCode,
+      );
+      await OfflineModeService.instance.setOfflineMode(true);
+
+      return inserted;
+    } finally {
+      _downloading = false;
     }
-
-    // Split into 332-char records
-    final records = <String>[];
-    for (var i = 0; i + 332 <= data.length; i += 332) {
-      records.add(data.substring(i, i + 332));
-    }
-
-    if (records.isEmpty) {
-      throw OfflineDataException('No valid records in download.');
-    }
-
-    // Clear existing offline data before new download
-    await _db.deleteAllOfflineData();
-
-    int inserted = 0;
-    for (final rec in records) {
-      final c = _parseRecord(rec);
-      await _db.insertOfflineCustomer(c);
-      inserted++;
-    }
-
-    // Save prefs
-    await OfflineModeService.instance.recordDownload(
-      totalRecords: inserted,
-      machineId: _machineId,
-      userCode: SessionService.instance.offlineUserCode,
-    );
-    await OfflineModeService.instance.setOfflineMode(true);
-
-    return inserted;
   }
 
   /// Parse a single 332-char record into OfflineCustomer.

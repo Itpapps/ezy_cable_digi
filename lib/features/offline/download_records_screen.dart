@@ -22,6 +22,7 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
   int _pendingToSync = 0;
   int _totalSynced = 0;
   bool _loading = true;
+  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -46,6 +47,8 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
   }
 
   Future<void> _download() async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
     try {
       await OfflineDataService.instance.guardBeforeDownload();
       if (!mounted) return;
@@ -75,6 +78,8 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
         SnackBar(
             content: Text('Download failed: $e'), backgroundColor: Colors.red),
       );
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
     }
   }
 
@@ -198,13 +203,19 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: _download,
+                        onTap: _isDownloading ? null : _download,
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Column(
                             children: [
-                              const Icon(Icons.download, color: Colors.red, size: 56),
+                              _isDownloading
+                                  ? const SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: CircularProgressIndicator(strokeWidth: 3),
+                                    )
+                                  : const Icon(Icons.download, color: Colors.red, size: 56),
                               Text(
                                 'DOWNLOAD',
                                 style: TextStyle(

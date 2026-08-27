@@ -5,6 +5,7 @@ import '../../core/constants/app_sizes.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/offline_data_service.dart';
+import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/widgets/premium_dialog.dart';
 
@@ -51,6 +52,16 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
     setState(() => _isDownloading = true);
     try {
       await OfflineDataService.instance.guardBeforeDownload();
+      final flag = await OfflineModeService.instance.offlineFlag;
+      if (flag == 0) {
+        if (!mounted) return;
+        showPremiumSnackBar(
+          context,
+          'Data already downloaded. Clear data first to download again.',
+          isError: true,
+        );
+        return;
+      }
       if (!mounted) return;
       showPremiumSnackBar(context, 'Getting count...');
       final count = await OfflineDataService.instance.downloadGetCount();

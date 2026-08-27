@@ -22,6 +22,7 @@ class DashboardController extends ChangeNotifier {
   bool loading = false;
   bool hasError = false;
   String? errorMessage;
+  int? kpiStatusCode;
 
   double dueAmount = 0;
   double monthBilling = 0;
@@ -47,6 +48,7 @@ class DashboardController extends ChangeNotifier {
     loading = true;
     hasError = false;
     errorMessage = null;
+    kpiStatusCode = null;
     notifyListeners();
     try {
       final r = await DashboardRepository.instance.fetchKpis();
@@ -59,12 +61,14 @@ class DashboardController extends ChangeNotifier {
       } else {
         // statusCode 1/2/3 — keep safe ₹0.00 values, surface a soft message.
         hasError = true;
+        kpiStatusCode = r.statusCode;
         errorMessage =
             r.statusMessage.isEmpty ? 'Could not load dashboard' : r.statusMessage;
       }
     } catch (e, s) {
       // Network / timeout / parse — never crash; keep zeros.
       hasError = true;
+      kpiStatusCode = 3;
       errorMessage = 'Could not load dashboard';
       ErrorHandlerService.recordError(e, s,
           reason: 'DashboardController.loadKpis');

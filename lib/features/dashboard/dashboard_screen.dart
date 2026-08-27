@@ -26,6 +26,7 @@ import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../main.dart';
+import '../auth/login_screen.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../customers/customer_list_screen.dart';
@@ -157,6 +158,58 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     if (mounted) setState(() {});
   }
 
+  // Android parity (DashboardHomeFragment.java:1364-1386, 1541-1558):
+  // on KPI failure, show a dialog and redirect to LoginScreen.
+  void _handleKpiResult() {
+    if (!mounted || !_dash.hasError) return;
+    final code = _dash.kpiStatusCode;
+    if (code == 1) {
+      _showKpiErrorDialog(
+        title: 'No Details Found!',
+        message: _dash.errorMessage ?? 'No Details Found',
+      );
+    } else if (code == 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${_dash.errorMessage ?? 'Error'}: Contact Support',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } else {
+      _showKpiErrorDialog(
+        title: 'Server is busy or Un reachable!',
+        message: 'Please login again after sometime',
+      );
+    }
+  }
+
+  void _showKpiErrorDialog({required String title, required String message}) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // DUMMY login-notification popup — one-shot guard so it shows only once.
   bool _notificationShown = false;
 
@@ -166,7 +219,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     super.initState();
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
     _dash.addListener(_onDash);
-    _dash.loadKpis();
+    _dash.loadKpis().then((_) => _handleKpiResult());
     _dash
         .loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
     _dash.loadComplaints(); // Complaints is the default feed tab.
@@ -220,7 +273,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     // changed the totals while we were away — Android parity. Nothing reloads
     // when the flag is unset (returning from read-only screens).
     if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
-      _dash.loadKpis();
+      _dash.loadKpis().then((_) => _handleKpiResult());
       _dash.loadWallet(); // Android refreshes the wallet on every recreate too
       // Android's changeFragment(replace) RECREATES the dashboard on return, so
       // onCreateView re-runs: KPIs + wallet + COMPLAINTS reload and the tab resets

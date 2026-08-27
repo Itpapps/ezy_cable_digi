@@ -27,6 +27,7 @@ import '../features/offline/download_records_screen.dart';
 import '../features/offline/static_content_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/debug/debug_console_screen.dart';
+import '../core/database/database_helper.dart';
 
 void _closeDrawerThen(
   BuildContext drawerContext,
@@ -47,6 +48,24 @@ void _closeDrawerThen(
 Future<bool> offlineDataMatchesDealer() async {
   final stored = (await OfflineModeService.instance.machineId).trim();
   final current = SessionService.instance.machineNumber.trim();
+
+  // ── TEMPORARY DIAGNOSTIC — remove after testing ──
+  if (kDebugMode) {
+    final storedUserCode = await OfflineModeService.instance.userCode;
+    final currentUserCode = SessionService.instance.offlineUserCode;
+    final flag = await OfflineModeService.instance.offlineFlag;
+    final count = await DatabaseHelper().getOfflineCustomerCount();
+    debugPrint('offlineDataMatchesDealer');
+    debugPrint('  stored machineNumber  = [$stored]');
+    debugPrint('  current machineNumber = [$current]');
+    debugPrint('  stored userCode       = [$storedUserCode]');
+    debugPrint('  current userCode      = [$currentUserCode]');
+    debugPrint('  offlineFlag           = [$flag]');
+    debugPrint('  offline customer count= [$count]');
+    debugPrint('  match result          = ${stored.isNotEmpty && current.isNotEmpty && stored.toLowerCase() == current.toLowerCase()}');
+  }
+  // ── END DIAGNOSTIC ──
+
   return stored.isNotEmpty &&
       current.isNotEmpty &&
       stored.toLowerCase() == current.toLowerCase();

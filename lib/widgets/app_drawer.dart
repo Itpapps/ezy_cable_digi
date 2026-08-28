@@ -74,12 +74,24 @@ Future<bool> offlineDataMatchesDealer() async {
 /// Android "ID Mismatch!" dialog (MainActivity:697-710 / :722-731).
 Future<void> showIdMismatch(BuildContext ctx) async {
   final usercode = await OfflineModeService.instance.userCode;
+  final storedMachine = (await OfflineModeService.instance.machineId).trim();
+  final currentMachine = SessionService.instance.machineNumber.trim();
+  final dealerId = SessionService.instance.dealerId;
+  final imei = AppConfig.deviceImei;
+  final flag = await OfflineModeService.instance.offlineFlag;
+  final count = await DatabaseHelper().getOfflineCustomerCount();
   if (!ctx.mounted) return;
   await showPremiumConfirm(
     context: ctx,
     title: 'ID Mismatch!',
-    body:
-        'You have not downloaded the data or Data already present for $usercode',
+    body: 'Data present for $usercode\n\n'
+        'stored machine: [$storedMachine]\n'
+        'current machine: [$currentMachine]\n'
+        'dealerId: [$dealerId]\n'
+        'userCode: [$usercode]\n'
+        'imei: [$imei]\n'
+        'offlineFlag: [$flag]\n'
+        'records: [$count]',
     confirmLabel: 'OK',
     cancelLabel: 'Close',
   );

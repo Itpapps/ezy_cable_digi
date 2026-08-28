@@ -29,11 +29,11 @@ class AppConfig {
   //
   // NAMESPACE — the data server .
   // login_serverUrl defaults to NAMESPACE + "/wsController".
-  static const String namespace = 'https://digi.kccl.tv/index.php';      // LIVE MagikDigi
+  // static const String namespace = 'https://digi.kccl.tv/index.php';      // LIVE MagikDigi
   // static const String namespace = 'https://digi.ezycable.com/index.php'; // LIVE CloudDigi
   // static const String namespace =
   //     'http://192.168.1.16/testing/ezycabledigi_v2_H8_cloud_live/app/index.php'; // LOCAL (active)
-      // static const String namespace = "https://digiv2.kccl.tv/index.php";
+      static const String namespace = "https://digiv2.kccl.tv/index.php";
   // Device id sent as `imei`.
   // Resolution order:
   //   1) --dart-define=DEVICE_IMEI=…  → optional override for debugging or testing
@@ -74,17 +74,26 @@ class AppConfig {
       return;
     }
 
-    try {
-      final String? value = await _deviceIdChannel.invokeMethod<String>('getDeviceIdentifier');
-      if (value != null && value.isNotEmpty) {
-        _cachedDeviceImei = value;
-        return;
+    final maxAttempts = defaultTargetPlatform == TargetPlatform.iOS ? 3 : 1;
+    for (var i = 0; i < maxAttempts; i++) {
+      if (i > 0) await Future.delayed(const Duration(milliseconds: 200));
+      try {
+        final String? value =
+            await _deviceIdChannel.invokeMethod<String>('getDeviceIdentifier');
+        if (value != null && value.isNotEmpty) {
+          _cachedDeviceImei = value;
+          return;
+        }
+        _log('Device identifier call returned empty.');
+      } on MissingPluginException {
+        _log('Device id channel not ready (attempt ${i + 1}/$maxAttempts).');
+      } on PlatformException catch (e) {
+        _log('Device identifier lookup failed: ${e.message}');
+        break;
+      } catch (e) {
+        _log('Device identifier lookup failed: $e');
+        break;
       }
-      _log('Android device identifier call returned empty.');
-    } on PlatformException catch (e) {
-      _log('Android device identifier lookup failed: ${e.message}');
-    } catch (e) {
-      _log('Android device identifier lookup failed: $e');
     }
   }
 

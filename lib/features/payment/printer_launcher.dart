@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -71,6 +72,12 @@ Future<void> launchThermalPrint({
   // true = batched (long Collection/Employee reports). See printReceipt.
   bool batched = false,
 }) async {
+  // iOS: never open the picker or touch the plugin. The Print affordances are
+  // already hidden on iOS, so this is defence-in-depth for any path added later.
+  // All callers discard this Future without chaining, so returning early cannot
+  // strand a caller.
+  if (!AppConfig.bluetoothPrintingEnabled) return;
+
   // Android parity (DeviceListActivity auto-returns the saved device): if a
   // printer is saved AND still paired, connect + print directly — no picker.
   // Only fall back to the picker when nothing is saved, the saved printer is no
@@ -215,6 +222,9 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
   }
 
   Future<void> _scan() async {
+    // iOS: unreachable today (launchThermalPrint is gated and is the only way
+    // this sheet opens), but guarded so no future path can reach the plugin.
+    if (!AppConfig.bluetoothPrintingEnabled) return;
     setState(() {
       _isScanning = true;
       _devices = [];
@@ -281,7 +291,9 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
     debugPrint('[PICKER 1] connectPrinter() returned = $ok (mac=${device.macAdress})');
     bool statusAfter = false;
     try {
-      statusAfter = await PrintBluetoothThermal.connectionStatus;
+      if (AppConfig.bluetoothPrintingEnabled) {
+        statusAfter = await PrintBluetoothThermal.connectionStatus;
+      }
     } catch (_) {}
     debugPrint('[PICKER 2] connectionStatus after connect = $statusAfter');
     debugPrint('[PICKER 3] selected="${device.name}" _connected=$ok');

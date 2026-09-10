@@ -2183,16 +2183,18 @@ class _PremiumAppBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  _AppBarIcon(
-                    icon: Iconsax.bluetooth,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const BluetoothDevicesScreen(),
+                  if (AppConfig.bluetoothPrintingEnabled) ...[
+                    const SizedBox(width: 4),
+                    _AppBarIcon(
+                      icon: Iconsax.bluetooth,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BluetoothDevicesScreen(),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(width: 4),
                   _AppBarIcon(
                     icon: Iconsax.calendar,

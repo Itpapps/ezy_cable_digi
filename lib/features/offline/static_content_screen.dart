@@ -75,7 +75,7 @@ const String kDummyAboutUs = '''
  Company: ITP Software India Pvt Ltd.
 
  About App:
-  Digi offers complete customer relationship management solution to local cable operators by keeping track of their customer's profile,  Make Payments and print a receipt via Bluetooth Printer, complaints Management or any customer queries which can be resolved through your smartphones - anytime and anywhere.
+  Digi offers complete customer relationship management solution to local cable operators by keeping track of their customer's profile,  Make Payments and print or share a receipt, complaints Management or any customer queries which can be resolved through your smartphones - anytime and anywhere.
 
      itpworld.com,  All Rights Reserved
 ''';

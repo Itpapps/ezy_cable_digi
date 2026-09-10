@@ -4,6 +4,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'dart:io';
 
+import '../config/app_config.dart';
+
 class RealBluetoothService {
 
   // 🔹 Permissions — simplified since startup already asked for them.
@@ -38,6 +40,7 @@ class RealBluetoothService {
 
   // 🔹 Get paired devices
   Future<List<BluetoothInfo>> getDevices() async {
+    if (!AppConfig.bluetoothPrintingEnabled) return [];
     try {
       if (!await requestPermissions()) return [];
       return await PrintBluetoothThermal.pairedBluetooths;
@@ -49,6 +52,7 @@ class RealBluetoothService {
 
   // 🔹 Connect
   Future<bool> connectPrinter(String mac) async {
+    if (!AppConfig.bluetoothPrintingEnabled) return false;
     try {
       if (!await requestPermissions()) return false;
       await disconnectPrinter();
@@ -85,6 +89,18 @@ class RealBluetoothService {
   }
 
   Future<void> disconnectPrinter() async {
+    // iOS: skip before touching the plugin at all. This method is called from
+    // nine screens' dispose(), so without this guard the permission prompt
+    // fires when the user merely leaves a screen, no print button tapped.
+    //
+    // MUST stay here rather than at the call sites: receipt_preview_screen.dart
+    // :326 runs the offline NEXT CUSTOMER Navigator.pop() inside this Future's
+    // .whenComplete(), and offline_unpaid_list_screen.dart:154 refreshes the
+    // unpaid list only after that pop. A bare `return` in an async method still
+    // completes the Future normally, so whenComplete fires and the pop happens.
+    // Guarding at the call site would delete the pop along with the call.
+    if (!AppConfig.bluetoothPrintingEnabled) return;
+
     try {
       // iOS: the plugin's `disconnect` branch force-unwraps a nil
       // `connectedPeripheral` (SwiftPrintBluetoothThermalPlugin.swift:244,
@@ -108,6 +124,7 @@ class RealBluetoothService {
 
   // 🔹 Ensure connection
   Future<bool> ensureConnected(String mac) async {
+    if (!AppConfig.bluetoothPrintingEnabled) return false;
     try {
       bool isConnected = await PrintBluetoothThermal.connectionStatus;
       print("Connection status: $isConnected");
@@ -162,6 +179,7 @@ class RealBluetoothService {
     required List<String> lines,
     bool batched = false,
   }) async {
+    if (!AppConfig.bluetoothPrintingEnabled) return;
     // [PRINTDIAG] TEMPORARY instrumentation — logic unchanged.
     debugPrint('[PRINT 1] printReceipt entered — mac=$mac lines=${lines.length} batched=$batched');
     try {

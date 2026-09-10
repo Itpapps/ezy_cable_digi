@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
 import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -244,6 +245,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       actions: [
         // Single top Print button (Android viewpayhistory_printbtn) — prints the
         // WHOLE payment history as one report.
+        if (AppConfig.bluetoothPrintingEnabled)
         IconButton(
           onPressed: _payments.isEmpty ? null : _printHistory,
           tooltip: 'Print payment history',
@@ -650,13 +652,18 @@ class _PaymentHistoryDetailScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _DetailActionButton(
-                      icon: Icons.print,
-                      label: 'Print',
-                      color: Colors.red,
-                      onTap: _print),
+                  if (AppConfig.bluetoothPrintingEnabled)
+                    _DetailActionButton(
+                        icon: Icons.print,
+                        label: 'Print',
+                        color: Colors.red,
+                        onTap: _print),
                   if (SessionService.instance.shareOption) ...[
-                    const SizedBox(width: 20),
+                    // Separator only when Print is actually rendered — this Row
+                    // is centre-aligned, so a leading spacer would push Share
+                    // 10px off centre on iOS.
+                    if (AppConfig.bluetoothPrintingEnabled)
+                      const SizedBox(width: 20),
                     Builder(
                       builder: (btnCtx) => _DetailActionButton(
                           icon: Icons.share,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/data/offline_customer.dart';
 import '../../core/database/database_helper.dart';
@@ -288,23 +289,26 @@ class _OfflineCollectionsReportScreenState
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: SizedBox(
-            width: double.infinity,
-            height: 42,
-            child: ElevatedButton.icon(
-              onPressed: _printAll,
-              icon: const Icon(Icons.print, color: Colors.red),
-              label: const Text('PRINT ALL',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primary,
+        // Whole Padding goes — the button is its sole child, so hiding just
+        // the button would leave a 54px band of bare blue above the list.
+        if (AppConfig.bluetoothPrintingEnabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: ElevatedButton.icon(
+                onPressed: _printAll,
+                icon: const Icon(Icons.print, color: Colors.red),
+                label: const Text('PRINT ALL',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                ),
               ),
             ),
           ),
-        ),
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),

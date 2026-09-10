@@ -75,11 +75,15 @@ post_install do |installer|
         'PERMISSION_NOTIFICATIONS=1',
 
         ## dart: PermissionGroup.bluetooth
-        # Info.plist: NSBluetoothAlwaysUsageDescription,
-        #             NSBluetoothPeripheralUsageDescription
-        # Thermal-printer pairing. NOTE: does NOT affect Permission.bluetoothScan
-        # / .bluetoothConnect, which are Android-only permission groups.
-        'PERMISSION_BLUETOOTH=1',
+        # DISABLED for iOS — Bluetooth thermal printing is Android-only (see
+        # AppConfig.bluetoothPrintingEnabled). At 0 the permission_handler
+        # strategy compiles down to UnknownPermissionStrategy and CoreBluetooth
+        # is not imported at all. Nothing in lib/ requests Permission.bluetooth,
+        # so this was already dead weight; the NSBluetooth* Info.plist keys have
+        # been removed alongside it. Set back to 1 if iOS Bluetooth returns.
+        # NOTE: does NOT affect Permission.bluetoothScan / .bluetoothConnect,
+        # which are Android-only permission groups.
+        'PERMISSION_BLUETOOTH=0',
       ]
     end
   end

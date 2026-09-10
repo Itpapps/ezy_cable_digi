@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -342,18 +343,21 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                         fontSize: 14,
                         fontWeight: FontWeight.w800)),
               ),
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: _printList,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+              // Leading spacer travels inside — Print is the last child.
+              if (AppConfig.bluetoothPrintingEnabled) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _printList,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  icon: const Icon(Icons.print, color: Colors.white, size: 18),
+                  label: const Text('Print',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700)),
                 ),
-                icon: const Icon(Icons.print, color: Colors.white, size: 18),
-                label: const Text('Print',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700)),
-              ),
+              ],
             ],
           ),
         ),
@@ -540,7 +544,9 @@ class _MonthlyReportDetailScreenState
                 letterSpacing: 1.1,
                 color: t.appBarFg)),
         actions: [
-          if (_items != null && _items!.isNotEmpty)
+          if (AppConfig.bluetoothPrintingEnabled &&
+              _items != null &&
+              _items!.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.print),
               tooltip: 'Print',

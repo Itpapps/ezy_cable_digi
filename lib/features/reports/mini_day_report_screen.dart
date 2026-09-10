@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../payment/printer_launcher.dart';
@@ -134,40 +135,43 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // ── Print button row ──────────────────────────────────────────
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: _printReport,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: t.sectionBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: t.dividerColor),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      const Icon(Icons.print, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'PRINT',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: t.bodyText,
+            // The whole Material/Container is the affordance — hiding only the
+            // inner Row would leave an empty full-width bordered box.
+            if (AppConfig.bluetoothPrintingEnabled) ...[
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _printReport,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: t.sectionBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: t.dividerColor),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Icon(Icons.print, color: Colors.red, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'PRINT',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: t.bodyText,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
+            ],
 
             // ── Data card ─────────────────────────────────────────────────
             Container(

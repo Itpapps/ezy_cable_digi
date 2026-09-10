@@ -18,6 +18,19 @@ class AppConfig {
 
   static late AppConfig instance;
 
+  // Bluetooth thermal printing — Android only.
+  // print_bluetooth_thermal's iOS plugin constructs a CBCentralManager as the
+  // FIRST statement of handle(), before it dispatches on the method name, so
+  // ANY call on the channel raises the iOS Bluetooth permission prompt — even
+  // read-only ones like connectionStatus. Apple rejected the build under
+  // Guideline 2.1 asking for a video of the printer hardware, which we cannot
+  // produce. Always true on Android; flip the iOS half back once the hardware
+  // is testable on a device.
+  // Static (not instance) because `instance` is `late` and widgets read this
+  // during build/dispose, which can run before main() assigns it.
+  static bool get bluetoothPrintingEnabled =>
+      !kIsWeb && defaultTargetPlatform != TargetPlatform.iOS;
+
   // ── Mirror of Android EzyCableDigiConstants (NAMESPACE / NAMESPACE_BMS) ──────
   // Switch environment : comment/uncomment a line.
   // NAMESPACE_BMS — the BMS server. The BMS

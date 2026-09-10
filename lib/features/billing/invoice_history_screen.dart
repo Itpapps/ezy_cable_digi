@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
 import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -310,16 +311,17 @@ class _InvoiceCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    GestureDetector(
-                      onTap: onPrint,
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                            color: Colors.red.shade50, shape: BoxShape.circle),
-                        child: const Icon(Icons.print, color: Colors.red, size: 20),
+                    if (AppConfig.bluetoothPrintingEnabled)
+                      GestureDetector(
+                        onTap: onPrint,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                              color: Colors.red.shade50, shape: BoxShape.circle),
+                          child: const Icon(Icons.print, color: Colors.red, size: 20),
+                        ),
                       ),
-                    ),
                     if (shareVisible) ...[
                       const SizedBox(width: 12),
                       // Builder so the tap handler gets THIS button's context —

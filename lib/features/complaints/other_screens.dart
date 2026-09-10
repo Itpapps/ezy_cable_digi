@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/data/customer.dart';
 import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -831,20 +832,24 @@ class _OneTimeCard extends StatelessWidget {
                     child: const Icon(Icons.edit, color: Color(0xFF0D47A1), size: 18),
                   ),
                 ),
-                const SizedBox(width: 8),
                 // Print — thermal (Android igv_print → offline_report=9).
-                GestureDetector(
-                  onTap: onPrint,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      shape: BoxShape.circle,
+                // Leading spacer travels inside: Print is the last child, so
+                // hiding it alone would leave a trailing 8px gap after Edit.
+                if (AppConfig.bluetoothPrintingEnabled) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: onPrint,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.print, color: Colors.red, size: 18),
                     ),
-                    child: const Icon(Icons.print, color: Colors.red, size: 18),
                   ),
-                ),
+                ],
               ],
             ),
           ),

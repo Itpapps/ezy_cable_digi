@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/real_bluetooth_service.dart';
@@ -542,14 +543,16 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                   ),
                 ),
                 const Spacer(),
-                _ReceiptIconBtn(
-                  icon: Iconsax.printer,
-                  color: Colors.red,
-                  label: 'Print',
-                  onTap: _openPrinterSheet,
-                  t: t,
-                ),
-                const SizedBox(width: 10),
+                if (AppConfig.bluetoothPrintingEnabled) ...[
+                  _ReceiptIconBtn(
+                    icon: Iconsax.printer,
+                    color: Colors.red,
+                    label: 'Print',
+                    onTap: _openPrinterSheet,
+                    t: t,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 _ReceiptIconBtn(
                   icon: Iconsax.share,
                   color: t.accent,

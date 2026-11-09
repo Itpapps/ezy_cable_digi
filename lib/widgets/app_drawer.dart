@@ -19,7 +19,6 @@ import '../core/config/app_config.dart';
 import '../features/search/search_customer_screen.dart';
 import '../features/customers/nearest_customers_screen.dart';
 import '../features/customers/customer_list_screen.dart';
-import '../features/customers/paid_customers_screen.dart';
 import '../features/collections/collection_schedule_screen.dart';
 import '../features/event/event_management_screen.dart';
 import '../features/employee_track/employee_track_screen.dart';
@@ -74,24 +73,12 @@ Future<bool> offlineDataMatchesDealer() async {
 /// Android "ID Mismatch!" dialog (MainActivity:697-710 / :722-731).
 Future<void> showIdMismatch(BuildContext ctx) async {
   final usercode = await OfflineModeService.instance.userCode;
-  final storedMachine = (await OfflineModeService.instance.machineId).trim();
-  final currentMachine = SessionService.instance.machineNumber.trim();
-  final dealerId = SessionService.instance.dealerId;
-  final imei = AppConfig.deviceImei;
-  final flag = await OfflineModeService.instance.offlineFlag;
-  final count = await DatabaseHelper().getOfflineCustomerCount();
   if (!ctx.mounted) return;
   await showPremiumConfirm(
     context: ctx,
     title: 'ID Mismatch!',
-    body: 'Data present for $usercode\n\n'
-        'stored machine: [$storedMachine]\n'
-        'current machine: [$currentMachine]\n'
-        'dealerId: [$dealerId]\n'
-        'userCode: [$usercode]\n'
-        'imei: [$imei]\n'
-        'offlineFlag: [$flag]\n'
-        'records: [$count]',
+    body:
+        'You have not downloaded the data or Data already present for $usercode',
     confirmLabel: 'OK',
     cancelLabel: 'Close',
   );
@@ -314,7 +301,6 @@ class AppDrawer extends StatelessWidget {
             _DrawerItem(icon: Iconsax.setting_2, labelKey: 'settings'),
             _DrawerItem(icon: Iconsax.sun_1, labelKey: 'select_theme'),
             _DrawerItem(icon: Iconsax.user_tag, labelKey: 'customer_list'),
-            _DrawerItem(icon: Iconsax.money_recive, labelKey: 'paid_customers'),
             _DrawerItem(
               icon: Iconsax.location_tick,
               labelKey: 'nearest_customer',
@@ -821,7 +807,6 @@ class _DrawerItem extends StatelessWidget {
     'settings': 'Settings',
     'select_theme': 'Select Theme',
     'customer_list': 'Customer List',
-    'paid_customers': 'Paid Customers',
     'nearest_customer': 'Nearest Customer',
     'list_expenses': 'List Expenses',
     'collection_schedule': 'Collection Schedule',
@@ -864,11 +849,6 @@ class _DrawerItem extends StatelessWidget {
           case 'customer_list':
             Navigator.of(navCtx).push(
               MaterialPageRoute(builder: (_) => const CustomerListScreen()),
-            );
-            break;
-          case 'paid_customers':
-            Navigator.of(navCtx).push(
-              MaterialPageRoute(builder: (_) => const PaidCustomersScreen()),
             );
             break;
           case 'list_expenses':

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/database/database_helper.dart';
+import '../../core/services/error_handler_service.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/services/session_service.dart';
@@ -25,15 +26,34 @@ class OfflineDashboardScreen extends StatefulWidget {
 }
 
 class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
+  // Number of Offline Dashboards currently open. The offline-mode flag is on
+  // while at least one is open and is cleared only when the last one closes,
+  // so a late dispose of an old instance can't switch off a newer one.
+  static int _openCount = 0;
+
   final _db = DatabaseHelper();
   int _totalCustomers = 0;
   int _paidCount = 0;
   int _syncedCount = 0;
+  // True while [_exitOffline] is running — ignores repeated back presses.
+  bool _exiting = false;
 
   @override
   void initState() {
     super.initState();
+    // Every entry path (dashboard tile, drawer, offline login) is offline mode.
+    _openCount++;
+    OfflineModeService.instance.setOfflineMode(true);
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    // Clear the offline flag when the LAST open Offline Dashboard closes
+    // (back button, system back, logout or any other route removal).
+    if (_openCount > 0) _openCount--;
+    if (_openCount == 0) OfflineModeService.instance.setOfflineMode(false);
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -46,6 +66,63 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
         _paidCount = paid;
         _syncedCount = synced;
       });
+    }
+  }
+
+  /// Exit flow for the app-bar "Back to online" button.
+  ///
+  /// Android parity (Offline_Activity.java:101-114): how we exit offline
+  /// depends on whether there is an active online session.
+  ///  • No session (entered offline via the login gate, offlin="0") →
+  ///    the online dashboard has no authToken/dealerId, so Android sends
+  ///    the user back to LoginActivity to re-authenticate. We do the same
+  ///    — and we do NOT sync (no machine id/session to sync with).
+  ///  • Valid session (entered from the online dashboard, offlin="1") →
+  ///    sync pending payments, then return to the online dashboard.
+  Future<void> _exitOffline() async {
+    if (_exiting) return;
+    _exiting = true;
+    try {
+      if (!SessionService.instance.isLoggedIn) {
+        await OfflineModeService.instance.setOfflineMode(false);
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (_) => false,
+        );
+        return;
+      }
+      var n = 0;
+      try {
+        n = await OfflineSyncService.instance.syncPendingToServer();
+      } catch (error, stackTrace) {
+        // A sync failure must never block leaving offline mode. Pending
+        // payments stay at flag=1 and are synced later.
+        ErrorHandlerService.recordError(
+          error,
+          stackTrace,
+          reason: 'OfflineDashboard exit sync',
+        );
+      }
+      await OfflineModeService.instance.setOfflineMode(false);
+      if (!mounted) return;
+      if (n > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Synced $n record(s)')),
+        );
+      }
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        (_) => false,
+      );
+    } catch (error, stackTrace) {
+      // Unexpected failure before navigating: allow another back press.
+      _exiting = false;
+      ErrorHandlerService.recordError(
+        error,
+        stackTrace,
+        reason: 'OfflineDashboard._exitOffline',
+      );
     }
   }
 
@@ -66,37 +143,7 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
         leading: IconButton(
           icon: const Icon(Icons.wifi_off),
           tooltip: 'Back to online',
-          onPressed: () async {
-            // Android parity (Offline_Activity.java:101-114): how we exit offline
-            // depends on whether there is an active online session.
-            //  • No session (entered offline via the login gate, offlin="0") →
-            //    the online dashboard has no authToken/dealerId, so Android sends
-            //    the user back to LoginActivity to re-authenticate. We do the same
-            //    — and we do NOT sync (no machine id/session to sync with).
-            //  • Valid session (entered from the online dashboard, offlin="1") →
-            //    sync pending payments, then return to the online dashboard.
-            if (!SessionService.instance.isLoggedIn) {
-              await OfflineModeService.instance.setOfflineMode(false);
-              if (!context.mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (_) => false,
-              );
-              return;
-            }
-            final n = await OfflineSyncService.instance.syncPendingToServer();
-            await OfflineModeService.instance.setOfflineMode(false);
-            if (!context.mounted) return;
-            if (n > 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Synced $n record(s)')),
-              );
-            }
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const DashboardScreen()),
-              (_) => false,
-            );
-          },
+          onPressed: _exitOffline,
         ),
         actions: [
           IconButton(

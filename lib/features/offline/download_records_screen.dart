@@ -92,7 +92,10 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
       if (!mounted) return;
       showPremiumSnackBar(
         context,
-        n > 0 ? 'Synced $n record(s)' : 'No pending records to sync',
+        n > 0
+            ? 'Synced $n record(s)'
+            // Android SyncData_Fragment text (also used by Sync/Clear).
+            : 'No payments has been made (or) Check your internet connection.',
         isSuccess: n > 0,
       );
       await _refresh();

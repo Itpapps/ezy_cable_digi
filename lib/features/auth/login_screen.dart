@@ -49,6 +49,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    // The login screen never has an active offline session: clear any stale
+    // offline flag (e.g. app killed inside the Offline Dashboard). The offline
+    // login gate sets it again only when the user actually enters offline mode.
+    OfflineModeService.instance.setOfflineMode(false);
     LocationSyncService.instance.onScreenOpened(TrackingScreen.login);
     _requestPermissions();
     _captureLoginLocation();

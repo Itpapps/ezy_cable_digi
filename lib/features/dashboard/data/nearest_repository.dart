@@ -91,7 +91,20 @@ class NearestRepository {
         ));
       }
 
-      return NearestListResult(0, msg, items);
+      // Android parity (LocateNextCustomer / DashboardHomeFragment): nearest
+      // first. Numeric ascending; equal distances keep server order;
+      // an unparseable distance goes last.
+      final sorted = items.asMap().entries.toList()
+        ..sort((a, b) {
+          final da =
+              double.tryParse(a.value.distance.trim()) ?? double.infinity;
+          final db =
+              double.tryParse(b.value.distance.trim()) ?? double.infinity;
+          final byDistance = da.compareTo(db);
+          return byDistance != 0 ? byDistance : a.key.compareTo(b.key);
+        });
+
+      return NearestListResult(0, msg, [for (final e in sorted) e.value]);
     } on TimeoutException {
       return const NearestListResult(3, 'Request timed out.', []);
     } catch (_) {

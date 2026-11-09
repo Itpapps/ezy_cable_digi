@@ -20,9 +20,11 @@ class OfflineUnpaidListScreen extends StatefulWidget {
 class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   final _db = DatabaseHelper();
   bool _loading = true;
-  // Android tri-state: null = all (initial), true = current month, false =
-  // non-current month (Offline_unPaidCustomer_Fragment :120 / :300-306).
-  bool? _monthFilter;
+  // true = current month, false = non-current month
+  // (Offline_unPaidCustomer_Fragment :120 / :300-306). Starts TRUE: Android's
+  // "Only Current Month" checkbox is checked by default
+  // (offline_tabfragment1.xml:56), so the screen opens on the current-month list.
+  bool? _monthFilter = true;
   // Full unpaid set (flag=0), loaded ONCE — Android keeps `custList` in memory
   // and filters it synchronously on the checkbox toggle (:294-344). [_filtered]
   // is the in-memory month-filtered view shown in the list.
@@ -67,7 +69,7 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   }
 
   /// Android parity (onCheckedChanged :298-307): filter the in-memory list.
-  /// null → all · true → current month (payment_flag "000") · false → non-current.
+  /// true → current month (payment_flag "000") · false → non-current.
   List<OfflineCustomer> _computeFiltered() {
     if (_monthFilter == true) {
       return _all.where((c) => c.paymentFlag.trim() == '000').toList();

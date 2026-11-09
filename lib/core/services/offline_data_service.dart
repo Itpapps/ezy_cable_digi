@@ -19,6 +19,9 @@ class OfflineDataService {
   final DatabaseHelper _db = DatabaseHelper();
   final RestClient _rest = RestClient.instance;
   bool _downloading = false;
+  // Single-flight sync lock: while a sync run is in progress, every other
+  // caller shares it instead of starting a second run (see [syncAllPending]).
+  Future<({int synced, int failed})>? _syncInFlight;
 
   String get _baseUrl => ServerUrlResolver.instance.namespace;
   String get _downloadUrl => '$_baseUrl/GetRequest';
@@ -114,7 +117,6 @@ class OfflineDataService {
         machineId: _machineId,
         userCode: SessionService.instance.offlineUserCode,
       );
-      await OfflineModeService.instance.setOfflineMode(true);
 
       return inserted;
     } finally {
@@ -238,7 +240,9 @@ class OfflineDataService {
 
   /// Sync a single payment to server. Returns true if ACK, false if NAK.
   /// Throws on network/server error (row stays at flag=1 for retry).
-  Future<bool> syncPayment(OfflineCustomer payment) async {
+  /// Private on purpose: payments reach the server only through the locked
+  /// [syncAllPending], so no caller can bypass the single-flight lock.
+  Future<bool> _syncPayment(OfflineCustomer payment) async {
     final tstamp = DateFormat('ddMMyyyyHHmmss').format(DateTime.now());
     final receiptNum = '$tstamp${payment.customerId}';
 
@@ -316,13 +320,30 @@ class OfflineDataService {
   }
 
   /// Sync ALL pending payments (flag=1). Returns (synced, failed) counts.
-  Future<({int synced, int failed})> syncAllPending() async {
+  ///
+  /// Single-flight: if a sync is already running, the caller gets that same
+  /// run instead of starting another, so a pending payment is never sent twice
+  /// in parallel. All five sync triggers (auto-sync, offline-dashboard exit,
+  /// Miniday, Sync/Clear, Download screen) reach the server only through here.
+  Future<({int synced, int failed})> syncAllPending() {
+    return _syncInFlight ??=
+        _runSyncAllPending().whenComplete(() => _syncInFlight = null);
+  }
+
+  Future<({int synced, int failed})> _runSyncAllPending() async {
+    // No machine ID (offline-login session, or before any online login): do
+    // not contact the server. Pending payments stay at flag=1 untouched and are
+    // reported as not synced (synced: 0), so no caller shows a success message.
+    if (_machineId.trim().isEmpty) {
+      final skipped = await _db.getOfflinePaidCount();
+      return (synced: 0, failed: skipped);
+    }
     final pending = await _db.getOfflinePaymentsByFlag(1);
     int synced = 0;
     int failed = 0;
     for (final p in pending) {
       try {
-        final ok = await syncPayment(p);
+        final ok = await _syncPayment(p);
         if (ok) {
           synced++;
         } else {

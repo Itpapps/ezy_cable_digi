@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:ezy_cable_digi/bluetooth/bluetooth_devices_screen.dart';
 import 'package:ezy_cable_digi/features/event/event_management_screen.dart';
 import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
@@ -662,7 +663,25 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                         await showIdMismatch(context);
                                         return;
                                       }
+                                      // Same as the drawer's "Switch to Offline
+                                      // Mode": Android "Internet Connected" info
+                                      // dialog before entering.
+                                      final conn =
+                                          await Connectivity().checkConnectivity();
+                                      final online = !conn
+                                          .contains(ConnectivityResult.none);
                                       if (!context.mounted) return;
+                                      if (online) {
+                                        final ok = await showPremiumConfirm(
+                                          context: context,
+                                          title: 'Internet Connected',
+                                          body:
+                                              'You are connected to internet. You can turn off internet connection in OFFLINE MODE.',
+                                          confirmLabel: 'OK',
+                                          cancelLabel: 'Cancel',
+                                        );
+                                        if (!ok || !context.mounted) return;
+                                      }
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(

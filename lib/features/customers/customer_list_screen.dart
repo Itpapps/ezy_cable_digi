@@ -188,8 +188,10 @@ class _CustomerListScreenState extends State<CustomerListScreen>
               if (_advancedOpen) ...[
                 const SizedBox(height: 8),
                 // Bill month (Android ll_seldat) — reuses the month-picker pattern.
+                // Fixed dark colours (same as _FilterDrop): the card is always
+                // white, so theme text colours would be white-on-white.
                 Text('Bill Month', style: TextStyle(
-                    fontSize: 11, color: t.subtitleText, fontWeight: FontWeight.w600)),
+                    fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () async {
@@ -214,8 +216,8 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                       Icon(Icons.calendar_month, size: 18, color: t.accent),
                       const SizedBox(width: 8),
                       Text('${provider.billMonth.month}-${provider.billMonth.year}',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, color: t.bodyText)),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     ]),
                   ),
                 ),

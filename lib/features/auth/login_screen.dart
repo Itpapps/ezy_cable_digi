@@ -111,10 +111,10 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Asks for Location + Nearby Devices (Bluetooth) as soon as login screen opens.
   Future<void> _requestPermissions() async {
     await [
-      Permission.locationWhenInUse,  // shows Location dialog
-      Permission.bluetoothScan,      // shows "Nearby devices" dialog on Android 12+
+      Permission.locationWhenInUse, // shows Location dialog
+      Permission.bluetoothScan, // shows "Nearby devices" dialog on Android 12+
       Permission.bluetoothConnect,
-      Permission.notification,       // ask at login, not after the first payment
+      Permission.notification, // ask at login, not after the first payment
     ].request();
   }
 
@@ -208,12 +208,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => const DashboardScreen(),
-        ),
+        MaterialPageRoute<void>(builder: (_) => const DashboardScreen()),
       );
     } catch (error, stackTrace) {
-      ErrorHandlerService.recordError(error, stackTrace, reason: 'LoginScreen._handleLogin');
+      ErrorHandlerService.recordError(
+        error,
+        stackTrace,
+        reason: 'LoginScreen._handleLogin',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Login failed. Please try again.')),
@@ -281,6 +283,117 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final topInset = MediaQuery.paddingOf(context).top;
+    // iPad-only: iPhone keeps its original (unchanged) layout below.
+    final isTablet = size.shortestSide >= 600;
+
+    final loginCard = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: Container(
+        margin: const EdgeInsets.only(top: 38),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppSizes.radiusXL),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 30,
+              spreadRadius: 1,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: GlassmorphicContainer(
+          width: double.infinity,
+          height: 440,
+          borderRadius: AppSizes.radiusXL,
+          blur: 18,
+          alignment: Alignment.center,
+          border: 1.6,
+          linearGradient: LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.68),
+              Colors.white.withValues(alpha: 0.22),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderGradient: LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.95),
+              Colors.white.withValues(alpha: 0.35),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSizes.paddingL,
+              56,
+              AppSizes.paddingL,
+              AppSizes.paddingL,
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.only(bottom: bottomInset),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _GlassTextField(
+                    controller: _userController,
+                    hint: 'Username',
+                    enabled: !_isOffline,
+                    lottieAsset: 'assets/Profile Icon.json',
+                  ),
+                  const SizedBox(height: AppSizes.paddingM),
+                  _GlassTextField(
+                    controller: _passwordController,
+                    hint: 'Password',
+                    obscureText: true,
+                    enabled: !_isOffline,
+                    lottieAsset: 'assets/Login.json',
+                    showPasswordToggle: true,
+                  ),
+                  const SizedBox(height: AppSizes.paddingS),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                        activeColor: AppColors.accent,
+                      ),
+                      const Text(
+                        'Remember Me',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSizes.paddingM),
+                  PrimaryButton(
+                    label: 'SIGN IN',
+                    isLoading: _isLoading,
+                    onPressed: _handleLogin,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final logoRing = _GlowLogoRing(
+      asset: AppConfig.instance.flavor == Flavor.magik
+          ? 'assets/mainlogo.png'
+          : 'assets/ezy_digi_pics.png',
+    );
 
     return Theme(
       data: AppTheme.theme1,
@@ -289,171 +402,92 @@ class _LoginScreenState extends State<LoginScreen> {
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
-          Container(
-            
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.secondary],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: size.height * 0.55,
+            Container(
               decoration: const BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                gradient: LinearGradient(
+                  colors: [AppColors.primary, AppColors.secondary],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSizes.paddingM),
-              child: Column(
-                children: [
-                  // "Welcome to <appName>" removed per request. Keep the same
-                  // vertical space so the blur login card does NOT move up.
-                  const SizedBox(height: 108),
-                  Expanded(
-                    child: Stack(
-                      alignment: Alignment.topCenter,
-                      children: [
-                        Align(
-                          alignment: Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 520),
-                            child: Container(
-                              margin: const EdgeInsets.only(top: 38),
-                              decoration: BoxDecoration(
-                                borderRadius:
-                                BorderRadius.circular(AppSizes.radiusXL),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.22),
-                                    blurRadius: 30,
-                                    spreadRadius: 1,
-                                    offset: const Offset(0, 16),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: size.height * 0.55,
+                decoration: const BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.paddingM,
+                ),
+                child: Column(
+                  children: [
+                    // "Welcome to <appName>" removed per request. Keep the same
+                    // vertical space so the blur login card does NOT move up.
+                    const SizedBox(height: 108),
+                    Expanded(
+                      child: isTablet
+                          // iPad only: align the card block's own vertical
+                          // center with the vertical center of the white
+                          // background panel below (Align+height 0.55 further
+                          // up), matching the phone reference instead of just
+                          // centering in the leftover blue space above it.
+                          ? LayoutBuilder(
+                              builder: (context, constraints) {
+                                final expandedTop = topInset + 108;
+                                final panelTop = size.height * 0.45;
+                                final panelCenter =
+                                    panelTop + (size.height * 0.55) * -0.15;
+                                final localCenter = panelCenter - expandedTop;
+                                final alignY = constraints.maxHeight > 0
+                                    ? ((localCenter / constraints.maxHeight) *
+                                                  2 -
+                                              1)
+                                          .clamp(-1.0, 1.0)
+                                    : 0.0;
+                                return Align(
+                                  alignment: Alignment(0, alignY),
+                                  child: Stack(
+                                    alignment: Alignment.topCenter,
+                                    children: [loginCard, logoRing],
                                   ),
-                                ],
-                              ),
-                              child: GlassmorphicContainer(
-                                width: double.infinity,
-                                height: 440,
-                                borderRadius: AppSizes.radiusXL,
-                                blur: 18,
-                                alignment: Alignment.center,
-                                border: 1.6,
-                                linearGradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.68),
-                                    Colors.white.withValues(alpha: 0.22),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
+                                );
+                              },
+                            )
+                          // iPhone: original, untouched layout.
+                          : Stack(
+                              alignment: Alignment.topCenter,
+                              children: [
+                                Align(
+                                  alignment: Alignment.topCenter,
+                                  child: loginCard,
                                 ),
-                                borderGradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.95),
-                                    Colors.white.withValues(alpha: 0.35),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    AppSizes.paddingL,
-                                    56,
-                                    AppSizes.paddingL,
-                                    AppSizes.paddingL,
-                                  ),
-                                  child: SingleChildScrollView(
-                                    physics: const BouncingScrollPhysics(),
-                                    padding: EdgeInsets.only(
-                                      bottom: bottomInset,
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                      children: [
-                                        _GlassTextField(
-                                          controller: _userController,
-                                          hint: 'Username',
-                                          enabled: !_isOffline,
-                                          lottieAsset:
-                                          'assets/Profile Icon.json',
-                                        ),
-                                        const SizedBox(height: AppSizes.paddingM),
-                                        _GlassTextField(
-                                          controller: _passwordController,
-                                          hint: 'Password',
-                                          obscureText: true,
-                                          enabled: !_isOffline,
-                                          lottieAsset: 'assets/Login.json',
-                                          showPasswordToggle: true,
-                                        ),
-                                        const SizedBox(height: AppSizes.paddingS),
-                                        Row(
-                                          children: [
-                                            Checkbox(
-                                              value: _rememberMe,
-                                              onChanged: (value) {
-                                                setState(() {
-                                                  _rememberMe = value ?? false;
-                                                });
-                                              },
-                                              activeColor: AppColors.accent,
-                                            ),
-                                            const Text(
-                                              'Remember Me',
-                                              style: TextStyle(
-                                                color: AppColors.textPrimary,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: AppSizes.paddingM),
-                                        PrimaryButton(
-                                          label: 'SIGN IN',
-                                          isLoading: _isLoading,
-                                          onPressed: _handleLogin,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
+                                logoRing,
+                              ],
                             ),
-                          ),
-                        ),
-                        _GlowLogoRing(
-                          asset: AppConfig.instance.flavor == Flavor.magik
-                              ? 'assets/mainlogo.png'
-                              : 'assets/ezy_digi_pics.png',
-                        ),
-                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'itpworld.com, All Rights Reserved',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 12),
+                    const Text(
+                      'itpworld.com, All Rights Reserved',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                    const SizedBox(height: 10),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -515,10 +549,7 @@ class _GlassTextFieldState extends State<_GlassTextField>
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(AppSizes.radiusM),
-        border: Border.all(
-          color: borderColor,
-          width: 1.2,
-        ),
+        border: Border.all(color: borderColor, width: 1.2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),

@@ -31,7 +31,11 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // D7: start after the first frame so _load can show its loader at once
+    // (a dialog can't open inside initState).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   @override
@@ -47,9 +51,19 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
       _loading = true;
       _hasError = false;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) showPremiumLoading(context, message: 'Loading...Please wait...');
-    });
+    // D7 / Android LocateNextCustomer :183: non-cancellable "Loading...Please
+    // wait..." shown at once and closed exactly once — Back can't close it, so
+    // a late pop can never remove this screen or the Dashboard.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
+    var loaderOpen = true;
+    void closeLoader() {
+      if (loaderOpen && mounted) {
+        loaderOpen = false;
+        Navigator.of(context).pop();
+      }
+    }
+
     try {
       // Get GPS (Android: GPSTracker, sends 0.0 if unavailable)
       double lat = 0.0;
@@ -77,7 +91,7 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
         fromDashboard: false,
       );
 
-      if (mounted) Navigator.of(context).pop(); // dismiss loading
+      closeLoader(); // dismiss loading
 
       if (result.statusCode == 0) {
         setState(() {
@@ -104,7 +118,7 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
         });
       }
     } catch (e) {
-      if (mounted) Navigator.of(context).pop(); // dismiss loading
+      closeLoader(); // dismiss loading
       setState(() {
         _loading = false;
         _hasError = true;

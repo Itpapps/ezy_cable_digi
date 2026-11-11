@@ -308,10 +308,10 @@ class OfflineDataService {
       await _db.updateOfflinePaymentAfterSync(synced);
       return true;
     } else if (trimmed.toUpperCase() == 'NAK') {
-      // Server rejected: reset to flag=0 for retry
-      final reset = payment.copyWith(flag: 0);
-      await _db.updateOfflineCustomerAfterPayment(reset);
-      await _db.updateOfflinePaymentAfterSync(reset);
+      // Server rejected (B2). Android bulk sync / auto-sync (SyncData_Fragment
+      // :208-209, MainActivity :950-951) leave the row at flag=1: the payment
+      // stays pending, is retried next sync, and Clear Data stays blocked.
+      // Resetting to 0 made a collected payment look unpaid and deletable.
       return false;
     } else {
       // Unknown response — keep at flag=1, will retry

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../features/dashboard/widgets/complaint_card.dart';
+import '../dashboard/dashboard_screen.dart' show DashboardScreenState;
 import '../dashboard/data/complaints_repository.dart';
 import '../dashboard/data/open_complaint.dart';
 import 'data/complaint_option.dart';
@@ -54,10 +55,37 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
     if (mounted) setState(() => _loading = true);
     // Android Complaints tab sends the selected dealer_id + from_dashboard "0"
     // (the dashboard card uses dealer_id 0 + "1", left unchanged).
-    final r = await ComplaintsRepository.instance.fetchOpenComplaints(
-      dealerId: _selectedDealer.id,
-      fromDashboard: '0',
-    );
+    final ComplaintsResult r;
+    try {
+      r = await ComplaintsRepository.instance.fetchOpenComplaints(
+        dealerId: _selectedDealer.id,
+        fromDashboard: '0',
+      );
+    } catch (_) {
+      // C9 / Android OpenComplaints_Fragment :451-474: no server reply → stop
+      // the loader and show "Server is busy or not reachable!"; OK goes back
+      // (Android popBackStack → the Dashboard; Complaints is a dashboard tab).
+      if (!mounted) return;
+      setState(() => _loading = false);
+      final dash = context.findAncestorStateOfType<DashboardScreenState>();
+      showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Server is busy or not reachable!'),
+          content: const Text('Please try again after sometime'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                dash?.setTab(0);
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _loading = false;

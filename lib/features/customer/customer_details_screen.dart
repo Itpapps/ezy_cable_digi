@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -265,7 +267,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       return;
     }
     // Android ProgressDialog: "Searching...,   Please wait...".
-    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    // D7 / Android prev/next (CustomerOperations_Fragment :2087): non-cancellable
+    // "Searching...,   Please wait..."; prevNextCustomer never throws.
+    showPremiumLoading(context,
+        message: 'Searching...,   Please wait...', canPop: false);
     final r = await SearchRepository.instance
         .prevNextCustomer(customerId: id, flag: flag);
     if (!mounted) return;
@@ -1011,9 +1016,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
     if (ok != true || !mounted) return;
 
+    // C1 / Android TemporaryActivation_stb :3426: non-cancellable
+    // "Loading...Please wait..." while the request runs (Back ignored). The
+    // repository never throws (70 s timeout → status 3), so it always closes.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final result = await PackageOperationsRepository.instance
         .stbTemporaryActivation(customerId: _customer.lcoCustomerId);
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
 
     // Transport failure → Android Toast "Failed.", stays on screen.
     if (result.statusCode == 3) {
@@ -1062,9 +1073,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
     if (ok != true || !mounted) return;
 
+    // C1 / Android renewal :2967: non-cancellable "Loading...Please wait..."
+    // while the request runs (Back ignored). The repository never throws
+    // (70 s timeout → status 3), so the loader always closes.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final result = await PackageOperationsRepository.instance
         .packageRenew(customerId: _customer.lcoCustomerId);
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
 
     // Transport failure → Android Toast "Failed.", stays on screen.
     if (result.statusCode == 3) {
@@ -1114,9 +1131,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
     if (ok != true || !mounted) return;
 
+    // C1 / Android UnpaidActivation_stb_CUstomer :3325: non-cancellable
+    // "Loading...Please wait..." while the request runs (Back ignored). The
+    // repository never throws (70 s timeout → status 3), so it always closes.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final result = await PackageOperationsRepository.instance
         .unpaidCustomerActivation(customerId: _customer.lcoCustomerId);
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
 
     // Transport failure → Android Toast "Failed.", stays on screen.
     if (result.statusCode == 3) {
@@ -1498,31 +1521,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     if (!mounted) return;
     // ignore: use_build_context_synchronously
     final nav       = Navigator.of(context);
+    // A6: the GPS wait is bounded (_currentOrLastKnown, max 8 s) and the
+    // loader is always closed below, so Back is ignored (Back used to close
+    // the loader, and the late nav.pop() then closed this screen instead).
     // ignore: use_build_context_synchronously
-    final messenger = ScaffoldMessenger.of(context);
-    // ignore: use_build_context_synchronously
-    showPremiumLoading(context, message: 'Getting GPS location...');
-    late double lat, lng;
+    showPremiumLoading(context,
+        message: 'Getting GPS location...', canPop: false);
+    double lat, lng;
     try {
-      final position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      final position = await _currentOrLastKnown();
       lat = position.latitude;
       lng = position.longitude;
-      if (!mounted) return;
-      nav.pop(); // dismiss loading
-    } catch (e) {
-      if (mounted) {
-        nav.pop();
-        messenger.showSnackBar(SnackBar(
-          content: Text('Location failed: $e'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-        ));
-      }
-      return;
+    } catch (_) {
+      // A6 / Android GPSTracker + MapsFragmentlocupdate :135-145, :493-494:
+      // no location → 0.0/0.0 and the flow continues (owner's decision:
+      // copy Android).
+      lat = 0.0;
+      lng = 0.0;
     }
+    if (!mounted) return;
+    nav.pop(); // dismiss loading
 
     // ── Location preview push ─────────────────────────────────────────────
     if (!mounted) return;
@@ -1605,6 +1623,23 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     }
   }
 
+  /// A6: the phone's position without ever waiting forever. Android never
+  /// waits (GPSTracker.java:47-104 returns the last known location at once).
+  /// Flutter keeps its fresh fix but waits at most 8 s (as Nearest does), then
+  /// takes the last known location; with neither it throws.
+  Future<Position> _currentOrLastKnown() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8)));
+    } on TimeoutException {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last == null) rethrow;
+      return last;
+    }
+  }
+
   Future<void> _openCustomerMap() async {
     if (_customer.latitude == null || _customer.longitude == null) {
       showPremiumSnackBar(context, 'Update customer location first', isError: true);
@@ -1612,10 +1647,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     }
     // Capture navigator before async gap
     final nav = Navigator.of(context);
-    showPremiumLoading(context, message: 'Getting your location...');
+    // A6: the in-app map needs a start point (owner kept it); the wait is
+    // bounded (max 8 s) and both paths close the loader, so Back is ignored.
+    showPremiumLoading(context,
+        message: 'Getting your location...', canPop: false);
     try {
-      final current = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      final current = await _currentOrLastKnown();
       if (!mounted) return;
       nav.pop();
       nav.push(

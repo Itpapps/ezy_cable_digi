@@ -34,12 +34,17 @@ class _DeactivateConfirmScreenState extends State<DeactivateConfirmScreen> {
   Future<void> _confirm() async {
     if (_busy) return;
     setState(() => _busy = true);
+    // C12 / Android DigiPackages_deactivation :169: non-cancellable
+    // "Loading...Please wait..." (Back ignored); deactivatePackages never throws.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final res = await CustomPackagesRepository.instance.deactivatePackages(
       customerId: widget.customer.lcoCustomerId,
       packages: widget.packages,
       autorenewal: widget.autorenewal,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _busy = false);
     if (res.statusCode == 3) {
       showPremiumSnackBar(context, 'Failed.', isError: true);

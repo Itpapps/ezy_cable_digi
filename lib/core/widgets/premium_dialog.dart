@@ -234,13 +234,19 @@ class _IosPillButton extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // showPremiumLoading — centered loading overlay (not barrierDismissible)
 // Call Navigator.of(context).pop() to dismiss.
+// [canPop] false = Back is ignored while it shows (Android's non-cancellable
+// ProgressDialog). Default true keeps every existing caller unchanged; use false
+// only where the caller always closes the loader itself (A2: payment).
 // ─────────────────────────────────────────────────────────────────────────────
-void showPremiumLoading(BuildContext context, {String message = 'Loading, please wait...'}) {
+void showPremiumLoading(BuildContext context,
+    {String message = 'Loading, please wait...', bool canPop = true}) {
   showDialog(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black.withValues(alpha: 0.45),
-    builder: (ctx) => Center(
+    builder: (ctx) => PopScope(
+      canPop: canPop,
+      child: Center(
       child: Material(
         color: Colors.transparent,
         child: Container(
@@ -282,6 +288,7 @@ void showPremiumLoading(BuildContext context, {String message = 'Loading, please
             ],
           ),
         ),
+      ),
       ),
     ),
   );

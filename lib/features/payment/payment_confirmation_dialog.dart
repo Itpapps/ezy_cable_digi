@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/data/customer.dart';
-import '../../core/database/database_helper.dart';
 
 class PaymentConfirmationDialog extends StatefulWidget {
   final Customer customer;
@@ -10,6 +9,9 @@ class PaymentConfirmationDialog extends StatefulWidget {
   final String paymentMethod;
   final double lastPaidAmount;  // Android last_paid_amount (from GPA) — the REAL
                                 // last paid, NOT the pending/bill amount.
+  // A4: server counts from the same GPA reply (Android :1474-1484 → :2818-2819).
+  final int paymentsCount;
+  final int adjustmentCount;
 
   const PaymentConfirmationDialog({
     super.key,
@@ -18,6 +20,8 @@ class PaymentConfirmationDialog extends StatefulWidget {
     this.broadbandAmount = 0,
     required this.paymentMethod,
     this.lastPaidAmount = 0,
+    this.paymentsCount = 0,
+    this.adjustmentCount = 0,
   });
 
   @override
@@ -25,35 +29,12 @@ class PaymentConfirmationDialog extends StatefulWidget {
 }
 
 class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
-  int _currentMonthPayments = 0;
-  int _currentMonthAdjustments = 0;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPaymentStats();
-  }
-
-  Future<void> _loadPaymentStats() async {
-    try {
-      final paymentCount = await _dbHelper.getCurrentMonthPaymentCount(widget.customer.lcoCustomerId);
-      if (mounted) {
-        setState(() {
-          _currentMonthPayments = paymentCount;
-          _currentMonthAdjustments = 0; // You can implement adjustment logic if needed
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  // A4: Android shows the server's current-month counts (GPA payments_count /
+  // adjustment_count). The old local-table count was always 0 for online
+  // payments, because online payments never write that table.
+  late final int _currentMonthPayments = widget.paymentsCount;
+  late final int _currentMonthAdjustments = widget.adjustmentCount;
+  final bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {

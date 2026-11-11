@@ -1,10 +1,10 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/error_handler_service.dart';
 import '../../core/services/offline_mode_service.dart';
-import '../../core/services/offline_sync_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../auth/login_screen.dart';
@@ -69,20 +69,33 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
     }
   }
 
-  /// Exit flow for the app-bar "Back to online" button.
+  /// Exit flow for the app-bar "Back to online" button (B7).
   ///
-  /// Android parity (Offline_Activity.java:101-114): how we exit offline
-  /// depends on whether there is an active online session.
+  /// Android parity: Offline_Activity.java:96-121 (toolbar logo) and
+  /// :262-290 (alertForNavigation). Nothing is synced here, so nothing blocks.
+  ///  • No network → stay here and reload the counts (Android re-opens
+  ///    Offline_Dashboard; no message).
   ///  • No session (entered offline via the login gate, offlin="0") →
   ///    the online dashboard has no authToken/dealerId, so Android sends
   ///    the user back to LoginActivity to re-authenticate. We do the same
   ///    — and we do NOT sync (no machine id/session to sync with).
   ///  • Valid session (entered from the online dashboard, offlin="1") →
-  ///    sync pending payments, then return to the online dashboard.
+  ///    "Choose one!" dialog (cancellable). "Online Dashboard" opens the
+  ///    online dashboard at once; it sends pending offline payments in the
+  ///    background (DashboardScreen._autoSyncOfflinePayments, B-B1 = Android
+  ///    MainActivity.onCreate → synvkkm). "Offline Dashboard" reloads this
+  ///    screen; Back / outside tap just closes the dialog.
   Future<void> _exitOffline() async {
     if (_exiting) return;
     _exiting = true;
     try {
+      final conn = await Connectivity().checkConnectivity();
+      if (!mounted) return;
+      if (conn.contains(ConnectivityResult.none)) {
+        _exiting = false;
+        await _refresh();
+        return;
+      }
       if (!SessionService.instance.isLoggedIn) {
         await OfflineModeService.instance.setOfflineMode(false);
         if (!mounted) return;
@@ -92,25 +105,31 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
         );
         return;
       }
-      var n = 0;
-      try {
-        n = await OfflineSyncService.instance.syncPendingToServer();
-      } catch (error, stackTrace) {
-        // A sync failure must never block leaving offline mode. Pending
-        // payments stay at flag=1 and are synced later.
-        ErrorHandlerService.recordError(
-          error,
-          stackTrace,
-          reason: 'OfflineDashboard exit sync',
-        );
+      final toOnline = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Choose one!'),
+          content: const Text('Where do you want to proceed?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: const Text('Offline Dashboard'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('Online Dashboard'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (toOnline != true) {
+        _exiting = false;
+        if (toOnline == false) await _refresh();
+        return;
       }
       await OfflineModeService.instance.setOfflineMode(false);
       if (!mounted) return;
-      if (n > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Synced $n record(s)')),
-        );
-      }
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
         (_) => false,

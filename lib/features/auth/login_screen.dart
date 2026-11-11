@@ -11,6 +11,8 @@ import 'package:glassmorphism/glassmorphism.dart';
 import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:provider/provider.dart';
+import '../customers/customer_list_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/location_sync_service.dart';
@@ -59,6 +61,12 @@ class _LoginScreenState extends State<LoginScreen> {
     _resolveServerUrl();
     _loadRememberedCredentials();
     _refreshOfflineState();
+    // D3 / Android parity (logout finishes MainActivity): every way back to
+    // login drops the previous session's Customer List, so the next user
+    // never sees it. Post-frame: notifying listeners inside initState is unsafe.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<CustomerListProvider>().reset();
+    });
   }
 
   /// Android parity (LoginActivity.java:226-227): prefill the fields with the
@@ -166,6 +174,30 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (!result.success) {
+        final title = result.dialogTitle;
+        if (title != null) {
+          // D-B6 / Android Commonempcrf status 1 (LoginActivity :989-1000):
+          // non-cancellable dialog with the server message; stays on login.
+          showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            // Android setCancelable(false): Back can't close it either.
+            builder: (dialogCtx) => PopScope(
+              canPop: false,
+              child: AlertDialog(
+                title: Text(title),
+                content: Text(result.message),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.message)),
         );

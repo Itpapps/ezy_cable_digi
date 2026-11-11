@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
 import '../../core/services/session_service.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
@@ -98,6 +99,31 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
         _message = pkg.statusMessage;
       }
     });
+    // C8 / Android Frag_Deactpack deactivereasons (:901-937): status 1 →
+    // "No Details Found!" dialog with the server message (OK only; Back and
+    // outside taps do nothing — setCancelable(false)); the screen stays.
+    // Failed call → "Failed." toast. Any other status shows nothing (Android).
+    if (reasons.statusCode == 1) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('No Details Found!'),
+            content: Text(reasons.statusMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (reasons.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+    }
   }
 
   List<Package> get _currentList {
@@ -388,6 +414,10 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
     if (confirmed != true || !mounted) return;
 
     setState(() => _submitting = true);
+    // C12 / Android Frag_Deactpack: non-cancellable "Loading...Please wait..."
+    // (Back ignored); deactivatePackages never throws (70 s → status 3).
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await PackageOperationsRepository.instance.deactivatePackages(
       customerId: widget.customer.lcoCustomerId,
       boxId: widget.box.boxId,
@@ -395,6 +425,7 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
       reasonId: _reasonId,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
 
     if (r.isSuccess) {
@@ -446,6 +477,10 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
   Future<void> _doExtend(Package p) async {
     if (_submitting) return; // reuse the screen's double-submit guard
     setState(() => _submitting = true);
+    // C12 / Android DeactiveAdapter_listview :201: non-cancellable
+    // "Loading...Please wait..."; serviceExtension never throws.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await PackageOperationsRepository.instance.serviceExtension(
       // Android uses the box's customer_id (Frag_Deactpack.getcustid); fall back.
       customerId: widget.box.customerId.isNotEmpty
@@ -456,6 +491,7 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
       pricingStructureType: p.pricingStructureType,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
 
     // Android parity (DeactiveAdapter_listview.java:217-260): status 0 → success

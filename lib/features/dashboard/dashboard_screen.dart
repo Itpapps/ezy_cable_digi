@@ -22,6 +22,9 @@ import '../offline/static_content_screen.dart';
 import '../notifications/data/notification_repository.dart';
 import '../notifications/login_notification_dialog.dart';
 import '../../core/services/session_service.dart';
+import '../../core/database/database_helper.dart';
+import '../../core/services/error_handler_service.dart';
+import '../../core/services/offline_sync_service.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -102,6 +105,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
 
   int _selectedTab = 0;
   bool _statsCollapsed = false;
+
+  // D-B1 / Android DashboardHomeFragment :261-283 — user-type gating.
+  //  DEALER/ADMIN: everything. EMPLOYEE: hides ll1 (Due / Month Billing /
+  //  Onetime). SERVICE: no DashboardDetails call; hides ll1 + ll2 (all money
+  //  cards), ll_operations (quick actions) and the Unpaid/PayLater tabs.
+  String get _userType =>
+      SessionService.instance.userType.trim().toUpperCase();
+  bool get _isService => _userType == 'SERVICE';
+  bool get _showMoneyCards => !_isService;
+  bool get _showRow1Cards => !_isService && _userType != 'EMPLOYEE';
   _FeedType _feed = _FeedType.complaints;
 
   // Client-side "Load more" — the APIs return the full list (no server paging,
@@ -220,7 +233,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     super.initState();
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
     _dash.addListener(_onDash);
-    _dash.loadKpis().then((_) => _handleKpiResult());
+    // D-B1: Android never calls DashboardDetails for SERVICE users.
+    if (!_isService) {
+      _dash.loadKpis().then((_) => _handleKpiResult());
+    }
     _dash
         .loadWallet(); // Android: lcowallet() on dashboard create (DEALER/ADMIN)
     _dash.loadComplaints(); // Complaints is the default feed tab.
@@ -229,6 +245,34 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _showLoginNotification(),
     );
+    _autoSyncOfflinePayments(); // B-B1
+  }
+
+  /// B-B1 / Android MainActivity.onCreate → synvkkm() (:423, :910-919): when the
+  /// online dashboard opens with pending offline payments and a network, send
+  /// them in the background. Same single-flight sync as Sync/Clear (rejected
+  /// payments stay pending). No machine-ID check, exactly like Android (user's
+  /// decision). Never throws; silent when nothing is pending or offline.
+  Future<void> _autoSyncOfflinePayments() async {
+    try {
+      final pending = await DatabaseHelper().getOfflinePaidCount();
+      if (pending == 0) return;
+      final conn = await Connectivity().checkConnectivity();
+      if (conn.contains(ConnectivityResult.none)) return;
+      final r = await OfflineSyncService.instance.syncPendingToServer();
+      if (!mounted) return;
+      if (r.failed > 0) {
+        showPremiumSnackBar(
+            context, 'Synced ${r.synced} record(s), ${r.failed} not synced',
+            isError: true);
+      } else if (r.synced > 0) {
+        showPremiumSnackBar(context, 'Synced ${r.synced} record(s)',
+            isSuccess: true);
+      }
+    } catch (error, stackTrace) {
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'Dashboard offline auto-sync');
+    }
   }
 
   // DUMMY login notification popup — runs once after the first frame, over the
@@ -274,7 +318,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     // changed the totals while we were away — Android parity. Nothing reloads
     // when the flag is unset (returning from read-only screens).
     if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
-      _dash.loadKpis().then((_) => _handleKpiResult());
+      if (!_isService) {
+        _dash.loadKpis().then((_) => _handleKpiResult()); // D-B1
+      }
       _dash.loadWallet(); // Android refreshes the wallet on every recreate too
       // Android's changeFragment(replace) RECREATES the dashboard on return, so
       // onCreateView re-runs: KPIs + wallet + COMPLAINTS reload and the tab resets
@@ -328,7 +374,21 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         ),
         bottomNavigationBar: BottomNavBar(
           currentIndex: _selectedTab,
-          onChanged: (i) => setState(() => _selectedTab = i),
+          onChanged: (i) {
+            // D-B3 / Android MainActivity :186-200: Expenses opens only with
+            // the role's `expenses` permission; otherwise "No Access".
+            if (i == 3 && !SessionService.instance.addExpense) {
+              showPremiumConfirm(
+                context: context,
+                title: 'No Access',
+                body: "You don't have access for this operation",
+                confirmLabel: 'Ok',
+                cancelLabel: 'Close',
+              );
+              return;
+            }
+            setState(() => _selectedTab = i);
+          },
         ),
         body: _selectedTab == 0
             ? Column(
@@ -364,6 +424,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                                 ),
                               ),
+                              if (_showMoneyCards) // D-B1: no cards → no toggle
                               IconButton(
                                 onPressed: () => setState(
                                   () => _statsCollapsed = !_statsCollapsed,
@@ -382,6 +443,8 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                             ],
                           ),
                           // Collapsible gradient stat cards (Row 1 + Row 2).
+                          // D-B1: SERVICE sees no money cards (Android ll1+ll2).
+                          if (_showMoneyCards)
                           AnimatedSize(
                             duration: const Duration(milliseconds: 250),
                             curve: Curves.easeInOut,
@@ -399,6 +462,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                       children: [
                                         for (final chip
                                             in <(String, String, Color)>[
+                                              // D-B1: Due/Bill/Onetime hidden
+                                              // for EMPLOYEE (Android ll1).
+                                              if (_showRow1Cards) ...[
                                               (
                                                 'Due',
                                                 _dash.dueAmountText,
@@ -414,6 +480,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                                 _dash.onetimeChargesText,
                                                 const Color(0xFF26C6DA),
                                               ),
+                                              ],
                                               if (_dash.showLcoWallet)
                                                 (
                                                   'Wallet',
@@ -466,6 +533,8 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                       // Due Amount  → deep blue-to-sky
                                       // Month Billing → rose-to-pink
                                       // Onetime Ch…  → amber-to-orange
+                                      // D-B1: hidden for EMPLOYEE (Android ll1).
+                                      if (_showRow1Cards) ...[
                                       IntrinsicHeight(
                                         child: Row(
                                           children: [
@@ -532,6 +601,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                       ),
 
                                       const SizedBox(height: 10),
+                                      ],
 
                                       // ── Row 2: LCO Wallet + Collections ───────────────────────────
                                       // LCO Wallet  → green-to-cyan  (existing — premium mixing)
@@ -602,6 +672,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   ),
                           ),
 
+                          // D-B1: SERVICE has no quick actions (Android
+                          // ll_operations GONE).
+                          if (!_isService) ...[
                           const SizedBox(height: 10),
 
                           // ── Row 3: Quick Actions — horizontal scroll ───────────────────
@@ -734,6 +807,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                               ),
                             ),
                           ),
+                          ],
                         ], // close hero inner Column children (A,B,C,D)
                       ), // close hero inner Column
                     ), // close hero Padding
@@ -824,6 +898,9 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                       _dash.loadComplaints(force: true);
                     },
                   ),
+                  // D-B1: SERVICE gets Complaints + Nearest only (Android
+                  // ll_tabs GONE → ll_tabs1).
+                  if (!_isService) ...[
                   const SizedBox(width: 8),
                   _FeedChip(
                     label: 'Unpaid',
@@ -839,6 +916,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                       _dash.loadUnpaid(force: true);
                     },
                   ),
+                  ],
                   const SizedBox(width: 8),
                   _FeedChip(
                     label: 'Nearest',
@@ -851,6 +929,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                       _dash.loadNearest(force: true);
                     },
                   ),
+                  if (!_isService) ...[ // D-B1
                   const SizedBox(width: 8),
                   _FeedChip(
                     label: 'PayLater',
@@ -863,6 +942,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                       _dash.loadPayLater(force: true);
                     },
                   ),
+                  ],
                 ],
               ),
             ),

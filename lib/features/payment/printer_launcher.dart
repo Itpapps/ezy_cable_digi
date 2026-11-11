@@ -94,10 +94,15 @@ Future<void> launchThermalPrint({
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => AutoScanPrinterSheet(
+    // A7 / Android BluetoothChatService.java:388-407: a print can't be stopped
+    // half way. Drag-to-close bypasses PopScope, so it is off; Back and
+    // tap-outside still close the sheet except while a print runs (PopScope
+    // in AutoScanPrinterSheet), so the disconnect below never cuts a write.
+    enableDrag: false,
+    builder: (sheetContext) => AutoScanPrinterSheet(
       printerService: printerService,
-      onPrint: (mac, fmt) =>
-          _doThermalPrint(context, printerService, buildLines, mac, fmt, batched),
+      onPrint: (mac, fmt) => _doThermalPrint(context, sheetContext,
+          printerService, buildLines, mac, fmt, batched),
     ),
   );
 
@@ -133,7 +138,11 @@ Future<bool> _tryAutoPrint(
   // ProgressDialog "Connecting to Device..."): the saved-printer path connects
   // silently for 1–3s, so show the same blocking loader instead of a frozen UI.
   if (context.mounted) {
-    showPremiumLoading(context, message: 'Connecting to Device...');
+    // canPop: false (A7): the print is bounded by the 40 s timeout and both
+    // the success and the catch path below pop the loader. Back used to close
+    // it early, and that pop then closed the caller's own screen.
+    showPremiumLoading(context,
+        message: 'Connecting to Device...', canPop: false);
   }
   try {
     await printerService
@@ -165,6 +174,7 @@ Future<bool> _tryAutoPrint(
 
 Future<void> _doThermalPrint(
   BuildContext context,
+  BuildContext sheetContext,
   RealBluetoothService printerService,
   List<String> Function(ReceiptFormat fmt) buildLines,
   String mac,
@@ -178,7 +188,12 @@ Future<void> _doThermalPrint(
         .timeout(const Duration(seconds: 40));
     if (!context.mounted) return;
     showPremiumSnackBar(context, 'Printed Successfully', isSuccess: true);
-    Navigator.pop(context); // close sheet
+    // A7: close only the picker sheet (the old Navigator.pop(context) popped
+    // whatever was on top, e.g. the caller's screen if the sheet was gone).
+    if (sheetContext.mounted &&
+        (ModalRoute.isCurrentOf(sheetContext) ?? false)) {
+      Navigator.pop(sheetContext);
+    }
   } on TimeoutException {
     if (!context.mounted) return;
     showPremiumSnackBar(
@@ -284,7 +299,12 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
     });
     // Android parity (Bluetooth_Fragment STATE_CONNECTING): blocking,
     // non-cancelable "Connecting to Device..." dialog for the socket connect.
-    if (mounted) showPremiumLoading(context, message: 'Connecting to Device...');
+    // canPop: false (A7): connectPrinter never throws and always returns, and
+    // the pop below always closes the loader.
+    if (mounted) {
+      showPremiumLoading(context,
+          message: 'Connecting to Device...', canPop: false);
+    }
     // Single connect only — no second `ensureConnected` attempt (that reconnect
     // closed the socket we just opened and caused the reconnect loop).
     final ok = await widget.printerService.connectPrinter(device.macAdress);
@@ -321,7 +341,11 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    // A7: Back / tap-outside can't close the sheet while a print runs
+    // (closing it disconnected the printer under the write).
+    return PopScope(
+      canPop: !_isPrinting,
+      child: Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -575,6 +599,7 @@ class _AutoScanPrinterSheetState extends State<AutoScanPrinterSheet> {
             ),
         ],
       ),
+    ),
     );
   }
 }

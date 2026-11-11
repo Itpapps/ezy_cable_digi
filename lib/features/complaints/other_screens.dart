@@ -12,6 +12,7 @@ import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../customer/data/act_deact_repository.dart';
 import '../customer/data/onetime_charges_repository.dart';
 import '../payment/printer_launcher.dart';
@@ -157,10 +158,11 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       _chequeCtrl.text = e.chequeDdNo;
       _bankCtrl.text = e.bankName;
       _branchCtrl.text = e.branchName;
-      // Instrument (cheque) leg was used if any bank/cheque detail exists.
-      _instrument = e.chequeDdNo.trim().isNotEmpty ||
-          e.bankName.trim().isNotEmpty ||
-          e.branchName.trim().isNotEmpty;
+      // Paid box mirrors the stored paid status (Android Editonetime_Frag
+      // :178-182 paidunpaid.equals("1"); same rule as the history list).
+      // Cheque/bank/branch text must not decide it: the server stores
+      // cheque_dd_no = 0 for cash charges, which pre-ticked unpaid charges.
+      _instrument = e.paidUnpaid == '1' || e.paidUnpaid.toLowerCase() == 'paid';
       _createdDate = _parseDate(e.date, _createdDate);
       _instrumentDate = _parseDate(e.chequeDate, _instrumentDate);
     }
@@ -199,6 +201,31 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
             );
       _loadingTypes = false;
     });
+    // C8 / Android OneTimeCharges_Frag chargetypes_opr (:296-330) and
+    // Editonetime_Frag (:385-419): status 1 → "No Details Found" dialog with
+    // the server message (OK closes it; the screen stays); failed call →
+    // "Failed." toast. Any other status shows nothing (Android).
+    if (r.statusCode == 1) {
+      // Edit mode: Editonetime_Frag puts the message in the title (:388-389).
+      final isEdit = widget.editItem != null;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isEdit ? '${r.statusMessage}!' : 'No Details Found!'),
+          content: Text(isEdit ? 'No Details Found' : r.statusMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } else if (r.statusCode == 3) {
+      // Editonetime_Frag :418 shows a mistyped "Faileddcccvcvcccxc.";
+      // "Failed." (OneTimeCharges_Frag :329) is used for both screens.
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+    }
   }
 
   @override
@@ -253,6 +280,11 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
     }
     // Android validates ONLY the amount — cheque/bank/branch are optional.
     setState(() => _saving = true);
+    // C6 + C12 / Android OneTimeCharges_Frag :356 and Editonetime_Frag :445:
+    // non-cancellable "Loading...Please wait..." while saving (Back ignored);
+    // save() never throws (70 s → status 3), so the pop below always closes it.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await OnetimeChargesRepository.instance.save(
       customerId: widget.customer.lcoCustomerId,
       chargeType: _chargeType!.id,
@@ -269,6 +301,7 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       receiptNo: widget.editItem?.receiptNo ?? '',
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _saving = false);
     if (r.isSuccess) {
       _snack(r.statusMessage.isEmpty ? 'Saved Successfully' : r.statusMessage,

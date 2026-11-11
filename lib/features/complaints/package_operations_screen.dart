@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
 import '../../core/services/session_service.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package_operations_repository.dart';
 import 'active_packages_screen.dart';
@@ -372,11 +373,11 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   Future<void> _doReactivate(CustomerBox box) async {
     if (_reactivating) return; // double-submit guard
     _reactivating = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    // C4 / Android Box_Selection_new reactivatebox :386: non-cancellable
+    // "Loading...Please wait..." (Back ignored), so the pop below always closes
+    // THIS loader. reactivateBox never throws (70 s timeout → status 3).
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     // Production sends the box's customer_id (not lcoCustomerId); fall back if empty.
     final customerId = box.customerId.isNotEmpty
         ? box.customerId
@@ -433,11 +434,10 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   Future<void> _doServiceExtension(CustomerBox box) async {
     if (_extending) return; // double-submit guard
     _extending = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    // C4 / Android Box_Selection_new serviceextensionwithbox :279: same
+    // non-cancellable loader. serviceExtensionWithBox never throws.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final customerId = box.customerId.isNotEmpty
         ? box.customerId
         : widget.customer.lcoCustomerId;

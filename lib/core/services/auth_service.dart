@@ -116,10 +116,18 @@ class AuthService {
           (SoapClient.readField(xml, 'offline_user_code') ?? '').trim();
       final offlineStatus =
           int.tryParse(SoapClient.readField(xml, 'offlineStatus') ?? '') ?? 0;
+      // D-B6: Android LoginActivity :633-637 (missing/unparsable → 0).
+      final commonEmployee = int.tryParse(
+              (SoapClient.readField(xml, 'common_employee') ?? '').trim()) ??
+          0;
       final restrictPartial = int.tryParse(
               SoapClient.readField(xml, 'lovvalue_restrict_partial_payment') ??
                   '') ??
           0;
+      // A-B4: dealer amount rounding (Android LoginActivity :645-651; missing →
+      // "ACTUAL"). Server: wsmodel checkAmountRound → lovtable AMOUNT_ROUND.
+      final amountRound =
+          (SoapClient.readField(xml, 'amount_round') ?? 'ACTUAL').trim();
       // useLcoDeposit (Android LoginActivity.userLcoDeposit): 1 = LCO-deposit dealer
       // → lock STB amount to full + show wallet card. Default 0 (feature off).
       final useLcoDeposit =
@@ -159,7 +167,9 @@ class AuthService {
         machineNumber: machineNum,
         offlineUserCode: offlineUserCode,
         offlineStatus: offlineStatus,
+        commonEmployee: commonEmployee,
         restrictPartialPayment: restrictPartial,
+        amountRound: amountRound,
         useLcoDeposit: useLcoDeposit,
         serverCurrentDate: serverDate,
         useCaf: useCaf,
@@ -184,6 +194,27 @@ class AuthService {
         rememberMe: rememberMe,
       );
 
+      // D-B6 / Android LoginActivity :800-803 + Commonempcrf() :951-1020: a
+      // common employee enters the app ONLY after packagelist/commonEmpCRF
+      // succeeds, and its lco_code list is their CRF prefix list (Android uses
+      // LoginActivity.crfs instead of userCode for them). Remember-Me is already
+      // saved above, as Android does before this branch; the offline-entry date
+      // below is saved only on success, as in Android's success branch.
+      if (commonEmployee == 1) {
+        final gate = await _fetchCommonEmployeeCrf();
+        if (gate.status != 0) {
+          // Android stays on the login screen; also drop the half-filled
+          // session so nothing (e.g. offline "Back to online") can use it.
+          SessionService.instance.clear();
+          if (gate.status == 1) {
+            return LoginResult(false, gate.message,
+                dialogTitle: 'No employee details found !');
+          }
+          return const LoginResult(false, 'Failed.'); // Android Toast "Failed."
+        }
+        SessionService.instance.crfPrefixes = gate.crfs;
+      }
+
       // Android parity (LoginActivity.java:812): persist the server `current_date`
       // for the offline-entry 2-day gate (survives process death).
       await OfflineModeService.instance.saveLastOnlineLoginDate(serverDate);
@@ -195,6 +226,46 @@ class AuthService {
     } catch (error, stackTrace) {
       ErrorHandlerService.recordError(error, stackTrace, reason: 'AuthService.login');
       return const LoginResult(false, 'Server is busy or not reachable.');
+    }
+  }
+
+  /// D-B6 / Android LoginActivity.Commonempcrf() (:951-1020): REST POST
+  /// `packagelist/commonEmpCRF` (dealer_id, imei, authtoken), 100 s like
+  /// Android's retry policy. status 0 → the `result` lco_code list; status 1 →
+  /// Android's "No employee details found !" dialog; anything else (transport
+  /// error, other status) → status 3. Never throws.
+  Future<({int status, String message, List<String> crfs})>
+      _fetchCommonEmployeeCrf() async {
+    try {
+      final data = await RestClient.instance.postForm(
+        '${ServerUrlResolver.instance.namespace}/packagelist/commonEmpCRF',
+        {
+          'dealer_id': SessionService.instance.dealerId,
+          'imei': _imei,
+          'authtoken': SessionService.instance.authToken,
+        },
+        timeout: const Duration(seconds: 100),
+      );
+      final status = int.tryParse('${data['status_code']}'.trim()) ?? 3;
+      final message = '${data['status_msg'] ?? ''}';
+      if (status == 1) return (status: 1, message: message, crfs: const <String>[]);
+      if (status != 0) return (status: 3, message: message, crfs: const <String>[]);
+      final raw = data['result'];
+      final list = raw is String ? jsonDecode(raw) : raw;
+      final crfs = <String>[];
+      if (list is List) {
+        for (final e in list) {
+          if (e is Map) {
+            final code = '${e['lco_code'] ?? ''}'.trim();
+            if (code.isNotEmpty) crfs.add(code);
+          }
+        }
+      }
+      return (status: 0, message: message, crfs: crfs);
+    } catch (error, stackTrace) {
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'AuthService.commonEmpCRF');
+      return (status: 3, message: '', crfs: const <String>[]);
     }
   }
 
@@ -243,6 +314,10 @@ class AuthService {
         unpaidCustomerActivation: perm('unpaid_customer_activation'),
         makePaymentAllowed: makePaymentAllowed,
         shareOption: shareOption,
+        // A-B2: Android customer_discount (deny unless "1", LoginActivity :1083).
+        customerDiscount: perm('customer_discount'),
+        // D-B3: Android addexpense (deny unless "1", LoginActivity :1126).
+        addExpense: perm('expenses'),
       );
     } catch (_) {
       // keep safe deny defaults (all false)
@@ -319,5 +394,8 @@ class AuthService {
 class LoginResult {
   final bool success;
   final String message;
-  const LoginResult(this.success, this.message);
+  // D-B6: when set, the login screen shows [message] in a dialog with this
+  // title (Android's non-cancellable AlertDialog) instead of a snackbar.
+  final String? dialogTitle;
+  const LoginResult(this.success, this.message, {this.dialogTitle});
 }

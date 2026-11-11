@@ -86,7 +86,9 @@ class SearchProvider extends ChangeNotifier {
   List<OfflineCustomer> _offlineResults = [];
   List<OfflineCustomer> get offlineResults => _offlineResults;
 
-  Future<void> search(String query) async {
+  /// [dealerId] — D-B6: the Dealer dropdown choice for a common employee
+  /// (0 = "----Select Dealer----"); always 0 for a normal employee (Android).
+  Future<void> search(String query, {int dealerId = 0}) async {
     final q = query.trim();
     if (q.isEmpty) return;
 
@@ -101,18 +103,30 @@ class SearchProvider extends ChangeNotifier {
     if (isOffline) {
       await _searchOffline(q);
     } else {
-      await _searchOnline(q);
+      await _searchOnline(q, dealerId);
     }
 
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> _searchOnline(String q) async {
+  /// D-B4: Primary (3) or Secondary (9) Mobile Number search.
+  bool get isMobileSearch {
+    final t = _searchType();
+    return t == 3 || t == 9;
+  }
+
+  Future<void> _searchOnline(String q, int dealerId) async {
     try {
+      // D-B4 / Android SearchCustomer_Fragment_Newdesign :638-648: a 10-digit
+      // mobile is sent as "91" + number. The server matches type 3 only on a
+      // 12-character value and type 9 by exact match (wsmodel searchCustomer
+      // :214-242), so a bare 10-digit number never finds anyone.
+      final value = (isMobileSearch && q.length == 10) ? '91$q' : q;
       final result = await SearchRepository.instance.search(
         searchType: _searchType(),
-        value: q,
+        value: value,
+        dealerId: dealerId, // D-B6
       );
       if (result.statusCode == 0) {
         _results = result.customers;

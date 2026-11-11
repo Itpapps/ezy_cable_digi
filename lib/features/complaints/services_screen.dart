@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
@@ -314,12 +315,17 @@ class _ServicesScreenState extends State<ServicesScreen>
     if (confirmed != true || !mounted) return;
 
     setState(() => _submitting = true);
+    // C12 / Android Frag_act_Pack :771: non-cancellable "Loading...Please
+    // wait..." (Back ignored); activatePackages never throws (70 s → status 3).
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await PackageOperationsRepository.instance.activatePackages(
       customerId: widget.customer.lcoCustomerId,
       boxId: widget.box.boxId,
       packageIds: packageIds,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
 
     if (r.isSuccess) {

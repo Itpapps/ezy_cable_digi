@@ -58,15 +58,19 @@ class _SyncClearScreenState extends State<SyncClearScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final n = await OfflineSyncService.instance.syncPendingToServer();
+      final r = await OfflineSyncService.instance.syncPendingToServer();
       if (!mounted) return;
       showPremiumSnackBar(
         context,
-        n > 0
-            ? '$n record(s) synced'
-            // Android SyncData_Fragment exact toast when there is nothing to sync.
-            : 'No payments has been made (or) Check your internet connection.',
-        isSuccess: n > 0,
+        r.failed > 0
+            // B2: rejected/failed payments stay pending (Android "Not synced").
+            ? '${r.synced} record(s) synced, ${r.failed} not synced'
+            : r.synced > 0
+                ? '${r.synced} record(s) synced'
+                // Android SyncData_Fragment exact toast when there is nothing to sync.
+                : 'No payments has been made (or) Check your internet connection.',
+        isSuccess: r.synced > 0 && r.failed == 0,
+        isError: r.failed > 0,
       );
       await _refresh();
     } catch (_) {

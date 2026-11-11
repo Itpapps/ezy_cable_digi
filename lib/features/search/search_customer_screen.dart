@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
 import '../../core/data/offline_customer.dart';
+import '../../core/services/offline_mode_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -14,6 +15,7 @@ import '../customer/customer_details_screen.dart';
 import 'data/search_repository.dart';
 import '../customer/customer_map_screen.dart';
 import '../offline/offline_payment_flow.dart';
+import 'search_dealers.dart';
 import 'search_provider.dart';
 
 class SearchCustomerScreen extends StatefulWidget {
@@ -34,6 +36,13 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
   late Animation<double> _fadeAnim;
   // Selected CRF prefix (Android crf_selected). Defaults to the first prefix.
   String? _crfPrefix;
+  // D-B6: common employees only — Android's Dealer dropdown
+  // (searchcustomer_searchoptions_spdealer), default "----Select Dealer----".
+  // Online search only: Android's offline search (Offline_Search_Fragment)
+  // has no Dealer dropdown, and this screen is reused for offline search.
+  bool _isCommonEmployee = false;
+  List<SearchDealer> _dealers = const [kSelectDealer];
+  int _dealerId = 0;
 
   @override
   void initState() {
@@ -51,8 +60,25 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
     });
 
     // Clear previous search results exactly as requested when opening the screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) context.read<SearchProvider>().clear();
+      // D-B6 / Android :506-510: load the Dealer list for a common employee
+      // (online search only — see _isCommonEmployee).
+      // Android :506 shows the Dealer dropdown when common_employee != 0.
+      if (SessionService.instance.commonEmployee == 0) return;
+      if (await OfflineModeService.instance.isOfflineMode) return;
+      if (!mounted) return;
+      setState(() => _isCommonEmployee = true);
+      _loadDealers();
+    });
+  }
+
+  Future<void> _loadDealers() async {
+    final list = await loadSearchDealers(context);
+    if (list == null || !mounted) return;
+    setState(() {
+      _dealers = list;
+      _dealerId = 0; // Android: items[0] "----Select Dealer----" is selected
     });
   }
 
@@ -85,7 +111,9 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
     final query = (isCrf && prefixes.isNotEmpty)
         ? '${_crfPrefix ?? prefixes.first}$typed'
         : typed;
-    await provider.search(query);
+    // D-B6 / Android :928-932: 0 for a normal employee, the chosen dealer for
+    // a common employee.
+    await provider.search(query, dealerId: _isCommonEmployee ? _dealerId : 0);
   }
 
   @override
@@ -104,6 +132,12 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
               // ── Teal gradient banner ──────────────────────────────────────
               _headerChip(t),
               const SizedBox(height: 14),
+              // ── D-B6: Dealer dropdown (common employees only, above the
+              //    search options like Android's search_new_digi.xml) ──────
+              if (_isCommonEmployee) ...[
+                _dealerDropdown(),
+                const SizedBox(height: 10),
+              ],
               // ── Dropdown ─────────────────────────────────────────────────
               _dropdown(t),
               const SizedBox(height: 10),
@@ -171,7 +205,12 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                             child: _resultBanner(p, t),
                           );
                         }
-                        return _CustomerCard(customer: p.results[i - 1], t: t);
+                        return _CustomerCard(
+                          customer: p.results[i - 1],
+                          t: t,
+                          // D-B6: the detail fetch uses the same dealer.
+                          dealerId: _isCommonEmployee ? _dealerId : 0,
+                        );
                       },
                     );
                   },
@@ -243,6 +282,63 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
             ),
           ),
         ],
+      ),
+    ),
+  );
+
+  // ── D-B6: Dealer dropdown (common employees) ──────────────────────────────
+  // Android searchcustomer_searchoptions_spdealer: "----Select Dealer----" (0)
+  // + the mapped dealers; the choice is sent as custInfo.dealer_id.
+  Widget _dealerDropdown() => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<int>(
+        value: _dealers.any((d) => d.id == _dealerId) ? _dealerId : 0,
+        isExpanded: true,
+        menuMaxHeight: 300,
+        borderRadius: BorderRadius.circular(12),
+        elevation: 3,
+        icon: const Padding(
+          padding: EdgeInsets.only(right: 14),
+          child: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 24,
+            color: Colors.black54,
+          ),
+        ),
+        items: _dealers
+            .map(
+              (d) => DropdownMenuItem<int>(
+                value: d.id,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(
+                    d.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0D1B4B),
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => _dealerId = v);
+        },
       ),
     ),
   );
@@ -384,7 +480,7 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                   focusNode: _focusNode,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _performSearch(),
-                  keyboardType: showPrefix
+                  keyboardType: (showPrefix || p.isMobileSearch)
                       ? TextInputType.number
                       : TextInputType.text,
                   inputFormatters: showPrefix
@@ -392,7 +488,13 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                           FilteringTextInputFormatter.digitsOnly,
                           LengthLimitingTextInputFormatter(4),
                         ]
-                      : null,
+                      // D-B4 / Android :282-298: mobile = digits only, max 10.
+                      : p.isMobileSearch
+                          ? [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ]
+                          : null,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -592,7 +694,9 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
 class _CustomerCard extends StatelessWidget {
   final Customer customer;
   final AppThemeConst t;
-  const _CustomerCard({required this.customer, required this.t});
+  final int dealerId; // D-B6: dealer_id for the enriched detail fetch
+  const _CustomerCard(
+      {required this.customer, required this.t, this.dealerId = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -883,12 +987,18 @@ class _CustomerCard extends StatelessWidget {
   /// are populated for the operations grid. Falls back to the list customer if
   /// the detail fetch yields nothing — never blocks navigation.
   Future<void> _openDetail(BuildContext context, Customer c) async {
-    showPremiumLoading(context);
+    // D7 / Android cust_search :908: non-cancellable "Searching...,   Please
+    // wait..." (Back ignored). The navigator is captured first so the loader
+    // is closed even if this card is rebuilt while waiting.
+    final nav = Navigator.of(context, rootNavigator: true);
+    showPremiumLoading(context,
+        message: 'Searching...,   Please wait...', canPop: false);
     final enriched = await SearchRepository.instance.fetchCustomerDetail(
       c.lcoCustomerId,
+      dealerId: dealerId, // D-B6
     );
+    nav.pop(); // dismiss loading (fetchCustomerDetail never throws)
     if (!context.mounted) return;
-    Navigator.of(context).pop(); // dismiss loading
     // Android parity: CRF is carried from the LIST result into the details/
     // payment screen via the bundle (CustomerMgmt_MakePayment_Fragment:263,
     // 1213-1216), NOT re-read from the enriched is_list=1 detail (whose response

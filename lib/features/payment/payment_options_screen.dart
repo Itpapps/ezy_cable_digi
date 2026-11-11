@@ -8,6 +8,7 @@ import 'package:iconsax/iconsax.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
+import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../dashboard/dashboard_refresh_signal.dart';
@@ -38,7 +39,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
   void initState() {
     super.initState();
     _ctrl = PaymentController(customer: widget.customer);
-    _ctrl.loadPendingAmount(); // gpa → prefill the amount with the live due amount
+    // gpa → prefill the amount with the live due amount. A3: behind Android's
+    // blocking loader, then Android's message per status (see _loadPending).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPending());
     _ctrl.captureLocation();   // Android parity: last-known GPS at screen open (0.0 fallback)
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
@@ -73,6 +76,45 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     if (picked != null) _ctrl.setInstrumentDate(picked);
   }
 
+  // ── Pending amount (gpa) ─────────────────────────────────────────────────────
+  /// A3 / Android GetPendingAmount (CustomerMgmt_MakePayment_Fragment :1312,
+  /// :1396-1418, :1611-1613): non-cancellable "Getting Pending Amount,   Please
+  /// wait..." while gpa runs, then: no reply → "Server is busy or Un reachable!"
+  /// (OK stays on this screen); status 1 → "{msg}: Enter Valid Details";
+  /// status 2 → "{msg}: Contact Support". PAY is not blocked afterwards (Android).
+  Future<void> _loadPending() async {
+    if (!mounted) return;
+    showPremiumLoading(context,
+        message: 'Getting Pending Amount,   Please wait...', canPop: false);
+    await _ctrl.loadPendingAmount(); // never throws
+    if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
+    final msg = _ctrl.pendingError ?? '';
+    switch (_ctrl.pendingStatus) {
+      case 1:
+        showPremiumSnackBar(context, '$msg: Enter Valid Details', isError: true);
+        break;
+      case 2:
+        showPremiumSnackBar(context, '$msg: Contact Support', isError: true);
+        break;
+      case -1:
+        showDialog<void>(
+          context: context,
+          builder: (dialogCtx) => AlertDialog(
+            title: const Text('Server is busy or Un reachable!'),
+            content: const Text('Please try again after sometime'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        break;
+    }
+  }
+
   // ── Pay Now ──────────────────────────────────────────────────────────────────
   Future<void> _handlePay() async {
     // Dismiss the keyboard before the confirmation/loading/success overlays so it
@@ -96,13 +138,18 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             _ctrl.isBroadbandCustomer ? _ctrl.parsedBroadbandAmount : 0.0,
         paymentMethod: '',
         lastPaidAmount: _ctrl.lastPaidAmount, // real GPA last_paid_amount
+        paymentsCount: _ctrl.paymentsCount,     // A4: GPA payments_count
+        adjustmentCount: _ctrl.adjustmentCount, // A4: GPA adjustment_count
       ),
     ) ?? false;
     
     if (!confirmed || !mounted) return;
 
-    // Show loading
-    showPremiumLoading(context, message: 'Processing payment...');
+    // Show loading. A2 / Android MakePayment :1765 (non-cancellable
+    // ProgressDialog): Back is ignored, so the pops below always close THIS
+    // loader and never the Payment screen. Every path closes it: success,
+    // null result and the catch (60 s SoapClient timeout at most).
+    showPremiumLoading(context, message: 'Processing payment...', canPop: false);
 
     try {
       final payment = await _ctrl.pay();
@@ -125,11 +172,15 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       final stbPaid = _ctrl.parsedAmount;
       final discountPaid = double.tryParse(_ctrl.discountCtrl.text) ?? 0.0;
       final dealerName = _ctrl.lastResult?.dealerBusinessName ?? '';
-      final dueAmt = _ctrl.receiptDueAmount;
-      final outAmt = _ctrl.receiptOutAmount;
+      // A-B4 / Android DisplayPaymentDetails_Fragment :299-331: the receipt's
+      // bill, due and out amounts follow the dealer rounding. Paid amounts stay
+      // exactly as collected.
+      final round = SessionService.instance.applyAmountRound;
+      final dueAmt = round(_ctrl.receiptDueAmount);
+      final outAmt = round(_ctrl.receiptOutAmount);
       // Receipt "Bill Amount" from the mpay response (Android parity) — the
       // customer list total is 0 for broadband, so use the server's billAmount.
-      final billAmt = _ctrl.lastResult?.billAmount ?? 0.0;
+      final billAmt = round(_ctrl.lastResult?.billAmount ?? 0.0);
 
       // Success popup before navigating — iOS 26 "liquid glass" card (no ✕; an OK
       // button instead). Self-contained, so it drops PremiumDialogShell. Timing is
@@ -578,19 +629,25 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           isError: true);
       return;
     }
-    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    // D7 / Android prev/next (CustomerMgmt_MakePayment_Fragment): non-
+    // cancellable "Searching...,   Please wait..."; prevNextCustomer never throws.
+    showPremiumLoading(context,
+        message: 'Searching...,   Please wait...', canPop: false);
     final r = await SearchRepository.instance
         .prevNextCustomer(customerId: id, flag: flag);
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop(); // dismiss loader
     if (r.statusCode == 0 && r.customer != null) {
       // Android reopens CustomerOperations_Fragment for the adjacent customer.
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => CustomerDetailsScreen(customer: r.customer!),
         ),
       );
+      // A5a / Android :371: coming back rebuilds the Pay screen and reloads
+      // the pending amount (the customer may have been paid meanwhile).
+      if (mounted) await _loadPending();
     } else if (r.statusCode == 1) {
       await _showInfoDialog('No Data Found!', r.statusMessage);
     } else if (r.statusCode == 2) {
@@ -678,6 +735,31 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           const SizedBox(height: 10),
         ],
 
+        // ── A-B3: billing-scheme discount / penalty (Android disc_pen_chk,
+        //    "Due Amount" + "Discount Applied"/"Penalty Applied" rows) ──────
+        if (_ctrl.schemeVisible) ...[
+          _CheckToggle(
+            value: _ctrl.schemeApplied,
+            // Automatic schemes are fixed (Android setEnabled(false)).
+            onChanged: (v) {
+              if (_ctrl.schemeMode == 'M') _ctrl.setSchemeApplied(v);
+            },
+            label: _ctrl.schemeCheckLabel,
+          ),
+          if (_ctrl.schemeApplied) ...[
+            const SizedBox(height: 6),
+            Text('Due Amount :  ₹${_ctrl.cablePending.toStringAsFixed(2)}',
+                style: TextStyle(fontSize: 13, color: t.bodyText)),
+            const SizedBox(height: 4),
+            Text(
+                '${_ctrl.schemeAppliedLabel} :  ₹${_ctrl.schemeAmount.toStringAsFixed(2)}',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: t.bodyText)),
+          ],
+          const SizedBox(height: 10),
+        ],
         // Amount (STB / cable leg). Disabled for BroadBand-only customers
         // (Android freezes et_amount when customerType == "BroadBand").
         _CompactField(

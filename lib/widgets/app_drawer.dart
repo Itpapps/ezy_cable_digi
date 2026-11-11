@@ -256,6 +256,15 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) => _buildDrawer(context);
 
   Widget _buildDrawer(BuildContext context) {
+    // D-B2 / Android MainActivity :266-281 — drawer items by user type / flags.
+    //  EMPLOYEE: no Employee Track. SERVICE: no Employee Track, Reports,
+    //  Customer List or OFFLINE OPTIONS. OFFLINE OPTIONS only when
+    //  offlineStatus != 0. (Android's "Lco Package" item is always hidden.)
+    final userType = SessionService.instance.userType.trim().toUpperCase();
+    final isService = userType == 'SERVICE';
+    final isEmployee = userType == 'EMPLOYEE';
+    final showOffline =
+        SessionService.instance.offlineStatus != 0 && !isService;
     return Drawer(
       child: SingleChildScrollView(
         child: Column(
@@ -296,16 +305,21 @@ class AppDrawer extends StatelessWidget {
               icon: Iconsax.search_normal,
               labelKey: 'search_customer',
             ),
-            _DrawerItem(icon: Iconsax.graph, labelKey: 'reports'),
-            _DrawerItem(icon: Iconsax.location, labelKey: 'employee_track'),
+            if (!isService)
+              _DrawerItem(icon: Iconsax.graph, labelKey: 'reports'),
+            if (!isService && !isEmployee)
+              _DrawerItem(icon: Iconsax.location, labelKey: 'employee_track'),
             _DrawerItem(icon: Iconsax.setting_2, labelKey: 'settings'),
             _DrawerItem(icon: Iconsax.sun_1, labelKey: 'select_theme'),
-            _DrawerItem(icon: Iconsax.user_tag, labelKey: 'customer_list'),
+            if (!isService)
+              _DrawerItem(icon: Iconsax.user_tag, labelKey: 'customer_list'),
             _DrawerItem(
               icon: Iconsax.location_tick,
               labelKey: 'nearest_customer',
             ),
-            _DrawerItem(icon: Iconsax.wallet_3, labelKey: 'list_expenses'),
+            // D-B3 / Android MainActivity :422: shown only with `expenses`.
+            if (SessionService.instance.addExpense)
+              _DrawerItem(icon: Iconsax.wallet_3, labelKey: 'list_expenses'),
             _DrawerItem(
               icon: Iconsax.calendar_1,
               labelKey: 'collection_schedule',
@@ -315,6 +329,9 @@ class AppDrawer extends StatelessWidget {
               labelKey: 'calendar_event_list',
             ),
 
+            // D-B2: Android nav_offline_items visible only when offlineStatus
+            // != 0, and never for SERVICE.
+            if (showOffline) ...[
             const Divider(height: 12, thickness: 0.5),
             // ── Offline Options ───────────────────────────────────────────
             Padding(
@@ -445,6 +462,7 @@ class AppDrawer extends StatelessWidget {
                 });
               },
             ),
+            ],
 
             const Divider(height: 12, thickness: 0.5),
 

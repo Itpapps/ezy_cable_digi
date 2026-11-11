@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
@@ -378,6 +379,10 @@ class _ScheduleServicesScreenState extends State<ScheduleServicesScreen>
     if (confirmed != true || !mounted) return;
 
     setState(() => _submitting = true);
+    // C12 / Android SchedulePackage_frag :772: non-cancellable "Loading...
+    // Please wait..." (Back ignored); schedulePackages never throws.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await PackageOperationsRepository.instance.schedulePackages(
       customerId: widget.customer.lcoCustomerId,
       boxId: widget.box.boxId,
@@ -385,6 +390,7 @@ class _ScheduleServicesScreenState extends State<ScheduleServicesScreen>
       scheduleStartDate: _fmt(_scheduleDate!),
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
 
     if (r.isSuccess) {

@@ -19,12 +19,13 @@ class OfflineSyncService {
 
   /// Sync all pending offline payments to server (real /GetCollectionData).
   /// For old payments table, marks as synced locally.
-  Future<int> syncPendingToServer() async {
+  /// `failed` = rejected (NAK) or not reached; those stay pending (flag=1).
+  Future<({int synced, int failed})> syncPendingToServer() async {
     // Sync real offline payments
     final result = await _offlineEngine.syncAllPending();
     // Also mark old payments table as synced
     final oldMarked = await _db.markAllPaymentsSynced();
-    return result.synced + oldMarked;
+    return (synced: result.synced + oldMarked, failed: result.failed);
   }
 
   /// Clear offline data after all synced.

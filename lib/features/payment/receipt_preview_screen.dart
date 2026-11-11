@@ -343,7 +343,10 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
           isError: true);
       return;
     }
-    showPremiumLoading(context, message: 'Searching...   Please wait...');
+    // D7 / Android prev/next: non-cancellable "Searching...,   Please wait...";
+    // prevNextCustomer never throws, so the pop below always closes it.
+    showPremiumLoading(context,
+        message: 'Searching...,   Please wait...', canPop: false);
     final r = await SearchRepository.instance
         .prevNextCustomer(customerId: id, flag: flag);
     if (!mounted) return;

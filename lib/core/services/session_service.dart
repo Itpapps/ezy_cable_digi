@@ -42,8 +42,24 @@ class SessionService {
   String offlineUserCode = '';
   // offlineStatus: 1 = offline feature enabled for this user.
   int offlineStatus = 0;
+  // D-B6: common_employee (validateLogin; Android LoginActivity.common_employee,
+  // default 0). 1 = an employee mapped to several dealers → login gate
+  // (commonEmpCRF) + the Dealer dropdown on Search and Scan.
+  int commonEmployee = 0;
   // lovvalue_restrict_partial_payment: 1 = paid amount must be >= total_amount.
   int restrictPartialPayment = 0;
+  // A-B4: amount_round (validateLogin; Android LoginActivity.amount_round,
+  // default "ACTUAL"). Values: ACTUAL / ROUND / CEIL.
+  String amountRound = 'ACTUAL';
+
+  /// A-B4: Android's exact rule (CustomerMgmt_MakePayment_Fragment :1485-1497,
+  /// DisplayPaymentDetails_Fragment :299-331): "ACTUAL" keeps the amount,
+  /// "ROUND" = Java Math.round (half up), anything else = Math.ceil.
+  double applyAmountRound(double v) {
+    if (amountRound == 'ACTUAL') return v;
+    if (amountRound == 'ROUND') return (v + 0.5).floorToDouble();
+    return v.ceilToDouble();
+  }
   // useLcoDeposit (Android LoginActivity.userLcoDeposit): 1 = this dealer uses LCO
   // deposit → the STB payment amount is locked to the full pending (no partial)
   // and the dashboard LCO Wallet card is shown. Default 0 = feature off (safe).
@@ -95,6 +111,15 @@ class SessionService {
   // (OnetimeHistory_Adapter:227, default "1"). Defaults true = show.
   bool shareOption = true;
 
+  // A-B2: customer_discount (getRolePermissions). Android LoginActivity :1083-
+  // 1087 defaults "0" and shows the Discount field only when this is "1" AND
+  // the dealer's enable_payment_discount is 1. Default false = hidden.
+  bool customerDiscount = false;
+
+  // D-B3: expenses (getRolePermissions). Android LoginActivity :1126-1132
+  // defaults "0"; Expenses tab → "No Access" and List Expenses hidden unless 1.
+  bool addExpense = false;
+
   bool get isLoggedIn => authToken.isNotEmpty;
 
   /// Centralized Android payment-permission rule, reused at every payment entry:
@@ -115,7 +140,9 @@ class SessionService {
     String machineNumber = '',
     String offlineUserCode = '',
     int offlineStatus = 0,
+    int commonEmployee = 0,
     int restrictPartialPayment = 0,
+    String amountRound = 'ACTUAL',
     int useLcoDeposit = 0,
     String serverCurrentDate = '',
     int useCaf = 0,
@@ -138,7 +165,9 @@ class SessionService {
     this.machineNumber = machineNumber;
     this.offlineUserCode = offlineUserCode;
     this.offlineStatus = offlineStatus;
+    this.commonEmployee = commonEmployee;
     this.restrictPartialPayment = restrictPartialPayment;
+    this.amountRound = amountRound;
     this.useLcoDeposit = useLcoDeposit;
     this.serverCurrentDate = serverCurrentDate;
     this.useCaf = useCaf;
@@ -163,6 +192,8 @@ class SessionService {
     bool unpaidCustomerActivation = false,
     bool makePaymentAllowed = true,
     bool shareOption = true,
+    bool customerDiscount = false,
+    bool addExpense = false,
   }) {
     this.packageActivation = packageActivation;
     this.packageDeactivation = packageDeactivation;
@@ -174,6 +205,8 @@ class SessionService {
     this.unpaidCustomerActivation = unpaidCustomerActivation;
     this.makePaymentAllowed = makePaymentAllowed;
     this.shareOption = shareOption;
+    this.customerDiscount = customerDiscount;
+    this.addExpense = addExpense;
   }
 
   void clear() {
@@ -197,10 +230,14 @@ class SessionService {
     unpaidCustomerActivation = false;
     makePaymentAllowed = true;
     shareOption = true;
+    customerDiscount = false;
+    addExpense = false;
     machineNumber = '';
     offlineUserCode = '';
     offlineStatus = 0;
+    commonEmployee = 0;
     restrictPartialPayment = 0;
+    amountRound = 'ACTUAL';
     useLcoDeposit = 0;
     serverCurrentDate = '';
     useCaf = 0;

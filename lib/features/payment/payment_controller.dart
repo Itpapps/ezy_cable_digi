@@ -51,6 +51,9 @@ class PaymentController extends ChangeNotifier {
   double  pendingAmount  = 0;
   bool    pendingLoading = false;
   String? pendingError;
+  // A3: last gpa outcome — 0 ok · the server's statusCode · -1 no reply
+  // (transport failure, Android's null response).
+  int     pendingStatus = 0;
   int     _billingId     = 0; // bill to settle (from gpa) — sent to mpay
   double  _dueAmount     = 0; // due_amount (from gpa) — sent to mpay (= cable leg)
   String? discountError;      // set when discount > due (mirrors Android toast)
@@ -58,6 +61,8 @@ class PaymentController extends ChangeNotifier {
   double  broadcasterPending = 0; // broadband pending (from gpa; 0 for STB)
   double  lastPaidAmount = 0; // Android last_paid_amount (from gpa) — the REAL
                               // "last paid", NOT the pending/bill amount.
+  int     paymentsCount = 0;   // A4: gpa payments_count (current month)
+  int     adjustmentCount = 0; // A4: gpa adjustment_count (current month)
   MakePaymentResult? lastResult;  // last successful mpay response (for receipt)
 
   String    get paymentMethod   => _paymentMethod;
@@ -122,6 +127,7 @@ class PaymentController extends ChangeNotifier {
   Future<void> loadPendingAmount() async {
     pendingLoading = true;
     pendingError = null;
+    pendingStatus = 0;
     notifyListeners();
     try {
       final id = int.tryParse(customer.lcoCustomerId) ?? 0;
@@ -132,11 +138,17 @@ class PaymentController extends ChangeNotifier {
         // STB/cable leg is what Android prefills into the amount box and sends as
         // due_amount (CustomerMgmt_MakePayment_Fragment :1487/:1829). For STB-only
         // customers cable == overall total, so this is a no-op for them.
-        cablePending = result.cablePendingAmount;
+        // A-B4 / Android :1485-1497: the dealer's amount rounding is applied
+        // to both dues BEFORE prefill, due_amount and every comparison.
+        final round = SessionService.instance.applyAmountRound;
+        cablePending = round(result.cablePendingAmount);
         _dueAmount = cablePending;          // due_amount for mpay (STB leg)
         _billingId = result.billingId;      // billingId for mpay (from gpa)
-        broadcasterPending = result.broadcasterPendingAmount; // broadband pending
+        broadcasterPending =
+            round(result.broadcasterPendingAmount); // broadband pending
         lastPaidAmount = result.lastPaidAmount; // Android last_paid_amount
+        paymentsCount = result.paymentsCount;     // A4: confirm popup
+        adjustmentCount = result.adjustmentCount; // A4: confirm popup
         // Android parity (CustomerMgmt_MakePayment_Fragment :1500-1507): prefill the
         // STB amount box with the pending only when it is positive; a zero/negative
         // pending (customer credit/advance) prefills "0", exactly like Android's
@@ -146,11 +158,14 @@ class PaymentController extends ChangeNotifier {
         if (broadcasterPending > 0) {
           broadbandAmountCtrl.text = broadcasterPending.toStringAsFixed(2);
         }
+        _applyScheme(result.scheme); // A-B3 (Android viewUpdating)
       } else {
         pendingError = result.statusMessage;
+        pendingStatus = result.statusCode; // A3
       }
     } catch (e, s) {
       pendingError = 'Failed to load pending amount';
+      pendingStatus = -1; // A3: no server reply
       ErrorHandlerService.recordError(e, s,
           reason: 'PaymentController.loadPendingAmount');
     } finally {
@@ -159,10 +174,11 @@ class PaymentController extends ChangeNotifier {
     }
   }
 
-  /// Whether the discount field is offered. Android gates on
-  /// `customer_discount == "1" && enable_payment_discount == 1`. Per the locked
-  /// scope, v1 gates on the login flag only (role permission deferred).
-  bool get discountEnabled => SessionService.instance.enablePaymentDiscount == 1;
+  /// Whether the discount field is offered. A-B2 / Android :549-551: role
+  /// permission `customer_discount == "1"` AND `enable_payment_discount == 1`.
+  bool get discountEnabled =>
+      SessionService.instance.enablePaymentDiscount == 1 &&
+      SessionService.instance.customerDiscount;
 
   /// Broadband customer? Android's master switch is "broadband account id
   /// non-empty" (set for customer_type 1 and 2). Empty → STB-only.
@@ -176,7 +192,99 @@ class PaymentController extends ChangeNotifier {
   /// LCO-deposit dealer → Android freezes ONLY the STB `et_amount` to the full
   /// pending (setEnabled(false), CustomerMgmt_MakePayment_Fragment :1633/1659/
   /// 1704). It does NOT lock the broadband field and adds no submit validation.
-  bool get amountLocked => SessionService.instance.useLcoDeposit == 1;
+  bool get amountLocked =>
+      SessionService.instance.useLcoDeposit == 1 || schemeApplied; // + A-B3
+
+  // ── A-B3: billing-scheme discount / penalty (Android viewUpdating) ─────────
+  PendingScheme scheme = const PendingScheme();
+  String schemeFrom = '0';  // 'D' discount · 'P' penalty · '0' none
+  String schemeMode = '0';  // 'A' automatic · 'M' manual (checkbox)
+  bool schemeApplied = false; // amount = total after discount/penalty, locked
+  String discountPenaltyFlag = '0000'; // sent as discount_penalty_flag
+
+  bool get schemeVisible =>
+      (schemeFrom == 'D' || schemeFrom == 'P') &&
+      (schemeMode == 'A' || schemeMode == 'M');
+  bool get schemeIsDiscount => schemeFrom == 'D';
+  double get schemeAmount =>
+      schemeIsDiscount ? scheme.discountAmount : scheme.penaltyAmount;
+  double get schemeTotal =>
+      schemeIsDiscount ? scheme.totalAfterDiscount : scheme.totalAfterPenalty;
+  /// Android disc_pen_chk text.
+  String get schemeCheckLabel => schemeIsDiscount
+      ? (schemeMode == 'A' ? 'Discount Applied' : 'Apply Discount')
+      : (schemeMode == 'A' ? 'Penalty Applied' : 'Apply Penalty');
+  /// Android dis_pen_tv text (shown with the amount while applied).
+  String get schemeAppliedLabel =>
+      schemeIsDiscount ? 'Discount Applied' : 'Penalty Applied';
+
+  /// A-B3 / Android :1576-1606: pick the scheme whose dates contain today
+  /// (server current_date), discount first, then penalty.
+  void _applyScheme(PendingScheme s) {
+    scheme = s;
+    schemeFrom = '0';
+    schemeMode = '0';
+    schemeApplied = false;
+    discountPenaltyFlag = '0000';
+    final today = _schemeToday();
+    DateTime? ymd(String v) => v.length >= 10 ? DateTime.tryParse(v.substring(0, 10)) : null;
+    bool has(String a, String b) => a.length > 1 && b.length > 1;
+    bool inRange(String a, String b) {
+      final st = ymd(a), en = ymd(b);
+      return st != null && en != null && !today.isBefore(st) && !today.isAfter(en);
+    }
+    final f = s.flag;
+    if (has(s.discountStart, s.discountEnd)) {
+      if (inRange(s.discountStart, s.discountEnd)) {
+        schemeFrom = f[0].toUpperCase();
+        schemeMode = f[1].toUpperCase();
+      } else if (has(s.penaltyStart, s.penaltyEnd) &&
+          inRange(s.penaltyStart, s.penaltyEnd)) {
+        schemeFrom = f[2].toUpperCase();
+        schemeMode = f[3].toUpperCase();
+      }
+    } else if (has(s.penaltyStart, s.penaltyEnd) &&
+        inRange(s.penaltyStart, s.penaltyEnd)) {
+      schemeFrom = f[2].toUpperCase();
+      schemeMode = f[3].toUpperCase();
+    }
+    if (!schemeVisible) {
+      schemeFrom = '0';
+      schemeMode = '0';
+      return;
+    }
+    // Automatic: applied at once and the checkbox is fixed (Android "A").
+    if (schemeMode == 'A') setSchemeApplied(true);
+  }
+
+  /// Android LoginActivity.current_date (dd-MM-yyyy); the device date if absent.
+  DateTime _schemeToday() {
+    final p = SessionService.instance.serverCurrentDate.trim().split('-');
+    if (p.length == 3) {
+      final d = int.tryParse(p[0]), m = int.tryParse(p[1]), y = int.tryParse(p[2]);
+      if (d != null && m != null && y != null && y > 31) return DateTime(y, m, d);
+    }
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  /// A-B3 / Android disc_pen_chk: applied → amount = total after the
+  /// discount/penalty, locked, flag DA00/DM00/00PA/00PM; not applied → the
+  /// pending amount again, editable, flag 0000.
+  void setSchemeApplied(bool on) {
+    if (!schemeVisible) return;
+    schemeApplied = on;
+    if (on) {
+      amountCtrl.text = schemeTotal.toStringAsFixed(2);
+      discountPenaltyFlag = schemeIsDiscount
+          ? (schemeMode == 'A' ? 'DA00' : 'DM00')
+          : (schemeMode == 'A' ? '00PA' : '00PM');
+    } else {
+      amountCtrl.text = cablePending > 0 ? cablePending.toStringAsFixed(2) : '0';
+      discountPenaltyFlag = '0000';
+    }
+    notifyListeners();
+  }
 
   /// Mirrors Android's discount TextWatcher (CustomerMgmt_MakePayment_Fragment
   /// afterTextChanged :607–639): the collector types the DISCOUNT and the amount
@@ -220,6 +328,19 @@ class PaymentController extends ChangeNotifier {
       if (stb <= 0) return 'Please enter a valid amount';
     }
 
+    // A-B1 / Android CustomerMgmt_MakePayment_Fragment :693: dealer setting
+    // "restrict partial payment" — a cable-only customer must pay the full due
+    // (amount + discount >= cable pending). Compared in paise to avoid
+    // floating-point noise on a prefilled full amount.
+    if (!isBroadbandCustomer &&
+        SessionService.instance.restrictPartialPayment == 1) {
+      final discount =
+          discountEnabled ? (double.tryParse(discountCtrl.text) ?? 0.0) : 0.0;
+      if (((stb + discount) * 100).round() < (cablePending * 100).round()) {
+        return 'Partial payments not allowed. Please pay the full amount';
+      }
+    }
+
     if (_paymentMethod == 'bank') {
       if (chequeNoCtrl.text.trim().isEmpty) return 'Please enter Cheque / DD number';
       if (bankNameCtrl.text.trim().isEmpty) return 'Please enter bank name';
@@ -261,6 +382,14 @@ class PaymentController extends ChangeNotifier {
     if (isBroadbandCustomer && !_isCombined) {
       return broadcasterPending - parsedBroadbandAmount;
     }
+    // A-B3 / Android :2089-2096: with a scheme applied, outstanding is
+    // counted from the total after the discount / penalty.
+    if (discountPenaltyFlag.contains('D')) {
+      return scheme.totalAfterDiscount - parsedAmount;
+    }
+    if (discountPenaltyFlag.contains('P')) {
+      return scheme.totalAfterPenalty - parsedAmount;
+    }
     final discount = double.tryParse(discountCtrl.text) ?? 0.0;
     return _dueAmount - parsedAmount - discount;
   }
@@ -287,7 +416,10 @@ class PaymentController extends ChangeNotifier {
         billingId:       _billingId,             // from gpa
         amount:          parsedAmount,           // = due − discount (user-entered)
         dueAmount:       _dueAmount,             // from gpa
-        discountApplied: double.tryParse(discountCtrl.text) ?? 0.0,
+        // A-B2 / Android :1851-1859: 0 unless the discount is permitted.
+        discountApplied: discountEnabled
+            ? (double.tryParse(discountCtrl.text) ?? 0.0)
+            : 0.0,
         modeType:        _paymentMethod,         // "cash" or "bank"
         sendSms:         _sendSms,
         remarks:         remarksCtrl.text.trim(),
@@ -298,6 +430,7 @@ class PaymentController extends ChangeNotifier {
         bank:            isBank ? bankNameCtrl.text.trim() : '',
         branch:          isBank ? branchCtrl.text.trim()   : '',
         chequeDate:      isBank ? _chequeDate              : '',
+        discountPenaltyFlag: discountPenaltyFlag, // A-B3
         // Broadband leg — sent only for broadband customers (else 0/empty),
         // mirroring Android. broadband_due = the broadband pending as text.
         broadbandAmount: isBroadbandCustomer ? parsedBroadbandAmount : 0.0,

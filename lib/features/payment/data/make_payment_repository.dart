@@ -70,6 +70,9 @@ class MakePaymentRepository {
     String bank = '',
     String branch = '',
     String chequeDate = '',
+    // A-B3 / Android :1836 discount_penalty_flag_update ("0000" / "DA00" /
+    // "DM00" / "00PA" / "00PM").
+    String discountPenaltyFlag = '0000',
     // Broadband leg — empty/0 for STB-only (Android sets these only when the
     // broadband account id is non-empty).
     double broadbandAmount = 0.0,
@@ -111,7 +114,7 @@ class MakePaymentRepository {
         'mobileNumber': mobileNumber,                   // 14
         'sendsms': sendSms ? 1 : 0,                     // 15
         'payment_flag': 4,                              // 16 mobile-app online payment
-        'discount_penalty_flag': '0000',               // 17 verified 4-char string
+        'discount_penalty_flag': discountPenaltyFlag,  // 17 4-char (A-B3)
         'latitude': latitude,                           // 18 last-known GPS (Android parity; 0.0 fallback)
         'longitude': longitude,                         // 19 last-known GPS (Android parity; 0.0 fallback)
         'discount_applied': discountApplied,            // 20 float STB discount

@@ -118,7 +118,10 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
     String label,
     String opName,
   ) async {
-    showPremiumLoading(context, message: 'Loading...Please wait...');
+    // D7 / Android EmployeeTrackAdapter :197: non-cancellable (Back ignored);
+    // getEmployeeTrackInfo never throws, so the pop below always closes it.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final r = await EmployeeTrackRepository.instance.getEmployeeTrackInfo(
       employeeId: e.employeeId,
       startDate: _fmt(_from), // Android sends dt_fromDt (the From date)

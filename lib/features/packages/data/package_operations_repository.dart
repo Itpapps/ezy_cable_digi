@@ -557,14 +557,22 @@ class PackageOperationsRepository {
         },
         timeout: const Duration(seconds: 70),
       );
+      // C8 / Android Deactivatestb_Frag_New Deactivation_Reasons (:491-525):
+      // the reasons are used only when statusCode is 0; 1 and 2 come with
+      // statusMessage. A reply without a statusCode counts as a failed call (3).
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
       final reasons = <DeactivateReason>[];
-      for (final item in SoapClient.readAll(xml, 'reasonList')) {
-        final id =
-            int.tryParse(SoapClient.readField(item, 'reasonId') ?? '') ?? -1;
-        final name = (SoapClient.readField(item, 'reasonName') ?? '').trim();
-        if (id >= 0) reasons.add(DeactivateReason(id, name));
+      if (status == 0) {
+        for (final item in SoapClient.readAll(xml, 'reasonList')) {
+          final id =
+              int.tryParse(SoapClient.readField(item, 'reasonId') ?? '') ?? -1;
+          final name = (SoapClient.readField(item, 'reasonName') ?? '').trim();
+          if (id >= 0) reasons.add(DeactivateReason(id, name));
+        }
       }
-      return DeactivateReasonsResult(0, '', reasons);
+      return DeactivateReasonsResult(status, message, reasons);
     } on SoapException {
       return const DeactivateReasonsResult(3, 'Server error.', []);
     } on TimeoutException {

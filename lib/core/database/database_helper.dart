@@ -786,8 +786,9 @@ Future<List<Customer>> getFilteredCustomersPaginated({
   // ── GET today's payments from payment queue ──
   Future<List<OfflineCustomer>> getTodayOfflinePayments(String todayDate) async {
     final db = await database;
+    // B-A1 / Android DB_Helper :927: only paid (1) and synced (2) rows count.
     final maps = await db.query(_tblOfflinePayments,
-        where: "paymentDate LIKE ?",
+        where: "flag IN (1, 2) AND paymentDate LIKE ?",
         whereArgs: ['$todayDate%'],
         orderBy: 'id DESC');
     return maps.map(OfflineCustomer.fromMap).toList();

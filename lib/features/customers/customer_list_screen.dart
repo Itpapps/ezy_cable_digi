@@ -17,7 +17,8 @@ import 'paid_customers_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomerListScreen — reads from CustomerListProvider (ChangeNotifier).
 // No local data state — all list, pagination, filters owned by the provider.
-// Navigating back and returning does NOT re-fetch — the data stays in memory.
+// Android parity (D3): every open starts fresh (default filters + new `uc`),
+// and coming back from a payment reloads with the same filters.
 // ─────────────────────────────────────────────────────────────────────────────
 class CustomerListScreen extends StatefulWidget {
   const CustomerListScreen({super.key});
@@ -39,10 +40,12 @@ class _CustomerListScreenState extends State<CustomerListScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // Kick off initial fetch (no-op if already loaded)
+    // Android parity: each open is a new Unpaid_Fragment — default filters and
+    // a fresh fetch (never the previous open's or previous login's list).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<CustomerListProvider>();
-      p.initialLoad();
+      p.reset();
+      p.fetch();
       p.loadGroups(); // dealer groups (dg) → Group filter dropdown
     });
 
@@ -469,8 +472,15 @@ class _CustomerTile extends StatelessWidget {
                               cancelLabel: 'Close',
                             );
                           } else {
+                            final list = context.read<CustomerListProvider>();
                             Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => PaymentOptionsScreen(customer: customer)));
+                                builder: (_) => PaymentOptionsScreen(customer: customer)))
+                                .then((_) {
+                              // Android parity: returning re-creates the list
+                              // and reloads it (same filters). Also fires when
+                              // the receipt replaces the payment screen.
+                              if (context.mounted) list.refresh();
+                            });
                           }
                         },
                         child: Container(

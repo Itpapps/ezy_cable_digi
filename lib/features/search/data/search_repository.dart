@@ -22,6 +22,22 @@ class PrevNextResult {
       [this.useAltCustomerId = 0]);
 }
 
+/// D-B6: one mapped dealer in a common employee's Search / Scan Dealer dropdown.
+class SearchDealer {
+  final int id; // dealer_id (0 = Android "----Select Dealer----")
+  final String name; // business_name
+  const SearchDealer(this.id, this.name);
+}
+
+/// D-B6: result of `getMappeddealers`. 0 ok · 1 none · 2 server · 3 transport
+/// (Android's null response).
+class MappedDealersResult {
+  final int statusCode;
+  final String statusMessage;
+  final List<SearchDealer> dealers;
+  const MappedDealersResult(this.statusCode, this.statusMessage, this.dealers);
+}
+
 /// Customer Search (config key `sc`).
 ///
 /// Android: `SearchCustomer_Fragment_Newdesign` SOAP `searchCustomer`, wrapper
@@ -38,6 +54,10 @@ class SearchRepository {
     required int searchType,
     required String value,
     int isList = 0, // Android custInfo.is_list (0 = list, 1 = enriched detail)
+    // D-B6 / Android SearchCustomer_Fragment_Newdesign :928-932, ScannerFrag
+    // :654-658: custInfo.dealer_id = 0 for a normal employee, the dealer chosen
+    // in the Dealer dropdown for a common employee (0 = "----Select Dealer----").
+    int dealerId = 0,
   }) async {
     final ns = ServerUrlResolver.instance.namespace;
 
@@ -53,7 +73,7 @@ class SearchRepository {
         'imei': _imei,
         'searchType': searchType,
         'searchValue': value,
-        'dealer_id': int.tryParse(SessionService.instance.dealerId) ?? 0,
+        'dealer_id': dealerId,
         'is_list': isList,
       },
     );
@@ -79,10 +99,13 @@ class SearchRepository {
   /// Returns the (first) enriched [Customer] — Android uses index 0. Returns null
   /// on empty / multiple-with-none / malformed / transport error so the caller can
   /// fall back to the list customer: it NEVER blocks navigation or throws.
-  Future<Customer?> fetchCustomerDetail(String customerId) async {
+  Future<Customer?> fetchCustomerDetail(String customerId,
+      {int dealerId = 0}) async {
     if (customerId.trim().isEmpty) return null;
     try {
-      final r = await search(searchType: 100, value: customerId, isList: 1);
+      // D-B6: same dealer_id as the list search (Android reuses cust_search).
+      final r = await search(
+          searchType: 100, value: customerId, isList: 1, dealerId: dealerId);
       if (r.statusCode == 0 && r.customers.isNotEmpty) {
         return r.customers.first; // Android takes SearchCustArrayList.get(0)
       }
@@ -90,6 +113,47 @@ class SearchRepository {
       // Transport/parse failure → caller keeps the original list customer.
     }
     return null;
+  }
+
+  /// D-B6 / Android Getmappeddealersru (SearchCustomer_Fragment_Newdesign
+  /// :701-800, ScannerFrag): SOAP `getMappeddealers` (wrapper + i:type
+  /// `getMappedDealers`, request authToken + imei) → repeated
+  /// `dealerinfo{dealer_id, business_name}`. Same call as the Complaints dealer
+  /// picker, but it keeps the status so the screens can show Android's
+  /// per-status messages. Never throws (transport failure → status 3).
+  Future<MappedDealersResult> fetchMappedDealers() async {
+    try {
+      final ns = ServerUrlResolver.instance.namespace;
+      final xml = await SoapClient.instance.call(
+        url: ServerUrlResolver.instance.loginServerUrl,
+        namespace: ns,
+        soapAction: '$ns/getMappeddealers',
+        methodName: 'getMappeddealers',
+        wrapper: 'getMappedDealers',
+        wrapperType: 'getMappedDealers',
+        fields: {
+          'authToken': SessionService.instance.authToken,
+          'imei': _imei,
+        },
+        timeout: const Duration(seconds: 70),
+      );
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+      final dealers = <SearchDealer>[];
+      if (status == 0) {
+        for (final block in SoapClient.readAll(xml, 'dealerinfo')) {
+          final id =
+              int.tryParse(SoapClient.readField(block, 'dealer_id') ?? '');
+          final name =
+              (SoapClient.readField(block, 'business_name') ?? '').trim();
+          if (id != null && name.isNotEmpty) dealers.add(SearchDealer(id, name));
+        }
+      }
+      return MappedDealersResult(status, message, dealers);
+    } catch (_) {
+      return const MappedDealersResult(3, '', []);
+    }
   }
 
   /// Prev/Next customer navigation — Android parity (SOAP `prenext`, config key

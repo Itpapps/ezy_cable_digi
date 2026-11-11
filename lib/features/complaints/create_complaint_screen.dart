@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../dashboard/data/complaints_repository.dart';
 import 'data/complaint_option.dart';
 
@@ -68,10 +69,46 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
     ]);
     if (!mounted) return;
     setState(() {
-      _categories = results[0];
-      _employees = results[1];
+      _categories = results[0].options;
+      _employees = results[1].options;
       _loading = false;
     });
+    // C8 / Android Complaint_NewComplaint_Fragment ComplaintCategoriesList
+    // (:452-539) then ComplaintAssigned (:714-788): each list shows its own
+    // failure message; the screen stays open.
+    await _showListLoadFailure(results[0], 'Categories not Loaded');
+    if (!mounted) return;
+    await _showListLoadFailure(results[1], 'asigned employees not Loaded');
+  }
+
+  /// C8: Android's message when a dropdown fails to load. status 1 → toast
+  /// "{message}: {notLoaded}"; status 2 → toast "{message}: Contact Support";
+  /// failed call (Android's null response) → "Server is Un reachable!" dialog
+  /// (OK closes it). Any other status shows nothing (Android).
+  Future<void> _showListLoadFailure(
+      ComplaintOptionsResult r, String notLoaded) async {
+    if (r.statusCode == 1) {
+      showPremiumSnackBar(context, '${r.statusMessage}: $notLoaded',
+          isError: true);
+    } else if (r.statusCode == 2) {
+      showPremiumSnackBar(context, '${r.statusMessage}: Contact Support',
+          isError: true);
+    } else if (r.statusCode == 3) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Server is Un reachable!'),
+          content: const Text(
+              'Please check your Internet connection and try again.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _loadLocation() async {
@@ -101,6 +138,19 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
     }
     if (_submitting) return;
     setState(() => _submitting = true);
+    // C12 / Android Complaint_NewComplaint_Fragment :1060: non-cancellable
+    // "Registering Complaint,   Please wait..." (Back ignored). Closed exactly
+    // once; createComplaint itself never throws.
+    showPremiumLoading(context,
+        message: 'Registering Complaint,   Please wait...', canPop: false);
+    var loaderOpen = true;
+    void closeLoader() {
+      if (loaderOpen && mounted) {
+        loaderOpen = false;
+        Navigator.of(context).pop();
+      }
+    }
+
     try {
       final result = await ComplaintsRepository.instance.createComplaint(
         customerId: _customerId,
@@ -111,6 +161,7 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
         longitude: _long,
       );
       if (!mounted) return;
+      closeLoader();
       if (result.isSuccess) {
         _showSuccessDialog();
       } else {
@@ -125,6 +176,7 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
       }
     } catch (_) {
       if (mounted) {
+        closeLoader();
         _showErrorDialog('Could not connect to server. Please try again.');
       }
     } finally {

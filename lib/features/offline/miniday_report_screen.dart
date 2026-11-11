@@ -5,7 +5,6 @@ import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
-import '../../core/services/offline_sync_service.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../payment/printer_launcher.dart';
 
@@ -21,7 +20,6 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
   final _printerService = RealBluetoothService();
   Map<String, dynamic>? _summary;
   bool _loading = true;
-  int _pendingToSync = 0;
 
   @override
   void initState() {
@@ -40,8 +38,6 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
     final todayStr =
         '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
     final s = await _db.getOfflineTodaySummary(todayStr);
-    final pendingPayments = await _db.getOfflinePaidCount();
-    _pendingToSync = pendingPayments;
     setState(() {
       _summary = s;
       _loading = false;
@@ -89,11 +85,6 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
       printerService: _printerService,
       buildLines: _buildMinidayLines,
     );
-  }
-
-  Future<void> _sync() async {
-    await OfflineSyncService.instance.syncPendingToServer();
-    await _load();
   }
 
   @override
@@ -272,33 +263,9 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  _pendingToSync > 0
-                      ? SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton.icon(
-                            onPressed: _sync,
-                            icon: const Icon(Icons.sync),
-                            label: const Text(
-                              'Click to Sync',
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        )
-                      : SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: Center(
-                            child: Text(
-                              'Synced.',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: Colors.redAccent.shade700,
-                              ),
-                            ),
-                          ),
-                        ),
+                  // B8: no sync button here — Android's offline Mini Day
+                  // report has Print only (Offline_MiniDay_Report_Fragment
+                  // :166-206). Owner's decision: remove it like Android.
                   const SizedBox(height: 8),
                 ],
               ),

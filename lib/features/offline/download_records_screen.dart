@@ -8,6 +8,8 @@ import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/widgets/premium_dialog.dart';
+import '../../widgets/app_drawer.dart'
+    show offlineDataMatchesDealer, showIdMismatch;
 
 class DownloadRecordsScreen extends StatefulWidget {
   const DownloadRecordsScreen({super.key});
@@ -87,16 +89,26 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
   }
 
   Future<void> _sync() async {
+    // B3a / Android MainActivity :634-655: the offline data must belong to this
+    // login (same check as the drawer's Sync/Clear entry, app_drawer :436).
+    if (!await offlineDataMatchesDealer()) {
+      if (mounted) await showIdMismatch(context);
+      return;
+    }
     try {
-      final n = await OfflineSyncService.instance.syncPendingToServer();
+      final r = await OfflineSyncService.instance.syncPendingToServer();
       if (!mounted) return;
       showPremiumSnackBar(
         context,
-        n > 0
-            ? 'Synced $n record(s)'
-            // Android SyncData_Fragment text (also used by Sync/Clear).
-            : 'No payments has been made (or) Check your internet connection.',
-        isSuccess: n > 0,
+        r.failed > 0
+            // B2: rejected/failed payments stay pending (Android "Not synced").
+            ? 'Synced ${r.synced} record(s), ${r.failed} not synced'
+            : r.synced > 0
+                ? 'Synced ${r.synced} record(s)'
+                // Android SyncData_Fragment text (also used by Sync/Clear).
+                : 'No payments has been made (or) Check your internet connection.',
+        isSuccess: r.synced > 0 && r.failed == 0,
+        isError: r.failed > 0,
       );
       await _refresh();
     } catch (e) {
@@ -106,6 +118,12 @@ class _DownloadRecordsScreenState extends State<DownloadRecordsScreen> {
   }
 
   Future<void> _clearData() async {
+    // B3a: same ID check as _sync (Android clears only via guarded Sync Data).
+    if (!await offlineDataMatchesDealer()) {
+      if (mounted) await showIdMismatch(context);
+      return;
+    }
+    if (!mounted) return;
     final ok = await showPremiumConfirm(
       context: context,
       title: 'Clear All Data',

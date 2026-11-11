@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/services/session_service.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../search/data/search_repository.dart';
+import '../search/search_dealers.dart';
 import '../customer/customer_details_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,11 +27,30 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
   bool _permissionGranted = false;
   bool _checkingPermission = true;
   MobileScannerController? _scanCtrl;
+  // D-B6 / Android ScannerFrag :145-150: Dealer dropdown for common employees
+  // only, default "----Select Dealer----" (0).
+  final bool _isCommonEmployee = SessionService.instance.commonEmployee != 0;
+  List<SearchDealer> _dealers = const [kSelectDealer];
+  int _dealerId = 0;
 
   @override
   void initState() {
     super.initState();
     _requestCameraPermission();
+    if (_isCommonEmployee) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadDealers();
+      });
+    }
+  }
+
+  Future<void> _loadDealers() async {
+    final list = await loadSearchDealers(context);
+    if (list == null || !mounted) return;
+    setState(() {
+      _dealers = list;
+      _dealerId = 0; // Android: items[0] "----Select Dealer----" is selected
+    });
   }
 
   Future<void> _requestCameraPermission() async {
@@ -81,19 +103,45 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
     // Android ScannerFrag: Serial Number → searchType 6, VC Number → 7,
     // then searchCustomer(sc) → open the customer.
     final searchType = _selectedType == 'VC Number' ? 7 : 6;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-    final result = await SearchRepository.instance
-        .search(searchType: searchType, value: _scannedValue);
+    // D1 / Android ScannerFrag cust_search :632: non-cancellable "Searching...,
+    // Please wait..." (Back ignored), so the pops below always close THIS
+    // loader and never the Scan screen.
+    showPremiumLoading(context,
+        message: 'Searching...,   Please wait...', canPop: false);
+    // D-B6 / Android ScannerFrag :654-658: dealer_id 0 for a normal employee,
+    // the chosen dealer for a common employee.
+    final dealerId = _isCommonEmployee ? _dealerId : 0;
+    final SearchResult result;
+    try {
+      result = await SearchRepository.instance.search(
+          searchType: searchType, value: _scannedValue, dealerId: dealerId);
+    } catch (_) {
+      // D1 / Android ScannerFrag :941-955: no server reply → close the loader
+      // and show "Server is busy or Un reachable!"; OK only closes the dialog.
+      if (!mounted) return;
+      Navigator.pop(context); // dismiss loading
+      showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Server is busy or Un reachable!'),
+          content: const Text('Please try again after sometime'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     // Android parity: on resolving the customer, fetch the enriched detail
     // (is_list=1) so is_show / tmp_activation reach the operations grid. Falls
     // back to the scan result if the detail fetch yields nothing.
     final enriched = (result.statusCode == 0 && result.customers.isNotEmpty)
-        ? await SearchRepository.instance
-            .fetchCustomerDetail(result.customers.first.lcoCustomerId)
+        ? await SearchRepository.instance.fetchCustomerDetail(
+            result.customers.first.lcoCustomerId,
+            dealerId: dealerId)
         : null;
     if (!mounted) return;
     Navigator.pop(context); // dismiss loading
@@ -163,6 +211,43 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
               child: Column(
                 children: [
+                  // ── D-B6: Dealer Dropdown (common employees only, above the
+                  //    type dropdown like Android's fragment_scanner.xml) ────
+                  if (_isCommonEmployee) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: _dealers.any((d) => d.id == _dealerId)
+                              ? _dealerId
+                              : 0,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down,
+                              color: AppColors.primary),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                          items: _dealers
+                              .map((d) => DropdownMenuItem(
+                                    value: d.id,
+                                    child: Text(d.name,
+                                        overflow: TextOverflow.ellipsis),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setState(() => _dealerId = v);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   // ── Type Dropdown ────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -14,6 +14,9 @@ class CustomerListProvider extends ChangeNotifier {
   List<Customer> _customers = [];
   bool _isLoading = false;
   bool _loaded = false;
+  // Bumped by reset(); a fetch/loadGroups that started before a reset drops
+  // its (stale) result instead of writing it into the new session.
+  int _generation = 0;
   int _statusCode = 0; // 0 ok · 1 no records · 3 failed
   String _statusMessage = '';
   // Android Unpaid_Fragment filters — options HARDCODED exactly like Android
@@ -56,8 +59,11 @@ class CustomerListProvider extends ChangeNotifier {
 
   /// Load dealer groups from the API to populate the dropdown.
   Future<void> loadGroups() async {
+    final gen = _generation;
     try {
-      _groups = await DealerGroupsRepository.instance.fetch();
+      final groups = await DealerGroupsRepository.instance.fetch();
+      if (gen != _generation) return; // reset() ran meanwhile — stale
+      _groups = groups;
       notifyListeners();
     } catch (_) {
       // keep the default ['Select'] on failure
@@ -100,6 +106,27 @@ class CustomerListProvider extends ChangeNotifier {
     refresh();
   }
 
+  // ── Reset (D3) ──────────────────────────────────────────────────────────────
+  /// Android parity: every Customer List open is a NEW Unpaid_Fragment (default
+  /// filters + a fresh `uc` call), and logout finishes the activity. This
+  /// provider is app-wide, so it must be cleared explicitly: on every list
+  /// open and whenever the Login screen is shown.
+  void reset() {
+    _generation++;
+    _customers = [];
+    _isLoading = false;
+    _loaded = false;
+    _statusCode = 0;
+    _statusMessage = '';
+    _paidUnpaid = 'Total Unpaid List';
+    _customerStatus = 'All';
+    _stbStatus = 'All';
+    _billMonth = DateTime.now();
+    _group = 'Select';
+    _groups = const [DealerGroup(0, 'Select')];
+    notifyListeners();
+  }
+
   // ── Load (uc) ────────────────────────────────────────────────────────────────
   Future<void> initialLoad() async {
     if (_loaded) return;
@@ -113,6 +140,7 @@ class CustomerListProvider extends ChangeNotifier {
 
   Future<void> fetch() async {
     if (_isLoading || _loaded) return; // uc loads the full list once; no pagination
+    final gen = _generation;
     _isLoading = true;
     notifyListeners();
     try {
@@ -123,19 +151,23 @@ class CustomerListProvider extends ChangeNotifier {
         groupId: selectedGroupId,
         billMonth: _billMonthValue(),
       );
+      if (gen != _generation) return; // reset() ran meanwhile — stale
       _statusCode = result.statusCode;
       _statusMessage = result.statusMessage;
       _customers = result.customers;
     } catch (error, stackTrace) {
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'CustomerListProvider.fetch');
+      if (gen != _generation) return; // reset() ran meanwhile — stale
       _statusCode = 3;
       _statusMessage = 'Server is busy or not reachable';
       _customers = [];
-      ErrorHandlerService.recordError(error, stackTrace,
-          reason: 'CustomerListProvider.fetch');
     } finally {
-      _isLoading = false;
-      _loaded = true;
-      notifyListeners();
+      if (gen == _generation) {
+        _isLoading = false;
+        _loaded = true;
+        notifyListeners();
+      }
     }
   }
 

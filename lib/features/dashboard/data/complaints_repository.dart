@@ -25,6 +25,19 @@ class ComplaintActionResult {
   bool get isSuccess => statusCode == 0;
 }
 
+/// C8: result of a Create-Complaint dropdown load (`complaintCategories` /
+/// `assignedemployeedetails`). [options] always starts with
+/// `ComplaintOption.select`; the server items follow only when statusCode is 0.
+/// statusCode 0 ok · 1 not loaded · 2 contact support · 3 failed call
+/// (Android's null response).
+class ComplaintOptionsResult {
+  final int statusCode;
+  final String statusMessage;
+  final List<ComplaintOption> options;
+  const ComplaintOptionsResult(
+      this.statusCode, this.statusMessage, this.options);
+}
+
 /// The safe default status options, used when the `complaintTypes` LOV cannot be
 /// loaded (so the Update screen is still usable). Mirrors the values the existing
 /// app shows. 'Select' is always the first (no-op) option.
@@ -279,7 +292,9 @@ class ComplaintsRepository {
   /// Wrapper `compCatInfo`/`getComplaintCategoriesInfo`; request `authToken`+`imei`.
   /// Returns a list led by `ComplaintOption.select`. On any failure returns just
   /// `[Select]` — never throws (the Create screen stays usable).
-  Future<List<ComplaintOption>> fetchComplaintCategories() async {
+  /// C8: also returns statusCode / statusMessage (Android
+  /// ComplaintCategoriesList :452-539) so the screen can show Android's message.
+  Future<ComplaintOptionsResult> fetchComplaintCategories() async {
     final list = <ComplaintOption>[ComplaintOption.select];
     try {
       final ns = ServerUrlResolver.instance.namespace;
@@ -296,24 +311,35 @@ class ComplaintsRepository {
         },
         timeout: const Duration(seconds: 60),
       );
-      for (final inner in SoapClient.readAll(xml, 'complaintCategories')) {
-        final id = int.tryParse(SoapClient.readField(inner, 'categoryId') ?? '');
-        final name = (SoapClient.readField(inner, 'categoryName') ?? '').trim();
-        if (id != null && id != 0 && name.isNotEmpty) {
-          list.add(ComplaintOption(id, name));
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+      if (status == 0) {
+        for (final inner in SoapClient.readAll(xml, 'complaintCategories')) {
+          final id =
+              int.tryParse(SoapClient.readField(inner, 'categoryId') ?? '');
+          final name =
+              (SoapClient.readField(inner, 'categoryName') ?? '').trim();
+          if (id != null && id != 0 && name.isNotEmpty) {
+            list.add(ComplaintOption(id, name));
+          }
         }
       }
+      return ComplaintOptionsResult(status, message, list);
     } catch (_) {
       // keep just [Select]
+      return const ComplaintOptionsResult(3, '', [ComplaintOption.select]);
     }
-    return list;
   }
 
   /// Assigned-employees LOV (key `aed`, method `assignedemployeedetails`).
   /// Wrapper `assignedinfo`/`assignedEmployeeInfo`; request `authToken`+`imei`+
   /// `customerId` (the numeric customer_id). Returns a list led by
   /// `ComplaintOption.select`. Never throws.
-  Future<List<ComplaintOption>> fetchAssignedEmployees(String customerId) async {
+  /// C8: also returns statusCode / statusMessage (Android ComplaintAssigned
+  /// :714-788) so the screen can show Android's message.
+  Future<ComplaintOptionsResult> fetchAssignedEmployees(
+      String customerId) async {
     final list = <ComplaintOption>[ComplaintOption.select];
     try {
       final ns = ServerUrlResolver.instance.namespace;
@@ -334,18 +360,26 @@ class ComplaintsRepository {
         },
         timeout: const Duration(seconds: 60),
       );
-      for (final inner in SoapClient.readAll(xml, 'assignedemployee_details')) {
-        final id = int.tryParse(SoapClient.readField(inner, 'employee_id') ?? '');
-        final name =
-            (SoapClient.readField(inner, 'employee_name') ?? '').trim();
-        if (id != null && id != 0 && name.isNotEmpty) {
-          list.add(ComplaintOption(id, name));
+      final status =
+          int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '') ?? 3;
+      final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+      if (status == 0) {
+        for (final inner
+            in SoapClient.readAll(xml, 'assignedemployee_details')) {
+          final id =
+              int.tryParse(SoapClient.readField(inner, 'employee_id') ?? '');
+          final name =
+              (SoapClient.readField(inner, 'employee_name') ?? '').trim();
+          if (id != null && id != 0 && name.isNotEmpty) {
+            list.add(ComplaintOption(id, name));
+          }
         }
       }
+      return ComplaintOptionsResult(status, message, list);
     } catch (_) {
       // keep just [Select]
+      return const ComplaintOptionsResult(3, '', [ComplaintOption.select]);
     }
-    return list;
   }
 
   /// Create a complaint (key `crecomp`, method `createComplaint`).

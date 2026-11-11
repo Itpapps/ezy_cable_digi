@@ -40,6 +40,10 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
   Future<void> _confirm() async {
     if (_busy) return;
     setState(() => _busy = true);
+    // C12 / Android BillDetails_Act :178: non-cancellable "Loading...Please
+    // wait..." (Back ignored); activatePackages never throws.
+    showPremiumLoading(context,
+        message: 'Loading...Please wait...', canPop: false);
     final res = await CustomPackagesRepository.instance.activatePackages(
       customerId: widget.customer.lcoCustomerId,
       packages: widget.packages,
@@ -48,6 +52,7 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
       autorenewal: widget.autorenewal,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _busy = false);
     if (res.statusCode == 3) {
       showPremiumSnackBar(context, 'Failed.', isError: true);

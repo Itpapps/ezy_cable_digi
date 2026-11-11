@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
@@ -77,6 +78,52 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
         _message = 'No Boxes For this Customer';
       }
     });
+    // C8 / Android Deactivatestb_Frag_New. Boxes (packageoperations :307-343):
+    // status 1 → "No Details Found!" + server message, OK closes the screen
+    // (:317; Back only closes the dialog); failed call → "Failed." toast.
+    if (boxesRes.statusCode == 1) {
+      final ok =
+          await _loadFailedDialog('No Details Found!', boxesRes.statusMessage);
+      if (!mounted) return;
+      if (ok == true) {
+        Navigator.pop(context);
+        return;
+      }
+    } else if (boxesRes.statusCode == 3) {
+      showPremiumSnackBar(context, 'Failed.', isError: true);
+    }
+    // Reasons (Deactivation_Reasons.onPostExecute :491-545): status 1 →
+    // "No Records Found!"; status 2 → "{message}: Contact Support" toast;
+    // failed call (Android's null response) → "Server is busy or not
+    // reachable!". The screen stays. Any other status shows nothing (Android).
+    if (reasonsRes.statusCode == 1) {
+      await _loadFailedDialog('No Records Found!', reasonsRes.statusMessage);
+    } else if (reasonsRes.statusCode == 2) {
+      showPremiumSnackBar(
+          context, '${reasonsRes.statusMessage}: Contact Support',
+          isError: true);
+    } else if (reasonsRes.statusCode == 3) {
+      await _loadFailedDialog(
+          'Server is busy or not reachable!', 'Please try again after sometime');
+    }
+  }
+
+  /// C8: Android's load-failure AlertDialog — cancelable (Back / outside tap
+  /// close it and return null); OK returns true.
+  Future<bool?> _loadFailedDialog(String title, String message) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadLocation() async {
@@ -309,6 +356,15 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
     final serial = box.boxNumber;
 
     setState(() => _submitting = true);
+    // C12 / Android Deactivatestb_Frag_New: non-cancellable loader (Back
+    // ignored) — "Deactivation in progress...,   Please wait..." for the SOAP
+    // path (reason 17, :559), "Loading...Please wait..." for REST (:704). Both
+    // requests never throw (status 3 on timeout / transport).
+    showPremiumLoading(context,
+        message: _reasonId == 17
+            ? 'Deactivation in progress...,   Please wait...'
+            : 'Loading...Please wait...',
+        canPop: false);
     final repo = PackageOperationsRepository.instance;
     // VERIFIED branch: reasonId 17 ("Unpaid Customer") → db (SOAP); else → ds (REST).
     final PackageWriteResult r = _reasonId == 17
@@ -327,6 +383,7 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
             lat: _lat,
             lang: _lang);
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
 
     // Production response handling:

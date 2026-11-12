@@ -16,6 +16,13 @@ import 'core/services/notification_service.dart';
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
+/// D8: notifies only when a full SCREEN (PageRoute) is popped back to a
+/// screen — never for dialogs, bottom sheets, pickers or dropdown menus
+/// (those are PopupRoutes). The Dashboard uses it to reload its figures on
+/// every return from another screen, like Android re-creating the fragment.
+final RouteObserver<PageRoute<dynamic>> pageRouteObserver =
+    RouteObserver<PageRoute<dynamic>>();
+
 Future<void> mainEntry() async {
   WidgetsFlutterBinding.ensureInitialized();
   ErrorHandlerService.init();
@@ -54,7 +61,7 @@ class EzyCableDigiApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             themeMode: ThemeMode.light,
             theme: themeData,
-            navigatorObservers: [routeObserver],
+            navigatorObservers: [routeObserver, pageRouteObserver],
             home: const LoginScreen(),
           );
         },

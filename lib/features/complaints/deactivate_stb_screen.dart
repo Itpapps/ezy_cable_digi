@@ -64,7 +64,10 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
       _reasonId = 0;
       if (boxesRes.statusCode == 0 && boxesRes.boxes.isNotEmpty) {
         _boxes = boxesRes.boxes;
-        _selectedBox = boxesRes.boxes.first;
+        // C-B2 / Android Deactivatestb_Frag_New :259-261: the box list starts
+        // on "Select" — no box is chosen until the user picks one (the first
+        // box must never be deactivated by default).
+        _selectedBox = null;
         _error = false;
       } else if (boxesRes.statusCode == 3) {
         _boxes = const [];
@@ -157,7 +160,8 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
-    if (_error || _selectedBox == null) {
+    // C-B2: the form needs boxes, not a selected box ("Select" is valid).
+    if (_error || _boxes.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -273,20 +277,30 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
   }
 
   Widget _boxDropdown() {
+    const selectLabel = Text('Select',
+        overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13));
     return _dropdownBox(
-      child: DropdownButton<CustomerBox>(
+      // C-B2 / Android :259-261 + :153-166: "Select" (no box) is the first
+      // item and the starting value; choosing it again clears the box, which
+      // hides DEACTIVATE (Android stat "Select" → INVISIBLE).
+      child: DropdownButton<CustomerBox?>(
         value: _selectedBox,
         isDense: true,
         isExpanded: true,
+        hint: selectLabel, // shown while no box is chosen
         icon: const Icon(Icons.keyboard_arrow_down),
-        items: _boxes
-            .map((b) => DropdownMenuItem(
-                  value: b,
-                  child: Text(b.boxNumber.isEmpty ? b.vcNumber : b.boxNumber,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13)),
-                ))
-            .toList(),
+        items: [
+          const DropdownMenuItem<CustomerBox?>(
+            value: null,
+            child: selectLabel,
+          ),
+          ..._boxes.map((b) => DropdownMenuItem<CustomerBox?>(
+                value: b,
+                child: Text(b.boxNumber.isEmpty ? b.vcNumber : b.boxNumber,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13)),
+              )),
+        ],
         onChanged: (b) => setState(() => _selectedBox = b),
       ),
     );
@@ -314,13 +328,14 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return; // double-submit guard
+    // C-B2 / Android :184-190: the reason is checked first, then the box.
+    if (_reasonId == 0) {
+      _snack('Select Reason to Deactivate');
+      return;
+    }
     final box = _selectedBox;
     if (box == null) {
       _snack('Select Box to Deactivate');
-      return;
-    }
-    if (_reasonId == 0) {
-      _snack('Select Reason to Deactivate');
       return;
     }
 

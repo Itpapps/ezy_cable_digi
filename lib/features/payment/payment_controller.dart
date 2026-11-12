@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -9,6 +10,19 @@ import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
 import 'data/pending_amount_repository.dart';
 import 'data/make_payment_repository.dart';
+
+/// R1: the server answered makePayments with a non-zero statusCode (payment
+/// NOT made). Carries Android's statusCode/statusMessage so the screen can
+/// show Android's per-status message (CustomerMgmt_MakePayment_Fragment
+/// :2348-2367) instead of a raw "Exception: …" text.
+class PaymentRejectedException implements Exception {
+  final int statusCode;
+  final String statusMessage;
+  const PaymentRejectedException(this.statusCode, this.statusMessage);
+
+  @override
+  String toString() => 'PaymentRejected($statusCode): $statusMessage';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PaymentController — ChangeNotifier for PaymentOptionsScreen
@@ -54,6 +68,9 @@ class PaymentController extends ChangeNotifier {
   // A3: last gpa outcome — 0 ok · the server's statusCode · -1 no reply
   // (transport failure, Android's null response).
   int     pendingStatus = 0;
+  // A-B8: true once gpa answered with status 0 (Android only then sets the
+  // PAY LATER visibility; before that / on failure the button stays visible).
+  bool    pendingLoaded = false;
   int     _billingId     = 0; // bill to settle (from gpa) — sent to mpay
   double  _dueAmount     = 0; // due_amount (from gpa) — sent to mpay (= cable leg)
   String? discountError;      // set when discount > due (mirrors Android toast)
@@ -122,6 +139,28 @@ class PaymentController extends ChangeNotifier {
     }
   }
 
+  // A1 / Android CustomerMgmt_MakePayment_Fragment :245 + :1945-1951: the
+  // mobile-network state is read when the payment screen opens; makePayments
+  // then waits 100 s if mobile data is connected, otherwise 200 s. Default
+  // 200 s = Android's branch when the mobile state is not connected.
+  Duration _payTimeout = const Duration(seconds: 200);
+
+  /// A1: called once at screen open (like [captureLocation]); never throws,
+  /// never blocks the pay path. Any failure keeps the 200 s default.
+  Future<void> capturePaymentTimeout() async {
+    try {
+      final conn = await Connectivity()
+          .checkConnectivity()
+          .timeout(const Duration(seconds: 3));
+      _payTimeout = conn.contains(ConnectivityResult.mobile)
+          ? const Duration(seconds: 100)
+          : const Duration(seconds: 200);
+    } catch (e, s) {
+      ErrorHandlerService.recordError(e, s,
+          reason: 'PaymentController.capturePaymentTimeout');
+    }
+  }
+
   /// gpa: fetch the live pending amount and prefill the amount field.
   /// altCustomerId = the customer's customer_id (stored in lcoCustomerId).
   Future<void> loadPendingAmount() async {
@@ -154,6 +193,10 @@ class PaymentController extends ChangeNotifier {
         // pending (customer credit/advance) prefills "0", exactly like Android's
         // `if (pendingAmount > 0) et_amount.setText(...) else et_amount.setText("0")`.
         amountCtrl.text = cablePending > 0 ? cablePending.toStringAsFixed(2) : '0';
+        // A-B7 / Android :1510: nothing pending → the SMS box is unticked
+        // (a positive pending keeps the dealer default, like Android).
+        if (cablePending <= 0) _sendSms = false;
+        pendingLoaded = true; // A-B8
         // Android prefills the broadband field only when there is a broadband due.
         if (broadcasterPending > 0) {
           broadbandAmountCtrl.text = broadcasterPending.toStringAsFixed(2);
@@ -179,6 +222,13 @@ class PaymentController extends ChangeNotifier {
   bool get discountEnabled =>
       SessionService.instance.enablePaymentDiscount == 1 &&
       SessionService.instance.customerDiscount;
+
+  /// A-B8 / Android CustomerMgmt_MakePayment_Fragment :1500-1511 (button
+  /// visible by default in custmgmt_makepayment.xml): after a successful gpa,
+  /// PAY LATER shows only when the cable pending is above 0 — so STB-only and
+  /// combined STB & Broadband customers with a cable due get it; broadband-only
+  /// (cable pending 0) and zero-pending customers don't.
+  bool get showPayLater => !pendingLoaded || cablePending > 0;
 
   /// Broadband customer? Android's master switch is "broadband account id
   /// non-empty" (set for customer_type 1 and 2). Empty → STB-only.
@@ -325,7 +375,19 @@ class PaymentController extends ChangeNotifier {
       }
     } else {
       if (amountCtrl.text.isEmpty) return 'Please enter amount';
-      if (stb <= 0) return 'Please enter a valid amount';
+      // A-B7 / Android :682: below 1 is blocked unless a discount is entered
+      // (so a full-discount payment of 0 can be posted).
+      final discountVal =
+          discountEnabled ? (double.tryParse(discountCtrl.text) ?? 0.0) : 0.0;
+      if (stb < 1 && discountVal == 0) {
+        return 'Amount should not be less than 1/Enter Valid amount.';
+      }
+    }
+
+    // A-B7 / Android :688-690: an entered mobile number must be 10 digits.
+    final mobile = mobileCtrl.text.trim();
+    if (mobile.isNotEmpty && mobile.length < 10) {
+      return 'Enter 10 digit mobile number';
     }
 
     // A-B1 / Android CustomerMgmt_MakePayment_Fragment :693: dealer setting
@@ -338,6 +400,25 @@ class PaymentController extends ChangeNotifier {
           discountEnabled ? (double.tryParse(discountCtrl.text) ?? 0.0) : 0.0;
       if (((stb + discount) * 100).round() < (cablePending * 100).round()) {
         return 'Partial payments not allowed. Please pay the full amount';
+      }
+    }
+
+    // A-B7 / Android :700-717: with the discount field on, a discount over the
+    // max % of the bill, or over the bill itself, is blocked BEFORE the
+    // confirm popup (Android checks the cable pending, cap first).
+    if (discountEnabled) {
+      final raw = discountCtrl.text.trim();
+      final entered = double.tryParse(raw);
+      if (raw.isNotEmpty && entered != null) {
+        final maxPct = SessionService.instance.maxDiscountPercentAllowed;
+        final maxAllowed = cablePending * maxPct / 100.0;
+        if (entered > maxAllowed) {
+          return 'Discount cannot exceed $maxPct% of bill amount '
+              '(Max: ₹${maxAllowed.toStringAsFixed(2)})';
+        }
+        if (entered > cablePending) {
+          return 'Discount cannot exceed bill amount';
+        }
       }
     }
 
@@ -440,13 +521,13 @@ class PaymentController extends ChangeNotifier {
         // Last-known GPS captured at screen open (Android parity; '0.0' fallback).
         latitude:        _latitude,
         longitude:       _longitude,
+        timeout:         _payTimeout, // A1: 100 s mobile data · 200 s other
       );
 
       if (!result.isSuccess) {
-        // Surface the server's message — do NOT build a receipt on failure.
-        throw Exception(
-          result.statusMessage.isEmpty ? 'Payment failed' : result.statusMessage,
-        );
+        // Surface the server's status/message — do NOT build a receipt on
+        // failure. R1: typed, so the screen shows Android's message.
+        throw PaymentRejectedException(result.statusCode, result.statusMessage);
       }
       lastResult = result; // keep for the receipt (dealer name, bill month, …)
 

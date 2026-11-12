@@ -33,6 +33,17 @@ class _DeactivateConfirmScreenState extends State<DeactivateConfirmScreen> {
 
   Future<void> _confirm() async {
     if (_busy) return;
+    // C-B3 / Android DigiPackages_deactivation :100-125: ask before sending.
+    _busy = true; // block a second tap while the question is open
+    final yes = await showPremiumConfirm(
+      context: context,
+      title: 'Deactivate Packages',
+      body: 'Are you sure you want to Deactivate packages?',
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    );
+    _busy = false;
+    if (!yes || !mounted) return;
     setState(() => _busy = true);
     // C12 / Android DigiPackages_deactivation :169: non-cancellable
     // "Loading...Please wait..." (Back ignored); deactivatePackages never throws.

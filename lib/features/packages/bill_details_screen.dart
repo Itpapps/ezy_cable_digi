@@ -39,6 +39,17 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
 
   Future<void> _confirm() async {
     if (_busy) return;
+    // C-B3 / Android BillDetails_Act :108-138: ask before sending.
+    _busy = true; // block a second tap while the question is open
+    final yes = await showPremiumConfirm(
+      context: context,
+      title: 'Activate Packages',
+      body: 'Are you sure you want to Activate packages?',
+      confirmLabel: 'Yes',
+      cancelLabel: 'No',
+    );
+    _busy = false;
+    if (!yes || !mounted) return;
     setState(() => _busy = true);
     // C12 / Android BillDetails_Act :178: non-cancellable "Loading...Please
     // wait..." (Back ignored); activatePackages never throws.

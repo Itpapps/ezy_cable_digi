@@ -5,6 +5,7 @@ import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/database/database_helper.dart';
+import '../../core/services/offline_mode_service.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../payment/printer_launcher.dart';
 
@@ -37,7 +38,26 @@ class _MinidayReportScreenState extends State<MinidayReportScreen> {
     final now = DateTime.now();
     final todayStr =
         '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-    final s = await _db.getOfflineTodaySummary(todayStr);
+    final raw = await _db.getOfflineTodaySummary(todayStr);
+    // B-B6 / Android Offline_MiniDay_Report_Fragment :85-160: each total is
+    // rounded to 2 decimals, then the saved dealer rounding is applied —
+    // ACTUAL keeps it, ROUND = half up, anything else = CEIL. The rounded
+    // totals feed both the screen and the printed mini report.
+    final mode = await OfflineModeService.instance.amountRound;
+    double r(Object? v) {
+      final d = ((v as num?)?.toDouble() ?? 0.0);
+      final two = (d * 100).round() / 100;
+      if (mode == 'ACTUAL') return two;
+      if (mode == 'ROUND') return (two + 0.5).floorToDouble();
+      return two.ceilToDouble();
+    }
+    final s = <String, dynamic>{
+      ...raw,
+      'cashAmount': r(raw['cashAmount']),
+      'bankAmount': r(raw['bankAmount']),
+      'totalAmount': r(raw['totalAmount']),
+    };
+    if (!mounted) return;
     setState(() {
       _summary = s;
       _loading = false;

@@ -93,6 +93,16 @@ class OfflineDataService {
         throw OfflineDataException('No data received from server.');
       }
 
+      // B6 / Android OfflineDataDownload_Fragment :255-395: the reply must be
+      // a whole number of 332-char records. Android hits the cut last record
+      // (substring throws) and shows this message; Flutter used to drop it
+      // silently and report success. Checked BEFORE the database is touched,
+      // so the previous offline data stays intact (atomic replace below).
+      if (data.length % 332 != 0) {
+        throw OfflineDataException(
+            'Error downloading data. Please contact Customer Care');
+      }
+
       // Split into 332-char records
       final records = <String>[];
       for (var i = 0; i + 332 <= data.length; i += 332) {

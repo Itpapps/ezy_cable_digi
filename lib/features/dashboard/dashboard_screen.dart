@@ -43,6 +43,16 @@ import '../../core/config/app_config.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
 
+/// D8: RouteAware listener for [pageRouteObserver] — calls [onReturn] when a
+/// full screen above the dashboard is closed back to it.
+class _PageReturnWatcher with RouteAware {
+  final VoidCallback onReturn;
+  _PageReturnWatcher(this.onReturn);
+
+  @override
+  void didPopNext() => onReturn();
+}
+
 enum _TicketStatus { assigned, inprocess }
 
 class _TicketItem {
@@ -199,8 +209,13 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     }
   }
 
+  // D8: KPIs now reload on every return, so never stack a second KPI error
+  // dialog on top of one that is still open.
+  bool _kpiDialogOpen = false;
+
   void _showKpiErrorDialog({required String title, required String message}) {
-    if (!mounted) return;
+    if (!mounted || _kpiDialogOpen) return;
+    _kpiDialogOpen = true;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -221,7 +236,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
           ),
         ],
       ),
-    );
+    ).whenComplete(() => _kpiDialogOpen = false);
   }
 
   // DUMMY login-notification popup — one-shot guard so it shows only once.
@@ -292,15 +307,23 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     );
   }
 
+  // D8: separate listener on the page-only observer, so only a full screen
+  // closing back to the dashboard reloads it (dialogs / sheets never do).
+  late final _PageReturnWatcher _pageWatcher =
+      _PageReturnWatcher(_onReturnedFromScreen);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)!);
+    final route = ModalRoute.of(context)!;
+    routeObserver.subscribe(this, route);
+    if (route is PageRoute) pageRouteObserver.subscribe(_pageWatcher, route);
   }
 
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    pageRouteObserver.unsubscribe(_pageWatcher);
     LocationSyncService.instance.stopDashboardTracking();
     _dash.removeListener(_onDash);
     _dash.dispose();
@@ -314,27 +337,36 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   @override
   void didPopNext() {
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
-    // Force a one-shot KPI refresh if a collection action (e.g. a payment)
-    // changed the totals while we were away — Android parity. Nothing reloads
-    // when the flag is unset (returning from read-only screens).
-    if (DashboardRefreshSignal.instance.consumeKpiDirty()) {
+  }
+
+  /// D8 / Android DashboardHomeFragment.onCreateView (:262-283): every return
+  /// to the dashboard (changeFragment replace) RE-CREATES it, so the KPIs,
+  /// the wallet and the COMPLAINTS feed reload and the feed resets to the
+  /// default (Complaints); getunpaiddata stays lazy (re-tapping Unpaid
+  /// force-refetches). Previously Flutter did this only after a payment.
+  /// Called only when a full screen is popped back to the dashboard (never
+  /// for dialogs/sheets). Every load below is crash-safe (never throws, keeps
+  /// ₹0.00/empty on failure) and single-flight (a call while the same load is
+  /// running is skipped), so quick back-and-forth can't stack requests.
+  void _onReturnedFromScreen() {
+    if (!mounted) return;
+    // The payment flag is now covered by this reload — clear it so it can't
+    // linger and fire later.
+    DashboardRefreshSignal.instance.consumeKpiDirty();
+    try {
       if (!_isService) {
         _dash.loadKpis().then((_) => _handleKpiResult()); // D-B1
       }
-      _dash.loadWallet(); // Android refreshes the wallet on every recreate too
-      // Android's changeFragment(replace) RECREATES the dashboard on return, so
-      // onCreateView re-runs: KPIs + wallet + COMPLAINTS reload and the tab resets
-      // to the default (Complaints); getunpaiddata stays lazy
-      // (DashboardHomeFragment onCreateView :264-266). Mirror that so the Unpaid
-      // feed can't show stale (already-paid) rows — re-tapping Unpaid then
-      // force-refetches a fresh list.
-      if (mounted) {
-        setState(() {
-          _feed = _FeedType.complaints;
-          _feedShown = _feedPage;
-        });
-      }
+      _dash.loadWallet();
+      setState(() {
+        _feed = _FeedType.complaints;
+        _feedShown = _feedPage;
+      });
       _dash.loadComplaints(force: true);
+    } catch (error, stackTrace) {
+      // Defensive only — the loads above never throw synchronously.
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'Dashboard reload on return');
     }
   }
 

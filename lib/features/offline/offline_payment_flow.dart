@@ -83,11 +83,29 @@ Future<void> openOfflinePaymentFlow(
   );
 }
 
+/// B-B4 / Android Offline_searchItemList_Fragment :137-143 and
+/// Offline_unPaidCustomer_Fragment :178-184 & :230-236: the payment popup
+/// opens only when the customer's total_amount is above 0.00; otherwise
+/// "Due amount is 0.00 or less". An unparsable total does nothing (Android's
+/// Double.parseDouble throws into its catch, so no popup opens).
+bool offlineDueAllowsPayment(BuildContext context, OfflineCustomer customer) {
+  final total = double.tryParse(customer.totalAmount.trim());
+  if (total == null) return false;
+  if (total <= 0.00) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Due amount is 0.00 or less')),
+    );
+    return false;
+  }
+  return true;
+}
+
 /// New offline payment flow for OfflineCustomer model from the offline_customers table.
 Future<void> openOfflinePaymentFlowForOfflineCustomer(
   BuildContext context,
   OfflineCustomer customer,
 ) async {
+  if (!offlineDueAllowsPayment(context, customer)) return;
   final result = await showDialog<OfflinePaymentResult>(
     context: context,
     barrierDismissible: false,

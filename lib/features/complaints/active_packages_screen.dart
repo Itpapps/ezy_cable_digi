@@ -27,9 +27,15 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
   bool _fetched = false;
   List<ActivePackage> _packages = const [];
 
+  // C10: id of the latest request — a reply for an older selection is dropped,
+  // so the list always matches the status shown.
+  int _req = 0;
+
   Future<void> _load() async {
+    final req = ++_req;
     if (_status == 'Select') {
       setState(() {
+        _loading = false;
         _fetched = false;
         _packages = const [];
         _error = false;
@@ -45,7 +51,7 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
       boxId: widget.box.boxId,
       status: _status == 'Active' ? '1' : '0',
     );
-    if (!mounted) return;
+    if (!mounted || req != _req) return; // C10: stale reply
     setState(() {
       _loading = false;
       _fetched = true;
@@ -166,10 +172,15 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
                   items: _statuses
                       .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                       .toList(),
-                  onChanged: (v) {
-                    setState(() => _status = v ?? 'Select');
-                    _load();
-                  },
+                  // C10 / Android ActivePackagesFragment :150: the modal
+                  // "Loading...Please wait..." blocks the dropdown while the
+                  // list loads — same here (disabled until the load ends).
+                  onChanged: _loading
+                      ? null
+                      : (v) {
+                          setState(() => _status = v ?? 'Select');
+                          _load();
+                        },
                 ),
               ),
             ),

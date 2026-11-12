@@ -78,7 +78,12 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
       _loading = false;
       _reasons = [
         const DeactivateReason(0, 'Select'),
-        if (reasons.statusCode == 0) ...reasons.reasons,
+        // C-B1 / Android Frag_Deactpack :859-885: reasons 17 (unpaid
+        // customer) and 21 (temporary deactivation) are box-level reasons
+        // and are dropped from the package-removal list.
+        if (reasons.statusCode == 0)
+          ...reasons.reasons
+              .where((r) => r.reasonId != 17 && r.reasonId != 21),
       ];
       _reasonId = 0;
       if (pkg.statusCode == 0) {

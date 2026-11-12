@@ -68,7 +68,7 @@ class _CustomPackagesActivationScreenState
         _packages[i] = _packages[i].copyWith(quantity: next.toString()));
   }
 
-  void _proceed() {
+  Future<void> _proceed() async {
     if (_selected.isEmpty) {
       // Android: Toast "No Packages selected".
       showPremiumSnackBar(context, 'No Packages selected', isError: true);
@@ -78,7 +78,7 @@ class _CustomPackagesActivationScreenState
     final items = [for (final i in idx) _packages[i]];
     // Comma-joined in selection order (Android convertStringArrayToString1).
     String join(String Function(CustomPackage) f) => items.map(f).join(',');
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BillDetailsScreen(
@@ -92,6 +92,17 @@ class _CustomPackagesActivationScreenState
         ),
       ),
     );
+    _reloadAfterReturn();
+  }
+
+  /// C3 / Android BillDetails_Act :207 popBackStack → CustomPackages_Activation
+  /// is re-created (onCreateView :105 fetches again, adapter :45 starts with no
+  /// ticks). Same on ANY return (Success, No Data Found or Back): clear the
+  /// ticks and reload, so activated packages don't stay listed/ticked.
+  void _reloadAfterReturn() {
+    if (!mounted) return;
+    setState(_selected.clear);
+    _load();
   }
 
   @override

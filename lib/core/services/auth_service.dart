@@ -124,10 +124,21 @@ class AuthService {
               SoapClient.readField(xml, 'lovvalue_restrict_partial_payment') ??
                   '') ??
           0;
+      // B-B2 / Android LoginActivity :776: persist it for offline payments.
+      await OfflineModeService.instance.savePartialPay(restrictPartial);
       // A-B4: dealer amount rounding (Android LoginActivity :645-651; missing →
       // "ACTUAL"). Server: wsmodel checkAmountRound → lovtable AMOUNT_ROUND.
       final amountRound =
           (SoapClient.readField(xml, 'amount_round') ?? 'ACTUAL').trim();
+      // B-B6 / Android LoginActivity :813: persist it for offline mode.
+      await OfflineModeService.instance.saveAmountRound(amountRound);
+      // A-B5: GST receipt gate (Android LoginActivity :681-694; missing → 0).
+      final isSyncBills = int.tryParse(
+              (SoapClient.readField(xml, 'is_sync_bills') ?? '').trim()) ??
+          0;
+      final gstCount = int.tryParse(
+              (SoapClient.readField(xml, 'dealer_gst_count') ?? '').trim()) ??
+          0;
       // useLcoDeposit (Android LoginActivity.userLcoDeposit): 1 = LCO-deposit dealer
       // → lock STB amount to full + show wallet card. Default 0 (feature off).
       final useLcoDeposit =
@@ -170,6 +181,8 @@ class AuthService {
         commonEmployee: commonEmployee,
         restrictPartialPayment: restrictPartial,
         amountRound: amountRound,
+        isSyncBills: isSyncBills,
+        gstCount: gstCount,
         useLcoDeposit: useLcoDeposit,
         serverCurrentDate: serverDate,
         useCaf: useCaf,

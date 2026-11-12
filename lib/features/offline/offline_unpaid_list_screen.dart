@@ -114,6 +114,8 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
   }
 
   Future<void> _onPayCustomer(OfflineCustomer customer) async {
+    // B-B4: Android blocks a due of 0.00 or less before the popup.
+    if (!offlineDueAllowsPayment(context, customer)) return;
     final initial = customer.totalAmount;
     final result = await showDialog<OfflinePaymentResult>(
       context: context,
@@ -121,7 +123,6 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
       builder: (_) => OfflinePaymentDialog(
         customerName: customer.name,
         initialAmount: initial,
-        restrictPartial: false,
         discountPenaltyFlag: customer.discountPenaltyFlag,
         discountAmount: customer.discountAmount,
         penaltyAmount: customer.penaltyAmount,

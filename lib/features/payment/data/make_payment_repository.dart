@@ -29,6 +29,10 @@ class MakePaymentResult {
   final double billAmount; // receipt "Bill Amount" (server response field)
   final String dealerBusinessName;
   final String billForMonth;
+  // A-B5: GST lines tax_displayname1-6 / tax_amount1-6 (Android
+  // CustomerMgmt_MakePayment_Fragment :2135-2278). Always 6 entries; a missing
+  // or "anyType{}" name → "NA", a missing amount → 0.
+  final List<ReceiptTax> taxes;
   const MakePaymentResult({
     required this.statusCode,
     required this.statusMessage,
@@ -39,9 +43,17 @@ class MakePaymentResult {
     required this.billAmount,
     required this.dealerBusinessName,
     required this.billForMonth,
+    this.taxes = const [],
   });
 
   bool get isSuccess => statusCode == 0;
+}
+
+/// A-B5: one GST line of the payment receipt.
+class ReceiptTax {
+  final String name;
+  final double amount;
+  const ReceiptTax(this.name, this.amount);
 }
 
 class MakePaymentRepository {
@@ -84,6 +96,9 @@ class MakePaymentRepository {
     // only; the server never blocks payment on it, so 0.0 is the safe default.
     String latitude = '0.0',
     String longitude = '0.0',
+    // A1 / Android :1945-1951: makePayments waits 100 s on mobile data,
+    // otherwise 200 s (the caller decides; default = Android's 200 s branch).
+    Duration timeout = const Duration(seconds: 200),
   }) async {
     final ns = ServerUrlResolver.instance.namespace;
     // Full 28-field makePaymentsInfo in Android's EXACT index order (parity with
@@ -96,6 +111,7 @@ class MakePaymentRepository {
       methodName: 'makePayments',
       wrapper: 'paymentInfo',
       wrapperType: 'makePaymentsInfo',
+      timeout: timeout, // A1
       fields: {
         'altCustomerId': altCustomerId,                 // 0
         'authToken': SessionService.instance.authToken, // 1
@@ -146,6 +162,19 @@ class MakePaymentRepository {
           double.tryParse(SoapClient.readField(xml, 'billAmount') ?? '') ?? 0.0,
       dealerBusinessName: SoapClient.readField(xml, 'dealerBusinessName') ?? '',
       billForMonth: SoapClient.readField(xml, 'bill_for_month') ?? '',
+      taxes: [
+        for (var i = 1; i <= 6; i++)
+          ReceiptTax(
+            () {
+              final n =
+                  (SoapClient.readField(xml, 'tax_displayname$i') ?? '').trim();
+              return (n.isEmpty || n == 'anyType{}') ? 'NA' : n;
+            }(),
+            double.tryParse(
+                    (SoapClient.readField(xml, 'tax_amount$i') ?? '').trim()) ??
+                0.0,
+          ),
+      ],
     );
 
     return result;

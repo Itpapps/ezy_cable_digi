@@ -278,7 +278,25 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       _snack('Please enter a valid amount');
       return;
     }
-    // Android validates ONLY the amount — cheque/bank/branch are optional.
+    // NEW charge: Android validates ONLY the amount — cheque/bank/branch are
+    // optional (OneTimeCharges_Frag :197-230).
+    // C-B5 / Android Editonetime_Frag :264-289: in EDIT mode, with Paid
+    // ticked (and an instrument date, always set here), cheque/DD no., bank
+    // and branch are required — checked in this order, Android's messages.
+    if (widget.editItem != null && _instrument) {
+      if (_chequeCtrl.text.trim().isEmpty) {
+        _snack('Enter valid cheque/dd number');
+        return;
+      }
+      if (_bankCtrl.text.trim().isEmpty) {
+        _snack('Enter  Bank name');
+        return;
+      }
+      if (_branchCtrl.text.trim().isEmpty) {
+        _snack('Enter  Branch name');
+        return;
+      }
+    }
     setState(() => _saving = true);
     // C6 + C12 / Android OneTimeCharges_Frag :356 and Editonetime_Frag :445:
     // non-cancellable "Loading...Please wait..." while saving (Back ignored);
@@ -304,12 +322,94 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
     Navigator.of(context).pop(); // close the loader
     setState(() => _saving = false);
     if (r.isSuccess) {
-      _snack(r.statusMessage.isEmpty ? 'Saved Successfully' : r.statusMessage,
-          error: false);
-      Navigator.pop(context);
+      await _showSaved(r.statusMessage);
     } else {
       _snack(r.statusMessage.isEmpty ? 'Save failed' : r.statusMessage);
     }
+  }
+
+  /// C-B4 — Android success handling after a save (status 0):
+  ///  • EDIT (Editonetime_Frag :462-500): "Success!" + server message, OK
+  ///    only → back.
+  ///  • NEW (OneTimeCharges_Frag :375-415): "Success!" + server message with
+  ///    OK (→ back) and Print (→ the One-Time Charge details page with a print
+  ///    button, DisplayOnetimeChrages). Returning from that page re-creates
+  ///    Android's form (fresh fields + charge types reloaded) — mirrored by
+  ///    [_resetForNewCharge], so the saved values can't be re-submitted.
+  /// The popup can't be dismissed by tapping outside; a system Back on it
+  /// counts as OK (back), never as "stay on the filled form".
+  Future<void> _showSaved(String message) async {
+    final isEdit = widget.editItem != null;
+    // Capture the saved values now (Android passes them in the bundle).
+    final slip = isEdit
+        ? null
+        : OneTimeChargeSlip(
+            chargeType: _chargeType?.name ?? '',
+            amount: (double.tryParse(_amountCtrl.text.trim()) ??
+                    _amountCtrl.text.trim())
+                .toString(), // Android String.valueOf(Double) e.g. "100.0"
+            createdDate: _ymd(_createdDate),
+            bank: _instrument ? _bankCtrl.text.trim() : '',
+            branch: _instrument ? _branchCtrl.text.trim() : '',
+            chequeDd: _instrument ? _chequeCtrl.text.trim() : '',
+            chequeDate: _instrument ? _ymd(_instrumentDate) : '',
+            remarks: _remarksCtrl.text.trim(),
+            paid: _instrument, // Android checked 1 → Paid · 2 → Unpaid
+          );
+    final print = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Success!'),
+        content: message.isEmpty ? null : Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('OK'),
+          ),
+          // Print only for a NEW charge, and only where Bluetooth printing
+          // exists (hidden on iOS like every other Print in the app).
+          if (slip != null && AppConfig.bluetoothPrintingEnabled)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Print'),
+            ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (print == true && slip != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              OneTimeChargeDetailsScreen(customer: widget.customer, slip: slip),
+        ),
+      );
+      if (mounted) _resetForNewCharge();
+      return;
+    }
+    Navigator.pop(context); // OK / Back → leave the form (Android popBackStack)
+  }
+
+  /// C-B4: Android re-creates OneTimeCharges_Frag when the user comes back
+  /// from the details page — empty fields, today's dates, charge types
+  /// fetched again (first type selected).
+  void _resetForNewCharge() {
+    setState(() {
+      _amountCtrl.clear();
+      _remarksCtrl.clear();
+      _chequeCtrl.clear();
+      _bankCtrl.clear();
+      _branchCtrl.clear();
+      _instrument = false;
+      _createdDate = DateTime.now();
+      _instrumentDate = DateTime.now();
+      _chargeTypes = [];
+      _chargeType = null;
+      _loadingTypes = true;
+    });
+    _loadChargeTypes();
   }
 
   String get _fmtDate => _ymd(_createdDate);
@@ -484,6 +584,182 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C-B4: DISPLAY ONE TIME CHARGES — Android DisplayOnetimeChrages
+// (fragment_display_onetime_chrages.xml), opened by "Print" after a NEW
+// one-time charge is saved. Shows the saved values and prints Android's
+// "ONETIME CHARGES" slip (BluetoothChatService.Onetimecharge_write).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The values of a just-saved one-time charge (Android's Print bundle).
+class OneTimeChargeSlip {
+  final String chargeType;
+  final String amount;
+  final String createdDate;
+  final String bank;
+  final String branch;
+  final String chequeDd;
+  final String chequeDate;
+  final String remarks;
+  final bool paid;
+  const OneTimeChargeSlip({
+    required this.chargeType,
+    required this.amount,
+    required this.createdDate,
+    required this.bank,
+    required this.branch,
+    required this.chequeDd,
+    required this.chequeDate,
+    required this.remarks,
+    required this.paid,
+  });
+}
+
+class OneTimeChargeDetailsScreen extends StatefulWidget {
+  final Customer customer;
+  final OneTimeChargeSlip slip;
+  const OneTimeChargeDetailsScreen(
+      {super.key, required this.customer, required this.slip});
+
+  @override
+  State<OneTimeChargeDetailsScreen> createState() =>
+      _OneTimeChargeDetailsScreenState();
+}
+
+class _OneTimeChargeDetailsScreenState
+    extends State<OneTimeChargeDetailsScreen> {
+  final RealBluetoothService _printerService = RealBluetoothService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Printer header/footer (Android reads the printer-settings prefs).
+    SettingsStore.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _printerService.disconnectPrinter();
+    super.dispose();
+  }
+
+  // Android shows R.string.not_available ("NA") for an empty value.
+  String _na(String v) => v.trim().isEmpty ? 'NA' : v.trim();
+  String get _chequeDate {
+    final t = widget.slip.chequeDate.trim();
+    return (t.isEmpty || t == '0000-00-00') ? 'NA' : t;
+  }
+
+  String get _paidLabel => widget.slip.paid ? 'Paid' : 'Unpaid';
+
+  /// Android `new Date().toString()` order: "EEE MMM dd yyyy HH:mm:ss".
+  String _timestamp() {
+    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${wd[n.weekday - 1]} ${mo[n.month - 1]} ${two(n.day)} ${n.year} '
+        '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
+  }
+
+  /// 1:1 with BluetoothChatService.Onetimecharge_write (offline_report=10).
+  /// 97BT has its own title spacing and a 7-space date indent.
+  List<String> _printLines(ReceiptFormat fmt) {
+    final c = widget.customer;
+    final st = SettingsStore.instance;
+    final s = widget.slip;
+    final sep = fmt.sep;
+    return [
+      sep, st.header1, sep, st.header2, sep,
+      fmt.is97bt
+          ? '          ONETIME CHARGES         '
+          : '        ONETIME CHARGES        ',
+      sep,
+      '${fmt.is97bt ? '       ' : ''}${_timestamp()}',
+      sep,
+      'CUSTOMER NAME    :${c.name}',
+      'ADDRESS          :${c.address}',
+      'MOBILE           :${c.primaryMobileNumber}',
+      'CHARGE TYPE      :${s.chargeType}',
+      'AMOUNT           :${s.amount}',
+      'CREATED DATE     :${s.createdDate}',
+      'BANK             :${_na(s.bank)}',
+      'BRANCH           :${_na(s.branch)}',
+      'CHEQUE/DD NO.    :${_na(s.chequeDd)}',
+      'CHEQUE DATE      :$_chequeDate',
+      'REMARKS          :${_na(s.remarks)}',
+      'PAID/UNPAID      :$_paidLabel',
+      sep, st.footer1, sep, st.footer2, sep,
+    ];
+  }
+
+  void _print() => launchThermalPrint(
+        context: context,
+        printerService: _printerService,
+        buildLines: _printLines,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.customer;
+    final s = widget.slip;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D47A1),
+      appBar: _appBar(context, 'DISPLAY ONE TIME CHARGES'),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                children: [
+                  _cRow('Customer Name', c.name),
+                  _cRow('Address', c.address),
+                  _cRow('Mobile No.', c.primaryMobileNumber),
+                  _cRow('Charge Type', s.chargeType),
+                  _cRow('Amount', s.amount),
+                  _cRow('Created Date', s.createdDate),
+                  _cRow('Bank', _na(s.bank)),
+                  _cRow('Branch', _na(s.branch)),
+                  _cRow('Cheque/DD No', _na(s.chequeDd)),
+                  _cRow('Cheque Date', _chequeDate),
+                  _cRow('Remarks', _na(s.remarks)),
+                  _cRow('Paid/Unpaid', _paidLabel, isLast: true),
+                ],
+              ),
+            ),
+            if (AppConfig.bluetoothPrintingEnabled) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _print,
+                  icon: const Icon(Icons.print),
+                  label: const Text('Print',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0D47A1),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

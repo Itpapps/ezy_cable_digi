@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/services/offline_mode_service.dart';
+
 class OfflinePaymentResult {
   final double amount;
   final String method; // 'cash' or 'bank'
@@ -70,11 +72,17 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
   bool _discountApplied = false;
   bool _penaltyApplied = false;
 
+  // B-B2: Android Offline_Activity.partial_pay (saved at the last online login).
+  late bool _restrictPartial = widget.restrictPartial;
+
   @override
   void initState() {
     super.initState();
     _resolveDiscountPenalty();
     _amountCtrl = TextEditingController(text: _getDisplayAmount());
+    OfflineModeService.instance.partialPay.then((v) {
+      if (v == 1) _restrictPartial = true;
+    });
   }
 
   void _resolveDiscountPenalty() {
@@ -134,30 +142,78 @@ class _OfflinePaymentDialogState extends State<OfflinePaymentDialog> {
     super.dispose();
   }
 
+  /// A-B6 / Android Offline_searchItemList_Fragment :385-393, :885-925 (same in
+  /// Offline_unPaidCustomer_Fragment): the picker opens only after a Cheque/DD
+  /// number is entered (otherwise the date goes back to "Select"); a date
+  /// before today shows "Cheque Date Error!" and keeps the previous date.
   Future<void> _pickDate() async {
+    if (_chequeCtrl.text.isEmpty) {
+      setState(() => _instrumentDate = null);
+      return;
+    }
     final d = await showDatePicker(
       context: context,
       initialDate: _instrumentDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (d != null) setState(() => _instrumentDate = d);
-  }
-
-  void _submit() {
-    final amt = double.tryParse(_amountCtrl.text.trim());
-    if (amt == null || amt <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter valid amount')),
+    if (d == null || !mounted) return;
+    final now = DateTime.now();
+    if (d.isBefore(DateTime(now.year, now.month, now.day))) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cheque Date Error!'),
+          content: const Text('Cheque date should not be before today.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
       return;
     }
-    // Partial pay restriction
-    if (widget.restrictPartial) {
-      final total = double.tryParse(_getDisplayAmount()) ?? 0;
+    setState(() => _instrumentDate = d);
+  }
+
+  void _submit() {
+    // B-B4 / Android Offline_searchItemList_Fragment :444-447 & :521-523,
+    // Offline_unPaidCustomer_Fragment :581-584 & :656-658: empty, "." or an
+    // amount below 1 is blocked. Android's text has a full stop for Cash and
+    // none for Bank/Cheque.
+    final amt = double.tryParse(_amountCtrl.text.trim());
+    if (amt == null || amt < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_method == 'bank'
+              ? 'Amount cannot be 0.00 or empty'
+              : 'Amount cannot be 0.00 or empty.'),
+        ),
+      );
+      return;
+    }
+    // B-B2 / Android Offline_searchItemList_Fragment :451 & :526,
+    // Offline_unPaidCustomer_Fragment :586 & :660: with partial_pay == 1 the
+    // amount must be >= the customer's total_amount (the downloaded total,
+    // not the discounted one — Android compares with getTotal_amount()).
+    if (_restrictPartial) {
+      final total = double.tryParse(widget.initialAmount) ?? 0;
       if (amt < total) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Partial payment not allowed')),
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Invalid Amount!'),
+            content: const Text('Entered payable amount should be greater '
+                'than or equal to your pending amount'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
         return;
       }

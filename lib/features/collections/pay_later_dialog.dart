@@ -140,10 +140,18 @@ Future<void> showPayLaterScheduleDialog(
                     Expanded(
                       child: GestureDetector(
                         onTap: () async {
+                          // A-B8 / Android CustomerOperations_Fragment :3971 /
+                          // :4054 setMinDate(today): no past schedule dates. A
+                          // saved past date opens on today (initialDate must
+                          // not be before firstDate).
+                          final now = DateTime.now();
+                          final today = DateTime(now.year, now.month, now.day);
                           final picked = await showDatePicker(
                             context: ctx,
-                            initialDate: scheduleDate,
-                            firstDate: DateTime(2020),
+                            initialDate: scheduleDate.isBefore(today)
+                                ? today
+                                : scheduleDate,
+                            firstDate: today,
                             lastDate: DateTime(2100),
                           );
                           if (picked != null) setD(() => scheduleDate = picked);

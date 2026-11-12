@@ -19,6 +19,24 @@ import 'data/open_complaint.dart';
 /// `₹0.00` fallback and flags [hasError] — it NEVER throws to the UI, so one
 /// failing section cannot crash the dashboard. See server docs/DASHBOARD_FLOW.md.
 class DashboardController extends ChangeNotifier {
+  // D8: the dashboard now reloads on every return, so a request can still be
+  // running when the dashboard is closed (logout, offline switch). Results
+  // arriving after dispose are dropped instead of notifying a disposed
+  // notifier (which asserts in debug builds).
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   bool loading = false;
   bool hasError = false;
   String? errorMessage;

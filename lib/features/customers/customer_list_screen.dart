@@ -137,7 +137,17 @@ class _CustomerListScreenState extends State<CustomerListScreen>
               BoxShadow(color: t.cardShadowColor, blurRadius: 10, offset: const Offset(0, 4)),
             ],
           ),
-          child: Column(
+          // D2 / Android Unpaid_Fragment getunpaiddata :413: a non-cancellable
+          // "Loading data, Please wait..." blocks every filter while the list
+          // loads. Same result here, keeping the inline spinner: the filters
+          // ignore taps (and are dimmed) until the load finishes, so a change
+          // can never be skipped and show the old list under the new label.
+          child: AbsorbPointer(
+            absorbing: provider.isLoading,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: provider.isLoading ? 0.5 : 1.0,
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('FILTERS', style: TextStyle(
@@ -264,6 +274,8 @@ class _CustomerListScreenState extends State<CustomerListScreen>
                 ),
               ],
             ],
+              ),
+            ),
           ),
         );
       },

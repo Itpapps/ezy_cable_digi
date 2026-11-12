@@ -51,6 +51,12 @@ class SessionService {
   // A-B4: amount_round (validateLogin; Android LoginActivity.amount_round,
   // default "ACTUAL"). Values: ACTUAL / ROUND / CEIL.
   String amountRound = 'ACTUAL';
+  // A-B5: GST receipt lines (validateLogin; Android LoginActivity :681-694,
+  // missing/unparsable → 0). Tax lines show only when isSyncBills == 2 AND
+  // gstCount > 0 (DisplayPaymentDetails_Fragment :372 / BluetoothChatService :1087).
+  int isSyncBills = 0;
+  int gstCount = 0;
+  bool get showGstLines => isSyncBills == 2 && gstCount > 0;
 
   /// A-B4: Android's exact rule (CustomerMgmt_MakePayment_Fragment :1485-1497,
   /// DisplayPaymentDetails_Fragment :299-331): "ACTUAL" keeps the amount,
@@ -143,6 +149,8 @@ class SessionService {
     int commonEmployee = 0,
     int restrictPartialPayment = 0,
     String amountRound = 'ACTUAL',
+    int isSyncBills = 0,
+    int gstCount = 0,
     int useLcoDeposit = 0,
     String serverCurrentDate = '',
     int useCaf = 0,
@@ -168,6 +176,8 @@ class SessionService {
     this.commonEmployee = commonEmployee;
     this.restrictPartialPayment = restrictPartialPayment;
     this.amountRound = amountRound;
+    this.isSyncBills = isSyncBills;
+    this.gstCount = gstCount;
     this.useLcoDeposit = useLcoDeposit;
     this.serverCurrentDate = serverCurrentDate;
     this.useCaf = useCaf;
@@ -238,6 +248,8 @@ class SessionService {
     commonEmployee = 0;
     restrictPartialPayment = 0;
     amountRound = 'ACTUAL';
+    isSyncBills = 0;
+    gstCount = 0;
     useLcoDeposit = 0;
     serverCurrentDate = '';
     useCaf = 0;

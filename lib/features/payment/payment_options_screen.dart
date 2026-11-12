@@ -8,6 +8,8 @@ import 'package:iconsax/iconsax.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/data/customer.dart';
+import '../../core/data/payment.dart';
+import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -43,6 +45,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     // blocking loader, then Android's message per status (see _loadPending).
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadPending());
     _ctrl.captureLocation();   // Android parity: last-known GPS at screen open (0.0 fallback)
+    _ctrl.capturePaymentTimeout(); // A1: Android reads the mobile state at open
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
@@ -57,10 +60,18 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
   }
 
   // ── Pick date ────────────────────────────────────────────────────────────────
+  /// A-B6 / Android CustomerMgmt_MakePayment_Fragment :871-878, :2411-2443:
+  /// the picker opens only after a Cheque/DD number is entered (otherwise the
+  /// date goes back to "Select"); a date before today shows "Cheque Date
+  /// Error!" and resets the date to "Select" (setCurrentDateOnView).
   Future<void> _pickInstrumentDate() async {
+    if (_ctrl.chequeNoCtrl.text.isEmpty) {
+      _ctrl.setInstrumentDate(null);
+      return;
+    }
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _ctrl.instrumentDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
       builder: (ctx, child) => Theme(
@@ -73,7 +84,15 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         child: child!,
       ),
     );
-    if (picked != null) _ctrl.setInstrumentDate(picked);
+    if (picked == null || !mounted) return;
+    final now = DateTime.now();
+    if (picked.isBefore(DateTime(now.year, now.month, now.day))) {
+      _ctrl.setInstrumentDate(null);
+      await _showInfoDialog(
+          'Cheque Date Error!', 'Cheque date should not be before today.');
+      return;
+    }
+    _ctrl.setInstrumentDate(picked);
   }
 
   // ── Pending amount (gpa) ─────────────────────────────────────────────────────
@@ -148,11 +167,32 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     // Show loading. A2 / Android MakePayment :1765 (non-cancellable
     // ProgressDialog): Back is ignored, so the pops below always close THIS
     // loader and never the Payment screen. Every path closes it: success,
-    // null result and the catch (60 s SoapClient timeout at most).
+    // null result and the catch (A1: makePayments times out after 100 s on
+    // mobile data, otherwise 200 s — Android's values).
     showPremiumLoading(context, message: 'Processing payment...', canPop: false);
 
+    // R1: only the makePayments call itself maps to Android's failure
+    // messages. Anything after a SUCCESSFUL payment (receipt build/navigation)
+    // must never be reported as a failure — that would invite a duplicate
+    // payment — so it has its own catch below.
+    final Payment? payment;
     try {
-      final payment = await _ctrl.pay();
+      payment = await _ctrl.pay();
+    } on PaymentRejectedException catch (r) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      await _showPaymentRejected(r);
+      return;
+    } catch (_) {
+      // R1 / Android :1988-2006: no server reply (network / timeout / bad
+      // response) → "Server is busy or Un reachable!"; OK stays here.
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      await _showServerBusy();
+      return;
+    }
+
+    try {
       if (!mounted) return;
       Navigator.of(context).pop(); // dismiss loading
 
@@ -160,6 +200,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         showPremiumSnackBar(context, 'Payment could not be saved', isError: true);
         return;
       }
+      final paid = payment; // promoted non-null for the closures below
 
       // A successful payment changes the dashboard totals — flag KPIs stale so
       // the Dashboard force-refreshes them on return (Android parity, where the
@@ -203,7 +244,7 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         MaterialPageRoute(
           builder: (_) => ReceiptPreviewScreen(
             customer: widget.customer,
-            payment: payment,
+            payment: paid, // non-null copy (closure-safe)
             broadbandPaidAmount: bbPaid,
             stbPaidAmount: stbPaid,
             discountAmount: discountPaid,
@@ -211,14 +252,64 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             dueAmount: dueAmt,
             outAmount: outAmt,
             billAmount: billAmt,
+            taxes: _ctrl.lastResult?.taxes ?? const [],
           ),
         ),
       );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop(); // dismiss loading
-      showPremiumSnackBar(context, 'Payment failed: $e', isError: true);
+    } catch (error, stackTrace) {
+      // The payment IS saved on the server; only showing the receipt failed.
+      // Never say "failed" here (it would invite a second payment).
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'Payment receipt display');
+      if (!mounted || payment == null) return;
+      showPremiumSnackBar(
+          context, 'Payment done. Receipt No: ${payment.transactionId}',
+          isSuccess: true);
     }
+  }
+
+  /// R1 / Android CustomerMgmt_MakePayment_Fragment :2348-2367.
+  ///  1 → "Payment Failed!" + server message; OK leaves the payment screen
+  ///      (popBackStack). 2 → "{message}: Contact Support"; stays.
+  ///  Any other code (no valid status in the reply) → the Server-busy dialog.
+  Future<void> _showPaymentRejected(PaymentRejectedException r) async {
+    if (r.statusCode == 1) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Payment Failed!'),
+          content: Text(r.statusMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (ok == true && mounted) Navigator.of(context).pop();
+    } else if (r.statusCode == 2) {
+      showPremiumSnackBar(context, '${r.statusMessage}: Contact Support',
+          isError: true);
+    } else {
+      await _showServerBusy();
+    }
+  }
+
+  Future<void> _showServerBusy() {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Server is busy or Un reachable!'),
+        content: const Text('Please try again after sometime'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Pay Later ────────────────────────────────────────────────────────────────
@@ -317,10 +408,17 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
+                            // A-B8 / Android :2753 setMinDate(today): no past
+                            // schedule dates. A saved past date opens on today
+                            // (initialDate must not be before firstDate).
+                            final now = DateTime.now();
+                            final today = DateTime(now.year, now.month, now.day);
                             final picked = await showDatePicker(
                               context: ctx,
-                              initialDate: scheduleDate,
-                              firstDate: DateTime(2020),
+                              initialDate: scheduleDate.isBefore(today)
+                                  ? today
+                                  : scheduleDate,
+                              firstDate: today,
                               lastDate: DateTime(2100),
                             );
                             if (picked != null) setD(() => scheduleDate = picked);
@@ -727,8 +825,17 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             hint: 'Discount amount (₹)',
             t: t,
             enabled: !_ctrl.isBroadbandOnly, // Android disables for BroadBand-only
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            // A-B7 / Android :552 + layout: digits and one ".", at most 2
+            // decimals, max 7 characters.
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(7),
+              TextInputFormatter.withFunction((oldValue, newValue) =>
+                  RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)
+                      ? newValue
+                      : oldValue),
+            ],
             onChanged: (_) => _ctrl.onDiscountChanged(),
             errorText: _ctrl.discountError,
           ),
@@ -832,7 +939,12 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
               ? 'Alternate mobile (optional)'
               : 'Alt: ${widget.customer.primaryMobileNumber}',
           t: t,
-          keyboardType: TextInputType.phone,
+          // A-B7 / Android layout makepayact_et_mobilenum: number, max 10.
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+          ],
         ),
         const SizedBox(height: 12),
 
@@ -861,9 +973,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                 ),
               ),
             ),
-            // Pay Later is NOT offered to broadband / STB&BroadBand customers
-            // (Android: only the STB/cable leg can be scheduled).
-            if (!_ctrl.isBroadbandCustomer) ...[
+            // A-B8 / Android :1500-1511: PAY LATER follows the cable pending
+            // (> 0), not the customer type — see PaymentController.showPayLater.
+            if (_ctrl.showPayLater) ...[
               const SizedBox(width: 10),
               Expanded(
                 child: SizedBox(

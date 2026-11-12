@@ -42,11 +42,23 @@ class _LoginNotificationDialogState extends State<LoginNotificationDialog> {
     }
   }
 
+  /// D6 / Android MainActivity :1201-1220: the timer and OK dismiss ONLY this
+  /// popup (`if (dialog.isShowing()) dialog.dismiss()`). A plain pop() would
+  /// close whatever is on top — e.g. a dashboard error/"login again" dialog
+  /// opened over this one. So pop when this popup is on top, otherwise remove
+  /// just this popup's route and leave the dialog above it untouched.
   void _close() {
     if (_closed || !mounted) return;
     _closed = true;
     _autoClose?.cancel();
-    Navigator.of(context).pop();
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) return; // already gone
+    final navigator = Navigator.of(context);
+    if (route.isCurrent) {
+      navigator.pop();
+    } else {
+      navigator.removeRoute(route);
+    }
   }
 
   @override

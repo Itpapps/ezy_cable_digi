@@ -77,6 +77,38 @@ class OfflineModeService {
     return p.getString(_keyLastOnlineLogin) ?? '';
   }
 
+  // B-B2 / Android LoginActivity :155, :776 — SharedPreferences "Partial_pay"
+  // holds lovvalue_restrict_partial_payment from the last online login, so
+  // the offline payment check still works after an app restart. Never cleared.
+  static const _keyPartialPay = 'Partial_pay';
+
+  Future<void> savePartialPay(int value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_keyPartialPay, value);
+  }
+
+  /// 1 = offline payments below the customer's total amount are blocked.
+  Future<int> get partialPay async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt(_keyPartialPay) ?? 0;
+  }
+
+  // B-B6 / Android LoginActivity :151, :813, :980 — SharedPreferences
+  // "amtround_lgn" keeps amount_round from the last online login; offline mode
+  // reads it (Offline_Activity.amtroundoff, default "ACTUAL"). Never cleared.
+  static const _keyAmountRound = 'amtround_lgn';
+
+  Future<void> saveAmountRound(String value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keyAmountRound, value);
+  }
+
+  /// ACTUAL / ROUND / anything else = CEIL (Android rule).
+  Future<String> get amountRound async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_keyAmountRound) ?? 'ACTUAL';
+  }
+
   /// Clear all offline data prefs (after sync + clear data).
   Future<void> clearOfflineData() async {
     final p = await SharedPreferences.getInstance();

@@ -28,12 +28,48 @@ import '../features/dashboard/dashboard_screen.dart';
 import '../features/debug/debug_console_screen.dart';
 import '../core/database/database_helper.dart';
 
+/// D5: only the FIRST tap per drawer opening is acted on (Android's
+/// navigation drawer ignores taps while it closes). Returns false for any
+/// later tap; the drawer also stops taking touches once one tap is claimed.
+/// A new [_AppDrawerState] is created every time the drawer opens.
+/// The drawer's state from either its OWN context (items built directly in
+/// _AppDrawerState.build — findAncestorStateOfType skips the element itself)
+/// or a descendant's context (_DrawerItem).
+_AppDrawerState? _drawerStateOf(BuildContext c) {
+  if (c is StatefulElement && c.state is _AppDrawerState) {
+    return c.state as _AppDrawerState;
+  }
+  return c.findAncestorStateOfType<_AppDrawerState>();
+}
+
+bool _claimDrawerTap(BuildContext drawerContext) {
+  final s = _drawerStateOf(drawerContext);
+  if (s == null) return true;
+  if (s._locked) return false;
+  s._lock();
+  return true;
+}
+
+/// D-B7: undo [_claimDrawerTap] when the claimed action was cancelled (e.g.
+/// "No" on the logout confirm) so the still-open drawer works again.
+void _releaseDrawerTap(BuildContext drawerContext) {
+  _drawerStateOf(drawerContext)?._unlock();
+}
+
+/// D5: closes ONLY the drawer. Unlike Navigator.pop, this can never pop the
+/// page underneath (the old double-tap black screen).
+void _closeDrawer(BuildContext drawerContext) {
+  final scaffold = Scaffold.maybeOf(drawerContext);
+  if (scaffold != null && scaffold.isDrawerOpen) scaffold.closeDrawer();
+}
+
 void _closeDrawerThen(
   BuildContext drawerContext,
   void Function(BuildContext navigatorContext) action,
 ) {
+  if (!_claimDrawerTap(drawerContext)) return;
   final navigator = Navigator.of(drawerContext);
-  navigator.pop();
+  _closeDrawer(drawerContext);
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (navigator.context.mounted) {
       action(navigator.context);
@@ -249,11 +285,25 @@ void showThemePicker(BuildContext context) {
   );
 }
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
 
   @override
-  Widget build(BuildContext context) => _buildDrawer(context);
+  State<AppDrawer> createState() => _AppDrawerState();
+}
+
+class _AppDrawerState extends State<AppDrawer> {
+  // D5: set by the first item tap; the drawer then ignores touches until it
+  // is opened again (a fresh state).
+  bool _locked = false;
+  void _lock() => setState(() => _locked = true);
+  void _unlock() {
+    if (mounted) setState(() => _locked = false);
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      AbsorbPointer(absorbing: _locked, child: _buildDrawer(context));
 
   Widget _buildDrawer(BuildContext context) {
     // D-B2 / Android MainActivity :266-281 — drawer items by user type / flags.
@@ -273,6 +323,21 @@ class AppDrawer extends StatelessWidget {
             // ── Premium Header ────────────────────────────────────────────
             _PremiumDrawerHeader(
               onLogout: () async {
+                if (!_claimDrawerTap(context)) return; // D5: one logout only
+                // D-B7 / Android MainActivity :216-236: confirm first —
+                // "Close Application?" Yes → Login, No → stay (drawer usable).
+                final yes = await showPremiumConfirm(
+                  context: context,
+                  title: 'Close Application?',
+                  body: 'Are you sure you want to logout? \n'
+                      ' Click \'Yes\' to Logout!',
+                  confirmLabel: 'Yes',
+                  cancelLabel: 'No',
+                );
+                if (!yes) {
+                  if (context.mounted) _releaseDrawerTap(context);
+                  return;
+                }
                 // Android parity: clear only the active session. Remembered
                 // credentials and the offline database are preserved.
                 await AuthService.instance.logout();
@@ -487,7 +552,8 @@ class AppDrawer extends StatelessWidget {
               ),
               title: Text('About Us', style: const TextStyle(fontSize: 14)),
               onTap: () {
-                Navigator.pop(context); // Close drawer
+                if (!_claimDrawerTap(context)) return; // D5
+                _closeDrawer(context);
                 final state = context
                     .findAncestorStateOfType<DashboardScreenState>();
                 if (state != null) {
@@ -516,7 +582,8 @@ class AppDrawer extends StatelessWidget {
                 style: const TextStyle(fontSize: 14),
               ),
               onTap: () {
-                Navigator.pop(context); // Close drawer
+                if (!_claimDrawerTap(context)) return; // D5
+                _closeDrawer(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -546,7 +613,8 @@ class AppDrawer extends StatelessWidget {
                   style: TextStyle(fontSize: 14),
                 ),
                 onTap: () {
-                  Navigator.pop(context); // close drawer
+                  if (!_claimDrawerTap(context)) return; // D5
+                  _closeDrawer(context);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -843,7 +911,8 @@ class _DrawerItem extends StatelessWidget {
       // (an ancestor → would resolve null). Mirrors the About Us item's setTab(4).
       if (labelKey == 'dashboard') {
         final dash = context.findAncestorStateOfType<DashboardScreenState>();
-        Navigator.of(context).pop(); // close drawer
+        if (!_claimDrawerTap(context)) return; // D5
+        _closeDrawer(context);
         dash?.setTab(0);
         return;
       }

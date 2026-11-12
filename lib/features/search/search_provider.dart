@@ -43,6 +43,9 @@ class SearchProvider extends ChangeNotifier {
     MapEntry('8', 'NickName'),
     MapEntry('9', 'Secondary Mobile Number'),
     MapEntry('16', 'Broadband User Id'),
+    // D-B5 / Android :190-194: Account Number = the customer's customnumber
+    // (NOT the LCO Customer Id), shown only when customerAppSearch has 17.
+    MapEntry('17', 'Account Number'),
   ];
 
   /// Dropdown options — Android parity: built from the dealer's allowed search
@@ -58,8 +61,13 @@ class SearchProvider extends ChangeNotifier {
         .where((o) => allowed.contains(o.key))
         .map((o) => o.value)
         .toList();
+    // D-B5: the empty-flag fallback keeps its old list — Account Number (17)
+    // appears only when the dealer explicitly allows it, like Android.
     return items.isEmpty
-        ? _searchOptions.map((o) => o.value).toList()
+        ? _searchOptions
+            .where((o) => o.key != '17')
+            .map((o) => o.value)
+            .toList()
         : items;
   }
 
@@ -109,6 +117,9 @@ class SearchProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
+
+  /// D-B5: Account Number (17) search — Android :468-494 input rules.
+  bool get isAccountNumberSearch => _searchType() == 17;
 
   /// D-B4: Primary (3) or Secondary (9) Mobile Number search.
   bool get isMobileSearch {
@@ -203,6 +214,7 @@ class SearchProvider extends ChangeNotifier {
 
   String get hintText {
     // Hints match Android SearchCustomer_Fragment_Newdesign.setHint(...).
+    if (isAccountNumberSearch) return 'Eg: ABC1234'; // D-B5 / Android :494
     if (_criteria.contains('Mobile')) return 'Eg: 9700000010';
     if (_criteria.contains('Id') || _criteria.contains('Number')) return 'Eg: 1234';
     if (_criteria.contains('Name')) return 'Eg: Ravi';

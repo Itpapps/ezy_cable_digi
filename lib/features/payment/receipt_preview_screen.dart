@@ -19,6 +19,7 @@ import '../../core/data/payment.dart';
 import '../../core/utils/share_origin.dart';
 import '../../core/theme/theme_constants.dart';
 import 'printer_launcher.dart';
+import 'data/make_payment_repository.dart' show ReceiptTax;
 import '../search/data/search_repository.dart';
 import '../customer/customer_details_screen.dart';
 import '../../core/widgets/premium_dialog.dart';
@@ -34,6 +35,9 @@ class ReceiptPreviewScreen extends StatefulWidget {
   final double dueAmount;           // TOT.DUE.AMT — GPA pending of the primary leg
   final double outAmount;           // OUT.AMT — outstanding after this payment
   final double billAmount;          // BILL.AMT — from the makePayments response
+  // A-B5: GST lines from the makePayments response (raw, un-rounded amounts).
+  // Empty for offline receipts (Android prints them only online).
+  final List<ReceiptTax> taxes;
 
   const ReceiptPreviewScreen({
     super.key,
@@ -47,6 +51,7 @@ class ReceiptPreviewScreen extends StatefulWidget {
     this.dueAmount = 0,
     this.outAmount = 0,
     this.billAmount = 0,
+    this.taxes = const [],
   });
 
   @override
@@ -81,6 +86,30 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
     _printerService.disconnectPrinter();
     super.dispose();
   }
+
+  // ── A-B5: GST lines ────────────────────────────────────────────────────────
+
+  /// GST lines allowed at all: online receipt AND the dealer's
+  /// is_sync_bills == 2 AND dealer_gst_count > 0 (Android LoginActivity gate).
+  bool get _gstOn =>
+      !widget.fromOfflineCollection && SessionService.instance.showGstLines;
+
+  /// Tax amount after the dealer rounding (Android DisplayPaymentDetails
+  /// :299-331 rounds taxvalue1-6 like the other receipt amounts).
+  String _taxValue(ReceiptTax t) =>
+      SessionService.instance.applyAmountRound(t.amount).toStringAsFixed(2);
+
+  /// Printed/shared lines: Android skips a tax whose rounded value is 0
+  /// (BluetoothChatService :1087 "0.00"/"0"/"0.0" check).
+  Iterable<ReceiptTax> get _printTaxes => _gstOn
+      ? widget.taxes.where(
+          (t) => SessionService.instance.applyAmountRound(t.amount) != 0)
+      : const [];
+
+  /// On-screen rows: Android shows a tax whose raw value is > 0
+  /// (DisplayPaymentDetails_Fragment :372-400).
+  Iterable<ReceiptTax> get _screenTaxes =>
+      _gstOn ? widget.taxes.where((t) => t.amount > 0) : const [];
 
   // ── PDF ───────────────────────────────────────────────────────────────────
 
@@ -167,6 +196,25 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         lines.add(fld('TOTAL PAID AMT', money(stbPaid + bbPaid)));
       }
     }
+    // A-B5: GST lines between the broadband block and TOT.DUE.AMT, in Android's
+    // exact layout (BluetoothChatService :1087-1170 / 97BT :1247-1330): a name
+    // up to 16 chars → padded to 16 + " :" + value; a longer name → first 15
+    // chars + " :" (97BT "  :") + value, then the rest of the name from char 16
+    // (97BT tax 3 from char 15) on its own line.
+    var taxNo = 0;
+    for (final t in widget.taxes) {
+      taxNo++;
+      if (!_printTaxes.contains(t)) continue;
+      final v = _taxValue(t);
+      final n = t.name;
+      if (n.length > 16) {
+        final rest = (fmt.is97bt && taxNo == 3) ? 15 : 16;
+        lines.add('${n.substring(0, 15)}${fmt.is97bt ? '  :' : ' :'}$v');
+        lines.add(n.substring(rest));
+      } else {
+        lines.add('${n.padRight(16)} :$v');
+      }
+    }
     // Android always prints TOT.DUE.AMT then OUT.AMT (BluetoothChatService :1171-1173).
     // dueAmt = GPA pending; outAmt = pending − paid − discount (post-payment outstanding).
     lines.add(fld('TOT.DUE.AMT', money(widget.dueAmount)));
@@ -241,6 +289,11 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
         money(isBroadbandOnly ? bbPaid : stbPaid)));
     lines.add(line);
     lines.add(fld('Bill Amount', billAmt));
+    // A-B5: GST lines (Android DisplayPaymentDetails_Fragment :701-718:
+    // name + 11 spaces + ":" + value, only online, raw value > 0).
+    for (final t in _screenTaxes) {
+      lines.add('${t.name}           :${_taxValue(t)}');
+    }
     lines.add(fld('Due Amount', money(widget.dueAmount)));
     lines.add(fld('Out Amount', money(widget.outAmount)));
     if (widget.discountAmount > 0) {
@@ -447,6 +500,9 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
                   // receipt). The customer-list totals are 0 for broadband, so they
                   // must NOT be used here.
                   ('Bill Amount',   '₹${widget.billAmount.toStringAsFixed(2)}'),
+                  // A-B5: GST rows under Bill Amount (Android
+                  // displaypaymentdetails_new.xml taxll1-6, raw value > 0).
+                  for (final tx in _screenTaxes) (tx.name, '₹${_taxValue(tx)}'),
                   ('Total Due',     '₹${widget.dueAmount.toStringAsFixed(2)}'),
                   ('Out Amount',    '₹${widget.outAmount.toStringAsFixed(2)}'),
                   ('Discount Amount',                      '₹${widget.discountAmount.toStringAsFixed(2)}'),

@@ -94,6 +94,10 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
   Future<void> _performSearch() async {
     _focusNode.unfocus();
     final provider = context.read<SearchProvider>();
+    // D4 / Android cust_search: the non-cancellable "Searching..., Please
+    // wait..." loader allows only one search at a time — a second Search
+    // (button or keyboard) while one is running is ignored.
+    if (provider.isLoading) return;
     // Android parity (SearchCustomer_Fragment_Newdesign:615-617): empty field →
     // "Please enter any value in the fields" instead of silently doing nothing.
     final typed = _searchController.text.trim();
@@ -134,15 +138,35 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
               const SizedBox(height: 14),
               // ── D-B6: Dealer dropdown (common employees only, above the
               //    search options like Android's search_new_digi.xml) ──────
-              if (_isCommonEmployee) ...[
-                _dealerDropdown(),
-                const SizedBox(height: 10),
-              ],
-              // ── Dropdown ─────────────────────────────────────────────────
-              _dropdown(t),
-              const SizedBox(height: 10),
-              // ── Search field ─────────────────────────────────────────────
-              _searchField(t),
+              // D4 / Android cust_search: while a search runs, the dealer,
+              // criteria, CRF prefix, text field and Search button ignore taps
+              // (dimmed), so a criteria change or second search can't mix
+              // results. The inline spinner below is kept.
+              Selector<SearchProvider, bool>(
+                selector: (_, p) => p.isLoading,
+                builder: (context, busy, child) => AbsorbPointer(
+                  absorbing: busy,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: busy ? 0.5 : 1.0,
+                    child: child,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_isCommonEmployee) ...[
+                      _dealerDropdown(),
+                      const SizedBox(height: 10),
+                    ],
+                    // ── Dropdown ───────────────────────────────────────────
+                    _dropdown(t),
+                    const SizedBox(height: 10),
+                    // ── Search field ───────────────────────────────────────
+                    _searchField(t),
+                  ],
+                ),
+              ),
               const SizedBox(height: 14),
               // ── Results ──────────────────────────────────────────────────
               // Android parity: the search controls stay fixed and the results
@@ -205,7 +229,7 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                             child: _resultBanner(p, t),
                           );
                         }
-                        return _CustomerCard(
+                        return SearchCustomerCard(
                           customer: p.results[i - 1],
                           t: t,
                           // D-B6: the detail fetch uses the same dealer.
@@ -494,7 +518,15 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(10),
                             ]
-                          : null,
+                          // D-B5 / Android :476-492: letters, digits, space
+                          // and _ / - . only, max 50 (customnumber varchar 50).
+                          : p.isAccountNumberSearch
+                              ? [
+                                  FilteringTextInputFormatter.allow(
+                                      RegExp(r'[a-zA-Z0-9 _/\-.]')),
+                                  LengthLimitingTextInputFormatter(50),
+                                ]
+                              : null,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -684,19 +716,19 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _CustomerCard — matches reference photo exactly
+// SearchCustomerCard — matches reference photo exactly
 //   • Light blue-grey card bg (#F0F4FF)
 //   • Blue rounded-square avatar
 //   • Outlined STB badge
 //   • Icon info rows (Pending, Last Paid, Address)
 //   • Dark navy "View Details" button + red map pin
 // ─────────────────────────────────────────────────────────────────────────────
-class _CustomerCard extends StatelessWidget {
+class SearchCustomerCard extends StatelessWidget {
   final Customer customer;
   final AppThemeConst t;
   final int dealerId; // D-B6: dealer_id for the enriched detail fetch
-  const _CustomerCard(
-      {required this.customer, required this.t, this.dealerId = 0});
+  const SearchCustomerCard(
+      {super.key, required this.customer, required this.t, this.dealerId = 0});
 
   @override
   Widget build(BuildContext context) {

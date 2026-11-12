@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/data/customer.dart';
 import '../../core/services/session_service.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../search/data/search_repository.dart';
+import '../search/search_customer_screen.dart' show SearchCustomerCard;
 import '../search/search_dealers.dart';
-import '../customer/customer_details_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCAN CUSTOMER SCREEN — real MobileScanner with camera permission
@@ -32,6 +34,10 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
   final bool _isCommonEmployee = SessionService.instance.commonEmployee != 0;
   List<SearchDealer> _dealers = const [kSelectDealer];
   int _dealerId = 0;
+  // D13 / Android ScannerFrag :973-978: every match is listed (even one);
+  // tapping a card opens that customer. Cleared by the rescan button.
+  List<Customer> _results = const [];
+  int _resultsDealerId = 0; // dealer used for the search (detail fetch)
 
   @override
   void initState() {
@@ -89,7 +95,10 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
   }
 
   void _resetScan() {
-    setState(() => _scannedValue = '');
+    setState(() {
+      _scannedValue = '';
+      _results = const [];
+    });
     _scanCtrl?.start();
   }
 
@@ -135,30 +144,38 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
       );
       return;
     }
-    // Android parity: on resolving the customer, fetch the enriched detail
-    // (is_list=1) so is_show / tmp_activation reach the operations grid. Falls
-    // back to the scan result if the detail fetch yields nothing.
-    final enriched = (result.statusCode == 0 && result.customers.isNotEmpty)
-        ? await SearchRepository.instance.fetchCustomerDetail(
-            result.customers.first.lcoCustomerId,
-            dealerId: dealerId)
-        : null;
     if (!mounted) return;
     Navigator.pop(context); // dismiss loading
-    if (result.statusCode == 0 && result.customers.isNotEmpty) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CustomerDetailsScreen(
-              customer: enriched ?? result.customers.first),
+    // D13 / Android ScannerFrag cust_search onPostExecute :973-1008.
+    if (result.statusCode == 0) {
+      // Show the result list; the customer opens on tap (the card's View
+      // Details does the enriched detail fetch, same as Search Customer).
+      setState(() {
+        _results = result.customers;
+        _resultsDealerId = dealerId;
+      });
+    } else if (result.statusCode == 1) {
+      // "No records Found !" with the server message; OK clears the scan so
+      // the next barcode can be read (Android :983-1005).
+      setState(() => _results = const []);
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('No records Found !'),
+          content: Text(result.statusMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('OK'),
+            ),
+          ],
         ),
       );
+      if (ok == true && mounted) _resetScan();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.statusMessage.isEmpty
-              ? 'No customer found for "$_scannedValue"'
-              : result.statusMessage),
+          content: Text('${result.statusMessage}: Contact Support'),
           backgroundColor: Colors.red,
         ),
       );
@@ -276,25 +293,46 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
 
                   const SizedBox(height: 16),
 
-                  // ── Camera Preview ───────────────────────────────────────
+                  // ── Camera Preview, or the D13 result list ───────────────
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: _permissionGranted
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                MobileScanner(
-                                  controller: _scanCtrl,
-                                  onDetect: _onDetect,
+                      // The camera stays in the tree (the scanner controller
+                      // is only stopped/started); the result list covers it.
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _permissionGranted
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    MobileScanner(
+                                      controller: _scanCtrl,
+                                      onDetect: _onDetect,
+                                    ),
+                                    // Corner scan frame overlay
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                          painter: _ScannerFramePainter()),
+                                    ),
+                                  ],
+                                )
+                              : _buildPermissionDenied(),
+                          if (_results.isNotEmpty)
+                            Container(
+                              color: AppColors.primary,
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: _results.length,
+                                itemBuilder: (ctx, i) => SearchCustomerCard(
+                                  customer: _results[i],
+                                  t: AppThemeConst.of(ctx),
+                                  dealerId: _resultsDealerId,
                                 ),
-                                // Corner scan frame overlay
-                                Positioned.fill(
-                                  child: CustomPaint(painter: _ScannerFramePainter()),
-                                ),
-                              ],
-                            )
-                          : _buildPermissionDenied(),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
 

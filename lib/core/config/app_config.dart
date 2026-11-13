@@ -46,7 +46,12 @@ class AppConfig {
   // static const String namespace = 'https://digi.ezycable.com/index.php'; // LIVE CloudDigi
   // static const String namespace =
   //     'http://192.168.1.16/testing/ezycabledigi_v2_H8_cloud_live/app/index.php'; // LOCAL (active)
-      // static const String namespace = "https://digiv2.kccl.tv/index.php";
+       //static const String namespace = "https://digiv2.kccl.tv/index.php";
+  // App Store listing (App Store Connect > App Information > Apple ID).
+  static const String appStoreId =
+      '6820844456';
+  static const String appStoreUrl =
+      'https://apps.apple.com/app/id$appStoreId';
   // Device id sent as `imei`.
   // Resolution order:
   //   1) --dart-define=DEVICE_IMEI=…  → optional override for debugging or testing

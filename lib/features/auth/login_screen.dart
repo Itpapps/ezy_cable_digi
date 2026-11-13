@@ -22,6 +22,8 @@ import '../offline/offline_dashboard_screen.dart';
 import '../../widgets/primary_button.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/app_version_service.dart';
+import '../update/force_update_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -47,6 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // blocks on location.
   double _loginLat = 0.0;
   double _loginLng = 0.0;
+  bool _forceUpdateShown = false;
 
   @override
   void initState() {
@@ -67,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<CustomerListProvider>().reset();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAppVersion());
   }
 
   /// Android parity (LoginActivity.java:226-227): prefill the fields with the
@@ -106,6 +110,22 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (_) {
       await ServerUrlResolver.instance.loadCached();
     }
+  }
+
+  /// iOS force update. Never blocks on error.
+  Future<void> _checkAppVersion() async {
+    final version = await AppVersionService.instance.check();
+    if (!mounted || !version.forceUpdate) return;
+    _openForceUpdate(version.message);
+  }
+
+  void _openForceUpdate(String message) {
+    if (_forceUpdateShown) return;
+    _forceUpdateShown = true;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => ForceUpdateScreen(message: message)),
+      (_) => false,
+    );
   }
 
   /// Asks for Location + Nearby Devices (Bluetooth) as soon as login screen opens.
@@ -163,6 +183,13 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Outdated iOS build cannot log in even if Sign In is tapped quickly.
+      final version = await AppVersionService.instance.check();
+      if (!mounted) return;
+      if (version.forceUpdate) {
+        _openForceUpdate(version.message);
+        return;
+      }
       final result = await AuthService.instance.login(
         username: username,
         password: password,

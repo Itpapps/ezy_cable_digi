@@ -67,7 +67,9 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               // ── Info Rows ──
               // Android last_paid_amount (GPA) — NOT the pending/bill amount.
               _infoRow('Last Paid Amount', '₹${widget.lastPaidAmount.toStringAsFixed(2)}'),
-              _infoRow('Last Paid Date', widget.customer.lastPaidDate.isEmpty ? 'Code=0' : widget.customer.lastPaidDate),
+              // No last payment → "NA" (Android's own fallback,
+              // R.string.not_available) instead of the old "Code=0" text.
+              _infoRow('Last Paid Date', widget.customer.lastPaidDate.trim().isEmpty ? 'NA' : widget.customer.lastPaidDate),
               _infoRow('Current Month\nPayments Count', _currentMonthPayments.toString()),
               _infoRow('Current Month\nAdjustments Count', _currentMonthAdjustments.toString()),
               

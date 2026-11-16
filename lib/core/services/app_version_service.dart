@@ -26,6 +26,14 @@ class AppVersionService {
 
   Future<AppVersionResult>? _result;
 
+  /// TestFlight testing only. TestFlight builds never appear in the App Store
+  /// lookup, so the iOS store check can never pass for them. Build with
+  ///   --dart-define=SKIP_STORE_CHECK=true
+  /// to let the server's statusCode alone decide (same as Android).
+  /// Off by default — never ship an App Store build with this flag.
+  static const bool _skipStoreCheck =
+      bool.fromEnvironment('SKIP_STORE_CHECK');
+
   /// Runs once per app launch; later calls reuse the same result.
   Future<AppVersionResult> check() => _result ??= _check();
 
@@ -67,7 +75,7 @@ class AppVersionService {
       final message = SoapClient.readField(xml, 'statusMessage') ?? '';
 
       // 2) App Store (iOS only): is a newer version really live?
-      if (isIOS) {
+      if (isIOS && !_skipStoreCheck) {
         final res = await http
             .get(Uri.parse(
                 'https://itunes.apple.com/lookup?id=${AppConfig.appStoreId}&country=in'))

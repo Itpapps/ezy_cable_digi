@@ -23,7 +23,7 @@ import '../../widgets/primary_button.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/app_version_service.dart';
-import '../update/force_update_screen.dart';
+import '../update/force_update_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -112,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// iOS force update. Never blocks on error.
+  /// iOS + Android force update. Never blocks on error.
   Future<void> _checkAppVersion() async {
     final version = await AppVersionService.instance.check();
     if (!mounted || !version.forceUpdate) return;
@@ -122,10 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _openForceUpdate(String message) {
     if (_forceUpdateShown) return;
     _forceUpdateShown = true;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => ForceUpdateScreen(message: message)),
-      (_) => false,
-    );
+    showForceUpdateDialog(context, message);
   }
 
   /// Asks for Location + Nearby Devices (Bluetooth) as soon as login screen opens.
@@ -183,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Outdated iOS build cannot log in even if Sign In is tapped quickly.
+      // Outdated build (iOS/Android) cannot log in even if Sign In is tapped quickly.
       final version = await AppVersionService.instance.check();
       if (!mounted) return;
       if (version.forceUpdate) {

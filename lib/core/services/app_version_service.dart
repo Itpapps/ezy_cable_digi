@@ -16,9 +16,10 @@ class AppVersionResult {
   static const ok = AppVersionResult(false, '');
 }
 
-/// iOS force update via the existing SOAP appVersionCheck.
-/// Force only when the server says update AND the App Store really has a
-/// newer version. Any error or offline -> ok (never blocks the user).
+/// iOS + Android force update via the existing SOAP appVersionCheck.
+/// iOS: force only when the server says update AND the App Store really has a
+/// newer version. Android: the Play Store has no public version lookup, so the
+/// server's answer alone decides. Any error or offline -> ok (never blocks).
 class AppVersionService {
   AppVersionService._();
   static final AppVersionService instance = AppVersionService._();
@@ -30,7 +31,9 @@ class AppVersionService {
 
   Future<AppVersionResult> _check() async {
     try {
-      if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+      final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+      if (kIsWeb || (!isIOS && !isAndroid)) {
         return AppVersionResult.ok;
       }
       final connectivity = await Connectivity().checkConnectivity();
@@ -63,18 +66,20 @@ class AppVersionService {
       }
       final message = SoapClient.readField(xml, 'statusMessage') ?? '';
 
-      // 2) App Store: is a newer version really live?
-      final res = await http
-          .get(Uri.parse(
-              'https://itunes.apple.com/lookup?id=${AppConfig.appStoreId}&country=in'))
-          .timeout(const Duration(seconds: 10));
-      if (res.statusCode != 200) return AppVersionResult.ok;
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final results = body['results'] as List<dynamic>? ?? const <dynamic>[];
-      if (results.isEmpty) return AppVersionResult.ok;
-      final storeVersion =
-          '${(results.first as Map<String, dynamic>)['version'] ?? ''}';
-      if (!_isNewer(storeVersion, installed)) return AppVersionResult.ok;
+      // 2) App Store (iOS only): is a newer version really live?
+      if (isIOS) {
+        final res = await http
+            .get(Uri.parse(
+                'https://itunes.apple.com/lookup?id=${AppConfig.appStoreId}&country=in'))
+            .timeout(const Duration(seconds: 10));
+        if (res.statusCode != 200) return AppVersionResult.ok;
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final results = body['results'] as List<dynamic>? ?? const <dynamic>[];
+        if (results.isEmpty) return AppVersionResult.ok;
+        final storeVersion =
+            '${(results.first as Map<String, dynamic>)['version'] ?? ''}';
+        if (!_isNewer(storeVersion, installed)) return AppVersionResult.ok;
+      }
 
       return AppVersionResult(
         true,

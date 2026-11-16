@@ -224,10 +224,16 @@ class RestClient {
     return map;
   }
 
-  /// DIAGNOSTIC (TEMPORARY) — same request as [postEncrypted], but decodes the
-  /// response `hash` field instead of `payload`, to check whether the server's
-  /// two fields disagree for an endpoint. Remove once the backend is confirmed.
-  Future<Map<String, dynamic>> postEncryptedHash(
+  /// Android `ApiCallRestClient.callPostApiSilent` (:396-500) — same request as
+  /// [postEncrypted], ONE call, response read in Android's order:
+  ///   1. `payload` decrypted — used if it is a JSON object with `status_code`;
+  ///   2. else `hash` hex-decoded — used only if it also has `status_code`
+  ///      (the server can echo the REQUEST hash back, which must not be taken
+  ///      as the result).
+  /// Returns the response map as-is (no Error_code mapping). Throws
+  /// [RestException] when neither field holds a real response, or on HTTP /
+  /// network errors — callers treat that as "nothing to show".
+  Future<Map<String, dynamic>> postEncryptedSilent(
     String url,
     Map<String, String> params, {
     Duration timeout = const Duration(seconds: 60),
@@ -256,13 +262,31 @@ class RestClient {
       throw RestException('HTTP ${res.statusCode}', statusCode: res.statusCode);
     }
     final outer = jsonDecode(res.body);
-    if (outer is! Map || outer['hash'] == null) {
-      throw RestException('Unexpected response (no hash)');
+    if (outer is! Map) {
+      throw RestException('Unexpected encrypted response shape');
     }
-    final inner = jsonDecode(DigiCrypto.hexToString(outer['hash'].toString()));
-    if (inner is! Map) {
-      throw RestException('hash did not decode to JSON');
+    Map<String, dynamic>? asResponse(String decoded) {
+      try {
+        final m = jsonDecode(decoded);
+        if (m is Map && m.containsKey('status_code')) {
+          return Map<String, dynamic>.from(m);
+        }
+      } catch (_) {
+        // Not JSON — fall through, like Android's guarded branches.
+      }
+      return null;
     }
-    return Map<String, dynamic>.from(inner);
+
+    final payload = '${outer['payload'] ?? ''}';
+    if (payload.isNotEmpty) {
+      final m = asResponse(DigiCrypto.decryptions(payload));
+      if (m != null) return m;
+    }
+    final hashVal = '${outer['hash'] ?? ''}';
+    if (hashVal.isNotEmpty) {
+      final m = asResponse(DigiCrypto.hexToString(hashVal));
+      if (m != null) return m;
+    }
+    throw RestException('Invalid Payload Response');
   }
 }

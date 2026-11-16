@@ -11,7 +11,8 @@ import 'data/complaint_option.dart';
 //     (complaintCategories / assignedemployeedetails) — never hardcoded.
 //   • GPS lat/long captured if available, else 0.0 (mirrors Android).
 //   • Submit calls createComplaint; handles statusCode 0/1/2/null.
-//   • Validates: category ≠ Select, employee ≠ Select, description not empty.
+//   • Validates: category ≠ Select, employee ≠ Select (description optional,
+//     like Android).
 //   • Never crashes on null / missing fields / malformed / network / timeout.
 // The "Employee / Service" dropdown is kept for visual parity with Android (it is
 // cosmetic there — it does not affect the request).
@@ -132,10 +133,9 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
       _snack('Please select an employee/service');
       return;
     }
-    if (_descController.text.trim().isEmpty) {
-      _snack('Please enter a description');
-      return;
-    }
+    // Issue 4 / Android Complaint_NewComplaint_Fragment :229: the description
+    // is optional — Android checks only category and employee, then sends
+    // the text as typed (empty allowed).
     if (_submitting) return;
     setState(() => _submitting = true);
     // C12 / Android Complaint_NewComplaint_Fragment :1060: non-cancellable
@@ -340,9 +340,27 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
                     TextField(
                       controller: _descController,
                       enabled: !_submitting,
+                      // The app theme's enabledBorder is a 20%-alpha line
+                      // (near invisible on white), so this field sets its own
+                      // visible borders.
                       decoration: InputDecoration(
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF9CA3AF), width: 1.2),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF0D47A1), width: 1.6),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFD1D5DB)),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 12),
                       ),

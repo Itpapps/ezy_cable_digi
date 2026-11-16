@@ -730,13 +730,30 @@ class SearchCustomerCard extends StatelessWidget {
   const SearchCustomerCard(
       {super.key, required this.customer, required this.t, this.dealerId = 0});
 
+  /// Issue 5 / Android SearchCustomer_Rec_Adapter :67-78: the card's "Pending
+  /// Amount" is the server's `pending` (the payable amount), not
+  /// `total_amount`, with the dealer's amount_round applied: ACTUAL → the
+  /// server text as-is · ROUND → whole number · CEIL → ceiling ("2399.0"),
+  /// like Java's String.valueOf(Math.round / Math.ceil). Empty or unreadable →
+  /// "₹0" (the card's existing fallback).
+  static String _pendingText(String raw) {
+    final s = raw.replaceAll('₹', '').trim();
+    final v = double.tryParse(s);
+    if (v == null) return '₹0';
+    final session = SessionService.instance;
+    if (session.amountRound == 'ACTUAL') return '₹$s';
+    final r = session.applyAmountRound(v);
+    if (session.amountRound == 'ROUND') return '₹${r.toInt()}';
+    return '₹$r';
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasLoc = customer.latitude != null && customer.longitude != null;
-    final hasPending =
-        customer.pendingAmount.isNotEmpty &&
-        customer.pendingAmount != '₹0' &&
-        customer.pendingAmount != '0';
+    final pendingValue = double.tryParse(
+            customer.amountPayable.replaceAll('₹', '').trim()) ??
+        0;
+    final hasPending = pendingValue != 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -856,9 +873,7 @@ class SearchCustomerCard extends StatelessWidget {
                 _row(
                   Iconsax.timer_1,
                   'Pending Amount',
-                  customer.pendingAmount.isEmpty
-                      ? '₹0'
-                      : customer.pendingAmount,
+                  _pendingText(customer.amountPayable),
                   valueColor: hasPending
                       ? const Color(0xFFD32F2F)
                       : const Color(0xFF1AA95A),

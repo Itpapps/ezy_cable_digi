@@ -18,10 +18,12 @@ class NotificationRepository {
 
   /// ALL active login notifications (newest-first), or empty on none/error.
   ///
-  /// DIAGNOSTIC (TEMPORARY): currently parses the response `hash`, because the
-  /// server's `payload` returns empty for this endpoint. Once the backend fixes
-  /// `payload`, return `_parse(data)` from the PAYLOAD block and delete the HASH
-  /// block + `RestClient.postEncryptedHash` + `DigiCrypto.hexToString`.
+  /// Issue 2 / Android MainActivity.fetchLoginNotifications (:1034-1090): ONE
+  /// request via ApiCallRestClient.callPostApiSilent, which reads the decrypted
+  /// `payload` first and falls back to `hash` only when it is a real response.
+  /// Flutter used to read `hash` alone (two requests) — when the server echoes
+  /// the request there, nothing showed even though Android showed the popup.
+  /// Any failure → empty list (silent, like Android).
   Future<List<LoginNotification>> fetchLoginNotifications() async {
     final url = _url('login_notifications');
     final params = {
@@ -31,32 +33,17 @@ class NotificationRepository {
       'employee_id': SessionService.instance.employeeId,
     };
 
-    // ── PAYLOAD (documented/production path) — logged for comparison ──
     try {
-      final data = await RestClient.instance
-          .postEncrypted(url, params, timeout: const Duration(seconds: 30));
+      final data = await RestClient.instance.postEncryptedSilent(url, params,
+          timeout: const Duration(seconds: 30)); // Android retry policy 30 s
       if (kDebugMode) {
-        debugPrint('[LOGIN-NOTIF] PAYLOAD = '
-            '${const JsonEncoder.withIndent('  ').convert(data)}');
-      }
-      // TODO(after backend fixes payload): return _parse(data); remove HASH block.
-    } catch (e) {
-      if (kDebugMode) debugPrint('[LOGIN-NOTIF] PAYLOAD failed: $e');
-    }
-
-    // ── HASH (DIAGNOSTIC — the server currently puts the data here) ──
-    try {
-      final data = await RestClient.instance
-          .postEncryptedHash(url, params, timeout: const Duration(seconds: 30));
-      if (kDebugMode) {
-        debugPrint('[LOGIN-NOTIF] HASH = '
+        debugPrint('[LOGIN-NOTIF] response = '
             '${const JsonEncoder.withIndent('  ').convert(data)}');
       }
       return _parse(data);
     } catch (e) {
-      if (kDebugMode) debugPrint('[LOGIN-NOTIF] HASH failed: $e');
+      if (kDebugMode) debugPrint('[LOGIN-NOTIF] failed: $e');
     }
-
     return const [];
   }
 

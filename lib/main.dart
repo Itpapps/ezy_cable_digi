@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:ezy_cable_digi/core/services/connectivity_service.dart';
 import 'package:ezy_cable_digi/core/services/error_handler_service.dart';
+import 'package:ezy_cable_digi/core/services/session_timeout_service.dart';
 import 'package:ezy_cable_digi/core/services/theme_service.dart';
 import 'package:ezy_cable_digi/features/customers/customer_list_provider.dart';
 import 'package:ezy_cable_digi/features/search/search_provider.dart';
@@ -34,6 +35,8 @@ Future<void> mainEntry() async {
     await ThemeService.init();
     // Start connectivity listener for offline auto-sync
     ConnectivityService.instance.startListening();
+    // Logout after 10+ minutes in the background (session only, no data reset)
+    SessionTimeoutService.instance.start();
     runApp(const EzyCableDigiApp());
   }, (error, stack) {
     ErrorHandlerService.recordError(error, stack, reason: 'Uncaught app error');
@@ -57,6 +60,8 @@ class EzyCableDigiApp extends StatelessWidget {
           final themeData = AppTheme.forIndex(ThemeService.instance.themeIndex)
               .copyWith(textTheme: GoogleFonts.interTextTheme());
           return MaterialApp(
+            navigatorKey: rootNavigatorKey,
+            scaffoldMessengerKey: rootMessengerKey,
             title: AppConfig.instance.appName,
             debugShowCheckedModeBanner: false,
             themeMode: ThemeMode.light,

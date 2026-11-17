@@ -21,6 +21,10 @@ import 'offline_unpaid_list_screen.dart';
 class OfflineDashboardScreen extends StatefulWidget {
   const OfflineDashboardScreen({super.key});
 
+  /// True while at least one Offline Dashboard is open (used by the
+  /// background-timeout logout to know an offline user is "logged in").
+  static bool get isOpen => _OfflineDashboardScreenState._openCount > 0;
+
   @override
   State<OfflineDashboardScreen> createState() => _OfflineDashboardScreenState();
 }

@@ -6,6 +6,9 @@ import 'data/change_password_repository.dart';
 /// Change Password — Android parity (UserProfile_ChangePsw_Fragment):
 /// Old / New / Confirm, client validation (empty + mismatch), SOAP
 /// `passwordChange`, Android-equivalent success/error messages.
+/// Issue 1 (QA): the new password must also meet the web app's rules
+/// ([_PasswordRule.all]) — checked after the Android checks, before the
+/// request. Login with an existing password is not affected.
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -47,6 +50,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (newP != conf) {
       _snack('New password and Confirm Password does not match.');
       return;
+    }
+    // Issue 1: the web app's password rules, first unmet rule wins.
+    for (final rule in _PasswordRule.all) {
+      if (!rule.isMet(newP)) {
+        _snack(rule.message);
+        return;
+      }
     }
 
     FocusScope.of(context).unfocus();
@@ -192,7 +202,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     onToggle: () =>
                         setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
-                  const SizedBox(height: 24),
+                  // Rules checklist (still tracks the New Password field)
+                  // sits below both password fields, above the button.
+                  const SizedBox(height: 12),
+                  _rulesChecklist(t),
+                  const SizedBox(height: 20),
                   SizedBox(
                     height: 52,
                     child: ElevatedButton(
@@ -271,4 +285,72 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ),
     );
   }
+
+  /// Issue 1: the web's rule list under "New Password"; each line turns green
+  /// as the typed (trimmed, as sent) password meets it.
+  Widget _rulesChecklist(AppThemeConst t) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _new,
+      builder: (context, value, _) {
+        final p = value.text.trim();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final rule in _PasswordRule.all)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      rule.isMet(p)
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 16,
+                      color: rule.isMet(p)
+                          ? const Color(0xFF1AA95A)
+                          : t.cardSubtitleText,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        rule.label,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: rule.isMet(p)
+                              ? const Color(0xFF1AA95A)
+                              : t.cardSubtitleText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Issue 1: the web app's change-password rules (labels as the web shows them).
+class _PasswordRule {
+  final String label;
+  final String message;
+  final bool Function(String) isMet;
+  const _PasswordRule(this.label, this.message, this.isMet);
+
+  static final List<_PasswordRule> all = [
+    _PasswordRule('Be at least 8 characters',
+        'Password requires at least 8 characters.', (p) => p.length >= 8),
+    _PasswordRule('At least one letter',
+        'Password requires at least one letter.',
+        (p) => RegExp(r'[A-Za-z]').hasMatch(p)),
+    _PasswordRule('At least one number',
+        'Password requires at least one number.',
+        (p) => RegExp(r'[0-9]').hasMatch(p)),
+    _PasswordRule('At least one capital letter',
+        'Password requires at least one capital letter.',
+        (p) => RegExp(r'[A-Z]').hasMatch(p)),
+  ];
 }

@@ -1,11 +1,7 @@
-import 'dart:convert';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../config/app_config.dart';
 import '../network/server_url_resolver.dart';
 import '../network/soap_client.dart';
 
@@ -17,22 +13,13 @@ class AppVersionResult {
 }
 
 /// iOS + Android force update via the existing SOAP appVersionCheck.
-/// iOS: force only when the server says update AND the App Store really has a
-/// newer version. Android: the Play Store has no public version lookup, so the
-/// server's answer alone decides. Any error or offline -> ok (never blocks).
+/// The server's answer alone decides (same as the native Android app).
+/// Any error or offline -> ok (never blocks).
 class AppVersionService {
   AppVersionService._();
   static final AppVersionService instance = AppVersionService._();
 
   Future<AppVersionResult>? _result;
-
-  /// TestFlight testing only. TestFlight builds never appear in the App Store
-  /// lookup, so the iOS store check can never pass for them. Build with
-  ///   --dart-define=SKIP_STORE_CHECK=true
-  /// to let the server's statusCode alone decide (same as Android).
-  /// Off by default — never ship an App Store build with this flag.
-  static const bool _skipStoreCheck =
-      bool.fromEnvironment('SKIP_STORE_CHECK');
 
   /// Runs once per app launch; later calls reuse the same result.
   Future<AppVersionResult> check() => _result ??= _check();
@@ -74,21 +61,6 @@ class AppVersionService {
       }
       final message = SoapClient.readField(xml, 'statusMessage') ?? '';
 
-      // 2) App Store (iOS only): is a newer version really live?
-      if (isIOS && !_skipStoreCheck) {
-        final res = await http
-            .get(Uri.parse(
-                'https://itunes.apple.com/lookup?id=${AppConfig.appStoreId}&country=in'))
-            .timeout(const Duration(seconds: 10));
-        if (res.statusCode != 200) return AppVersionResult.ok;
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        final results = body['results'] as List<dynamic>? ?? const <dynamic>[];
-        if (results.isEmpty) return AppVersionResult.ok;
-        final storeVersion =
-            '${(results.first as Map<String, dynamic>)['version'] ?? ''}';
-        if (!_isNewer(storeVersion, installed)) return AppVersionResult.ok;
-      }
-
       return AppVersionResult(
         true,
         message.isNotEmpty
@@ -106,17 +78,5 @@ class AppVersionService {
   static String _serverVersionName(String v) {
     final p = v.split('.');
     return (p.length == 3 && p[2] == '0') ? '${p[0]}.${p[1]}' : v;
-  }
-
-  /// true if [store] is newer than [installed], compared as numbers.
-  static bool _isNewer(String store, String installed) {
-    final a = store.split('.').map((s) => int.tryParse(s) ?? 0).toList();
-    final b = installed.split('.').map((s) => int.tryParse(s) ?? 0).toList();
-    for (var i = 0; i < 3; i++) {
-      final x = i < a.length ? a[i] : 0;
-      final y = i < b.length ? b[i] : 0;
-      if (x != y) return x > y;
-    }
-    return false;
   }
 }

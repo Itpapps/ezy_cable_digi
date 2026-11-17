@@ -35,7 +35,7 @@ Future<void> _openStore() async {
       // Package name follows the build flavor (e.g. com.magik.cable.digi).
       final info = await PackageInfo.fromPlatform();
       url = Uri.parse(
-          'https://play.google.com/store/apps/details?id=${info.packageName}');
+          'https://play.google.com/store/apps/details?id=itp.com.magikdigi');
     } else {
       url = Uri.parse(AppConfig.appStoreUrl);
     }

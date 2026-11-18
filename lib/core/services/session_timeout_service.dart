@@ -35,14 +35,14 @@ final GlobalKey<ScaffoldMessengerState> rootMessengerKey =
 ///    screen anyway (MaterialApp home).
 ///  • Short trips out of the app (QR scanner permission, url_launcher, share
 ///    sheet, UPI app) count as background time from the moment the app left
-///    the foreground; under 10 minutes nothing happens.
+///    the foreground; under 5 minutes nothing happens.
 ///  • Open dialogs / bottom sheets / pickers are removed with every other
 ///    route; screens awaiting API calls already guard with `mounted`.
 class SessionTimeoutService {
   SessionTimeoutService._();
   static final SessionTimeoutService instance = SessionTimeoutService._();
 
-  static const Duration backgroundTimeout = Duration(minutes: 10);
+  static const Duration backgroundTimeout = Duration(minutes: 5);
 
   AppLifecycleListener? _listener;
   DateTime? _backgroundedAt;

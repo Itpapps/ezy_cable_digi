@@ -35,7 +35,7 @@ Future<void> mainEntry() async {
     await ThemeService.init();
     // Start connectivity listener for offline auto-sync
     ConnectivityService.instance.startListening();
-    // Logout after 10+ minutes in the background (session only, no data reset)
+    // Logout after 5+ minutes in the background (session only, no data reset)
     SessionTimeoutService.instance.start();
     runApp(const EzyCableDigiApp());
   }, (error, stack) {

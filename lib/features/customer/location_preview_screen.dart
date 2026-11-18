@@ -6,11 +6,16 @@ class LocationPreviewScreen extends StatelessWidget {
   final String areaName;
   final LatLng location;
 
+  /// Android MapsFragmentlocupdate SEND: the save confirm + server call run
+  /// while this map is still open, so a failure leaves the user here.
+  final Future<void> Function(BuildContext context) onSend;
+
   const LocationPreviewScreen({
     super.key,
     required this.customerName,
     required this.areaName,
     required this.location,
+    required this.onSend,
   });
 
   @override
@@ -36,7 +41,10 @@ class LocationPreviewScreen extends StatelessWidget {
                 ),
               },
               polylines: const {},
-              myLocationEnabled: false,
+              // Android MapsFragmentlocupdate :305/:312 setMyLocationEnabled(true):
+              // blue dot + "my location" button (works on iOS and Android).
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
               zoomControlsEnabled: true,
               mapToolbarEnabled: false,
             ),
@@ -64,7 +72,7 @@ class LocationPreviewScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
+                        onPressed: () => onSend(context),
                         child: const Text('SEND'),
                       ),
                     ),

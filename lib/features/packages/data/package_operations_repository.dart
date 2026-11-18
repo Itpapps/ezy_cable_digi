@@ -511,7 +511,23 @@ class PackageOperationsRepository {
   Future<PackageWriteResult> updateLcoCustomerId({
     required String customerId,
     required String newLcoId,
-  }) async {
+  }) =>
+      _updateMobileOrLcoId(customerId, 'LCO_customer_id', newLcoId);
+
+  /// Same API as [updateLcoCustomerId] — Android igv_editmob →
+  /// update_Lco_or_mobile("", mobile): updateType="mobile",
+  /// updateValue="91"+<10-digit number>.
+  Future<PackageWriteResult> updateMobileNumber({
+    required String customerId,
+    required String newMobile,
+  }) =>
+      _updateMobileOrLcoId(customerId, 'mobile', '91$newMobile');
+
+  Future<PackageWriteResult> _updateMobileOrLcoId(
+    String customerId,
+    String updateType,
+    String updateValue,
+  ) async {
     try {
       final data = await RestClient.instance.postForm(
         _url('updateMobileAndLCOCustID'),
@@ -519,8 +535,8 @@ class PackageOperationsRepository {
           ..._auth,
           'customerId': customerId,
           'employeeId': SessionService.instance.employeeId,
-          'updateType': 'LCO_customer_id',
-          'updateValue': newLcoId,
+          'updateType': updateType,
+          'updateValue': updateValue,
         },
         timeout: const Duration(seconds: 70),
       );

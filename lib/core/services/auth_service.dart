@@ -154,6 +154,10 @@ class AuthService {
       // row is shown in search results / customer details.
       final useCaf =
           int.tryParse(SoapClient.readField(xml, 'use_crf') ?? '') ?? 0;
+      // gps_popup_app (Android LoginActivity.gps_popup_app): 1 = prompt to
+      // update the location of a customer that has none. Default 0 (off).
+      final gpsPopupApp =
+          int.tryParse((SoapClient.readField(xml, 'gps_popup_app') ?? '').trim()) ?? 0;
       // customerAppSearch (Android LoginActivity.customerAppSearch): comma-separated
       // allowed searchType ids → drives the Search Customer dropdown options.
       final customerAppSearch =
@@ -186,6 +190,7 @@ class AuthService {
         useLcoDeposit: useLcoDeposit,
         serverCurrentDate: serverDate,
         useCaf: useCaf,
+        gpsPopupApp: gpsPopupApp,
         customerAppSearch: customerAppSearch,
         showCustomPackages: showCustomPackages,
         username: username,

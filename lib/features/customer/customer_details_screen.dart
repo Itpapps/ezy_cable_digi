@@ -80,6 +80,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         vsync: this, duration: const Duration(milliseconds: 400));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _promptLocationIfMissing());
   }
 
   /// Android parity: `CustomerOperations` calls `packageoperations(0)` →
@@ -940,7 +941,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
         }
         break;
       case 'Update Location':
-        _showUpdateLocationDialog();
+        _onUpdateLocationTile();
         break;
       case 'Payment History':
         Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentHistoryScreen(customer: _customer)));
@@ -1181,8 +1182,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     if (mounted) Navigator.of(context).pop();
   }
 
+  // Android parity (CustomerOperations_Fragment igv_editmob :658-711): empty
+  // number box, digits only, max 10; < 10 → "Please enter 10 digit mobile
+  // number"; else POST updateMobileAndLCOCustID (updateType=mobile,
+  // updateValue="91"+number) and show "91"+number only after success.
   Future<void> _showUpdateMobileDialog(String currentMobile) async {
-    final controller = TextEditingController(text: currentMobile);
+    final controller = TextEditingController();
     final result = await showPremiumDialog<bool>(
       context: context,
       child: PremiumDialogShell(
@@ -1211,7 +1216,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
-                keyboardType: TextInputType.phone,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                 decoration: InputDecoration(
                   hintText: 'New mobile number',
@@ -1259,8 +1268,37 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
 
     if (result != true) return;
     final newMobile = controller.text.trim();
-    if (newMobile.isEmpty || newMobile == currentMobile) return;
-    setState(() { _customer = _customer.copyWith(primaryMobileNumber: newMobile); });
+    if (newMobile.length != 10) {
+      if (mounted) {
+        showPremiumSnackBar(context, 'Please enter 10 digit mobile number', isError: true);
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    showPremiumLoading(context, message: 'Updating...');
+    final res = await PackageOperationsRepository.instance.updateMobileNumber(
+      customerId: _customer.lcoCustomerId, // stable key, same as the LCO-id edit
+      newMobile: newMobile,
+    );
+    if (!mounted) return;
+    nav.pop(); // dismiss loader
+    if (res.isSuccess) {
+      setState(() {
+        _customer = _customer.copyWith(primaryMobileNumber: '91$newMobile');
+      });
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text(res.isSuccess
+          ? (res.statusMessage.isEmpty ? 'Mobile number updated successfully' : res.statusMessage)
+          : (res.statusMessage.isEmpty ? 'Update failed' : res.statusMessage)),
+      backgroundColor: res.isSuccess ? Colors.green.shade600 : Colors.red.shade600,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
     // NOTE: do NOT dispose `controller` here. The dialog has a 260ms exit
     // animation, so the TextField using this controller is still mounted when
     // this line runs. Disposing now makes the TextField's later teardown call
@@ -1462,90 +1500,205 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
   }
 
+  // ── Update Location — Android parity (CustomerOperations_Fragment +
+  // MapsFragmentlocupdate) ──────────────────────────────────────────────────
+  // Entry points:
+  //  • 'Update Location' tile (custoper_btn_addcustomerlocation :1397):
+  //    BroadBand customer → "Access denied!"; otherwise the popup below.
+  //  • Location icon with no location (tv_locate :980) and the on-open prompt
+  //    (:397, gps_popup_app == 1): straight to the popup (no BroadBand check).
+  // Flow: popup (customer details + "Enter Your Area Name", Yes/No, NO
+  // validation) → GPS → map (CANCEL/SEND) → SEND: "Do you want to save
+  // location for this customer?" (Yes/No) → updateCustomerlocation →
+  // status 0: Dashboard + "Location updated successfully…" · 1: "No Records
+  // Found!" · 2: "<msg>: Contact Support" · no reply: "Server is busy or Un
+  // reachable!" (failures stay on the map, as Android does).
+
+  /// Android `latt == 0.0 || longitudee == 0.0` → the customer has no location.
+  bool get _hasLocation {
+    final lat = _customer.latitude;
+    final lng = _customer.longitude;
+    return lat != null && lng != null && lat != 0 && lng != 0;
+  }
+
+  /// Android :397-540 — on opening a customer with no location, when the
+  /// dealer's gps_popup_app flag is 1.
+  Future<void> _promptLocationIfMissing() async {
+    if (!mounted || SessionService.instance.gpsPopupApp != 1 || _hasLocation) {
+      return;
+    }
+    final update = await showPremiumConfirm(
+      context: context,
+      title: 'Location Update!',
+      body: 'Customer doesnot have updated location .Please Update the customer Location!',
+      confirmLabel: 'Update',
+      cancelLabel: 'Cancel',
+    );
+    if (update && mounted) await _showUpdateLocationDialog();
+  }
+
+  /// Android custoper_btn_addcustomerlocation :1397-1418.
+  Future<void> _onUpdateLocationTile() async {
+    if (_customer.customerType.trim() == '1') {
+      await showPremiumConfirm(
+        context: context,
+        title: 'Access denied!',
+        body: 'You have no access ',
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
+      return;
+    }
+    await _showUpdateLocationDialog();
+  }
+
+  /// Customer block shown in both Android location popups
+  /// (addcustlocation_dialolg / adcustdialog_okscreen): Name, LCO Customer Id,
+  /// CRF (only when the dealer uses CRF) and Address.
+  Widget _locationCustomerInfo() {
+    final rows = <(String, String)>[
+      ('Customer Name', _customer.name),
+      ('Lco Customer Id', _lcoId),
+      if (SessionService.instance.useCaf == 1) ('CRF', _customer.crfNumber),
+      ('Address', _customer.address),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final r in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 110,
+                  child: Text(r.$1,
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600)),
+                ),
+                Expanded(
+                  child: Text(r.$2,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary)),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Android-style Yes / No row used by both location popups.
+  Widget _yesNoButtons(BuildContext dialogContext) => Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                side: BorderSide(color: Colors.grey.shade300),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('NO',
+                  style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: 12)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('YES', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+            ),
+          ),
+        ],
+      );
+
+  /// Android popup header + message used by both location popups.
+  Widget _locationPopupHeader(String message) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Iconsax.location, color: AppColors.primary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Update Location',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(message,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+          const SizedBox(height: 12),
+        ],
+      );
+
+  /// Android addcustlocation_dialolg → Yes → MapsFragmentlocupdate.
   Future<void> _showUpdateLocationDialog() async {
-    final controller = TextEditingController(text: _customer.areaName);
+    // Android: empty box, hint "Enter Your Area Name", no validation on Yes.
+    final controller = TextEditingController();
     final confirmed = await showPremiumDialog<bool>(
       context: context,
       child: PremiumDialogShell(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+          child: SingleChildScrollView(
+            child: Builder(
+              builder: (dialogContext) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(10),
+                  _locationPopupHeader(
+                      'Are you sure,you want to update location for following customer?'),
+                  _locationCustomerInfo(),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: controller,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      hintText: 'Enter Your Area Name',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      prefixIcon: const Icon(Iconsax.location, size: 18),
                     ),
-                    child: const Icon(Iconsax.location, color: AppColors.primary, size: 18),
                   ),
-                  const SizedBox(width: 10),
-                  const Text('Update Location', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  const SizedBox(height: 16),
+                  _yesNoButtons(dialogContext),
                 ],
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                decoration: InputDecoration(
-                  hintText: 'Enter area name',
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Iconsax.location, size: 18),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        side: BorderSide(color: Colors.grey.shade300),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('CANCEL', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700, fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('PROCEED', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+    // Android passes the area name on as "Remarks" (may be empty).
     final areaName = controller.text.trim();
-    if (areaName.isEmpty) return;
 
     // ── GPS fetch ────────────────────────────────────────────────────────
-    // mounted is guaranteed here — no await has occurred in this code path yet.
-    if (!mounted) return;
-    // ignore: use_build_context_synchronously
-    final nav       = Navigator.of(context);
+    final nav = Navigator.of(context);
     // A6: the GPS wait is bounded (_currentOrLastKnown, max 8 s) and the
     // loader is always closed below, so Back is ignored (Back used to close
     // the loader, and the late nav.pop() then closed this screen instead).
-    // ignore: use_build_context_synchronously
     showPremiumLoading(context,
         message: 'Getting GPS location...', canPop: false);
     double lat, lng;
@@ -1563,84 +1716,110 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     if (!mounted) return;
     nav.pop(); // dismiss loading
 
-    // ── Location preview push ─────────────────────────────────────────────
-    if (!mounted) return;
-    final previewAccepted = await nav.push<bool>(
+    // ── Map (Android MapsFragmentlocupdate): CANCEL = back, SEND = save ──
+    await nav.push<bool>(
       MaterialPageRoute(
         builder: (_) => LocationPreviewScreen(
           customerName: _customer.name,
           areaName: areaName,
           location: LatLng(lat, lng),
+          onSend: (mapContext) =>
+              _confirmAndSaveLocation(mapContext, areaName, lat, lng),
         ),
       ),
     );
-    if (previewAccepted != true || !mounted) return;
+  }
 
-    // ── Save confirm ──────────────────────────────────────────────────────
-    final shouldSave = await showPremiumConfirm(
-      context: context,
-      title: 'Save Location',
-      body: 'Save GPS location for ${_customer.name}?',
-      confirmLabel: 'SAVE',
+  /// Android btn_send_locupdate → adcustdialog_okscreen (Yes/No) →
+  /// updatecustomerinfodetails. Runs while the map is still open.
+  Future<void> _confirmAndSaveLocation(
+      BuildContext mapContext, String areaName, double lat, double lng) async {
+    final save = await showPremiumDialog<bool>(
+      context: mapContext,
+      child: PremiumDialogShell(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+          child: SingleChildScrollView(
+            child: Builder(
+              builder: (dialogContext) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _locationPopupHeader('Do you want to save location for this customer?'),
+                  _locationCustomerInfo(),
+                  const SizedBox(height: 16),
+                  _yesNoButtons(dialogContext),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
-    if (!shouldSave || !mounted) return;
+    if (save != true || !mapContext.mounted) return;
 
-    // ── Save to DB ────────────────────────────────────────────────────────
-    // Re-capture nav (may still be same, but safe after another async gap)
-    final nav2       = Navigator.of(context);
-    final messenger2 = ScaffoldMessenger.of(context);
-    showPremiumLoading(context, message: 'Saving location...');
-    try {
-      // ── Local DB ──
-      await _db.updateCustomerLocation(
-        lcoCustomerId: _customer.lcoCustomerId,
-        areaName: areaName,
-        latitude: lat,
-        longitude: lng,
-      );
+    final nav = Navigator.of(mapContext);
+    final messenger = ScaffoldMessenger.of(mapContext);
+    showPremiumLoading(mapContext,
+        message: 'Sending details, Please wait...', canPop: false);
+    final res = await CustomerLocationRepository.instance.update(
+      lcoCustomerId: _customer.lcoCustomerId,
+      latitude: lat,
+      longitude: lng,
+    );
+    if (!mapContext.mounted) return;
+    nav.pop(); // dismiss loader
 
-      // ── Server SOAP (fire-and-forget — local save already done above) ──
-      final soapFailed = !await CustomerLocationRepository.instance.update(
-        lcoCustomerId: _customer.lcoCustomerId,
-        latitude: lat,
-        longitude: lng,
-      );
-
-      if (!mounted) return;
-      nav2.pop();
-      messenger2.showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(
-            soapFailed ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
-            color: Colors.white, size: 18,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            soapFailed
-                ? 'Location saved locally (server sync failed)'
-                : 'Location saved successfully',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-          ),
-        ]),
-        backgroundColor: soapFailed ? Colors.orange.shade700 : Colors.green.shade600,
+    if (res.isSuccess) {
+      // Keep the phone copy in step — only after the server accepted it.
+      try {
+        await _db.updateCustomerLocation(
+          lcoCustomerId: _customer.lcoCustomerId,
+          areaName: areaName,
+          latitude: lat,
+          longitude: lng,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('Update location: local copy not saved: $error');
+        debugPrint(stackTrace.toString());
+      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          'Location updated successfully\n'
+          'Customername :${_customer.name}\n'
+          'LCO Customer Id :$_lcoId\n'
+          'Remarks :$areaName',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
       ));
-      setState(() {
-        _customer = _customer.copyWith(areaName: areaName, latitude: lat, longitude: lng);
-      });
-    } catch (e) {
-      if (mounted) {
-        nav2.pop();
-        messenger2.showSnackBar(SnackBar(
-          content: Text('Save failed: $e'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-        ));
-      }
+      // Android: changeFragment(DashboardHomeFragment).
+      nav.popUntil((route) => route.isFirst);
+      return;
+    }
+
+    if (res.statusCode == 1) {
+      await showPremiumConfirm(
+        context: mapContext,
+        title: 'No Records Found!',
+        body: res.statusMessage,
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
+    } else if (res.statusCode == 2) {
+      showPremiumSnackBar(mapContext, '${res.statusMessage}: Contact Support',
+          isError: true);
+    } else {
+      await showPremiumConfirm(
+        context: mapContext,
+        title: 'Server is busy or Un reachable!',
+        body: 'Please try again after sometime',
+        confirmLabel: 'OK',
+        cancelLabel: 'Close',
+      );
     }
   }
 
@@ -1662,8 +1841,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   }
 
   Future<void> _openCustomerMap() async {
-    if (_customer.latitude == null || _customer.longitude == null) {
-      showPremiumSnackBar(context, 'Update customer location first', isError: true);
+    // Android tv_locate :980-1060: no location → the Update Location popup.
+    if (!_hasLocation) {
+      await _showUpdateLocationDialog();
       return;
     }
     // Capture navigator before async gap

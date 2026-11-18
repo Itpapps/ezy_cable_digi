@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/data/customer.dart';
+import '../../core/widgets/premium_dialog.dart';
 import 'data/directions_repository.dart';
 
 class CustomerMapScreen extends StatefulWidget {
@@ -198,6 +200,26 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
     }
   }
 
+  /// Android parity (CustomerOperations_Fragment tv_locate :1116-1121): hand
+  /// the customer's lat/lng to the Google Maps app for turn-by-turn directions
+  /// (its START button). Google's official directions link opens the Google
+  /// Maps app on both Android and iOS (browser if the app is not installed).
+  Future<void> _startNavigation() async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${_customerPoint.latitude},${_customerPoint.longitude}',
+    );
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (error) {
+      debugPrint('CustomerMapScreen: navigation launch failed: $error');
+    }
+    if (!opened && mounted) {
+      showPremiumSnackBar(context, 'Unable to open Google Maps', isError: true);
+    }
+  }
+
   @override
   void dispose() {
     _posSub?.cancel();
@@ -233,6 +255,22 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text('${widget.customer.name} Location')),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: SizedBox(
+            height: 46,
+            child: ElevatedButton.icon(
+              onPressed: _startNavigation,
+              icon: const Icon(Icons.navigation_rounded),
+              label: const Text(
+                'START',
+                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: Stack(
         children: [
           GoogleMap(
@@ -242,10 +280,15 @@ class _CustomerMapScreenState extends State<CustomerMapScreen> {
             ),
             markers: markers,
             polylines: _polylines,
-            myLocationEnabled: false,
+            // "Go to my location" button on both platforms (zoom +/- below is
+            // Android-only in google_maps_flutter, so iOS had no buttons).
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
             compassEnabled: true,
             zoomControlsEnabled: true,
             mapToolbarEnabled: false,
+            // Keep the map's own buttons below the two info chips on top.
+            padding: const EdgeInsets.only(top: 72),
             onMapCreated: (c) => _mapController = c,
           ),
           Positioned(

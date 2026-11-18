@@ -75,6 +75,9 @@ class SessionService {
   // use_crf flag from validateLogin (Android LoginActivity.use_caf). 1 = this
   // dealer uses CRF, so the CRF row is shown in search results / customer details.
   int useCaf = 0;
+  // gps_popup_app from validateLogin (Android LoginActivity.gps_popup_app).
+  // 1 = on opening a customer with no location, ask to update it.
+  int gpsPopupApp = 0;
   // customerAppSearch from validateLogin (Android LoginActivity.customerAppSearch):
   // comma-separated allowed searchType ids (e.g. "1,2,5,6,16"). Drives which
   // options appear in the Search Customer dropdown.
@@ -154,6 +157,7 @@ class SessionService {
     int useLcoDeposit = 0,
     String serverCurrentDate = '',
     int useCaf = 0,
+    int gpsPopupApp = 0,
     String customerAppSearch = '',
     bool showCustomPackages = false,
     String username = '',
@@ -181,6 +185,7 @@ class SessionService {
     this.useLcoDeposit = useLcoDeposit;
     this.serverCurrentDate = serverCurrentDate;
     this.useCaf = useCaf;
+    this.gpsPopupApp = gpsPopupApp;
     this.customerAppSearch = customerAppSearch;
     this.showCustomPackages = showCustomPackages;
     this.username = username;
@@ -253,6 +258,7 @@ class SessionService {
     useLcoDeposit = 0;
     serverCurrentDate = '';
     useCaf = 0;
+    gpsPopupApp = 0;
     customerAppSearch = '';
     username = '';
     employeeName = '';

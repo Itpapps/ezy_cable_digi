@@ -3,21 +3,32 @@ import '../../../core/network/server_url_resolver.dart';
 import '../../../core/network/soap_client.dart';
 import '../../../core/services/session_service.dart';
 
+/// Result of `updateCustomerlocation`. Android (MapsFragmentlocupdate
+/// onPostExecute :556-620): statusCode 0 = success · 1 = rejected ("No Records
+/// Found!" + statusMessage) · 2 = "statusMessage: Contact Support" · no reply →
+/// "Server is busy or Un reachable!" (here [statusCode] 3).
+class LocationUpdateResult {
+  final int statusCode;
+  final String statusMessage;
+  const LocationUpdateResult(this.statusCode, this.statusMessage);
+  bool get isSuccess => statusCode == 0;
+}
+
 class CustomerLocationRepository {
   CustomerLocationRepository._();
   static final CustomerLocationRepository instance =
       CustomerLocationRepository._();
 
-  Future<bool> update({
+  Future<LocationUpdateResult> update({
     required String lcoCustomerId,
     required double latitude,
     required double longitude,
   }) async {
     final url = ServerUrlResolver.instance.loginServerUrl;
     final ns = ServerUrlResolver.instance.namespace;
-    if (url.isEmpty || ns.isEmpty) return false;
+    if (url.isEmpty || ns.isEmpty) return const LocationUpdateResult(3, '');
     try {
-      await SoapClient.instance.call(
+      final xml = await SoapClient.instance.call(
         url: url,
         namespace: ns,
         soapAction: '$ns/updateCustomerlocation',
@@ -31,12 +42,17 @@ class CustomerLocationRepository {
           'lat': latitude.toString(),
           'lang': longitude.toString(),
         },
+        // Android HttpTransportSE(URL, 70000) on mobile data.
+        timeout: const Duration(seconds: 70),
       );
-      return true;
+      final code = int.tryParse(SoapClient.readField(xml, 'statusCode') ?? '');
+      if (code == null) return const LocationUpdateResult(3, '');
+      return LocationUpdateResult(
+          code, SoapClient.readField(xml, 'statusMessage') ?? '');
     } on SoapException {
-      return false;
+      return const LocationUpdateResult(3, '');
     } catch (_) {
-      return false;
+      return const LocationUpdateResult(3, '');
     }
   }
 }

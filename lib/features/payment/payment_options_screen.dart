@@ -206,8 +206,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       // the Dashboard force-refreshes them on return (Android parity, where the
       // post-payment fragment rebuild reloads the summary).
       DashboardRefreshSignal.instance.markKpiDirty();
+      DashboardRefreshSignal.instance.markPaymentDone(); // Customer Details reload
 
-      // Receipt values captured now, before pushReplacement disposes the controller.
+      // Receipt values captured now, before the controller is reset on return.
       final bbPaid =
           _ctrl.isBroadbandCustomer ? _ctrl.parsedBroadbandAmount : 0.0;
       final stbPaid = _ctrl.parsedAmount;
@@ -239,7 +240,11 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       );
 
       if (!mounted) return;
-      Navigator.pushReplacement(
+      // Android :2344 changeFragment(displayPaymentDetails, true) keeps Make
+      // Payment on the back stack: Back from the receipt returns HERE and
+      // GetPendingAmount (:371) shows the updated due. pushReplacement used to
+      // remove this screen, so Back showed the old due (stale customer object).
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ReceiptPreviewScreen(
@@ -266,6 +271,13 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           context, 'Payment done. Receipt No: ${payment.transactionId}',
           isSuccess: true);
     }
+
+    // Back from the receipt (or the receipt could not be shown): the payment
+    // is done, so clear the collected amounts and reload the live due — the
+    // old amount can't be paid again by mistake (Android :2346 + :371).
+    if (!mounted) return;
+    _ctrl.resetAfterPayment();
+    await _loadPending();
   }
 
   /// R1 / Android CustomerMgmt_MakePayment_Fragment :2348-2367.
@@ -607,7 +619,18 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
                 _buildPrevNextStrip(t),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                  child: _CustomerInfoCard(customer: widget.customer, t: t),
+                  child: _CustomerInfoCard(
+                    customer: widget.customer,
+                    t: t,
+                    // Android :1454/:1498: once gpa answers, Total Due and
+                    // Payable show the live amounts, not the search values.
+                    totalDue: _ctrl.pendingLoaded
+                        ? '₹${_ctrl.pendingAmount.toStringAsFixed(2)}'
+                        : null,
+                    payable: _ctrl.pendingLoaded
+                        ? '₹${_ctrl.cablePending.toStringAsFixed(2)}'
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Expanded(
@@ -1168,7 +1191,15 @@ class _PaymentSuccessContentState extends State<_PaymentSuccessContent> {
 class _CustomerInfoCard extends StatelessWidget {
   final Customer customer;
   final AppThemeConst t;
-  const _CustomerInfoCard({required this.customer, required this.t});
+  // Live gpa amounts; null → the customer's search values.
+  final String? totalDue;
+  final String? payable;
+  const _CustomerInfoCard({
+    required this.customer,
+    required this.t,
+    this.totalDue,
+    this.payable,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1234,8 +1265,8 @@ class _CustomerInfoCard extends StatelessWidget {
   Widget _infoGrid(Customer c, AppThemeConst t) {
     final items = [
       ('Mobile', c.primaryMobileNumber),
-      ('Total Due', c.totalDue),
-      ('Payable (STB)', c.amountPayable),
+      ('Total Due', totalDue ?? c.totalDue),
+      ('Payable (STB)', payable ?? c.amountPayable),
       ('Last Paid', c.lastPaidDate),
       ('Bill Month', c.billMonth),
       ('Type', c.customerTypeLabel),

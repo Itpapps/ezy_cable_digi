@@ -23,4 +23,12 @@ class DashboardRefreshSignal {
     _kpiDirty = false;
     return was;
   }
+
+  /// Counts successful payments. A screen notes the value before opening the
+  /// Payment screen and reloads its customer on return only if it changed —
+  /// a plain Back without paying makes no extra API call. Not one-shot, so
+  /// several screens can check it.
+  int _paymentCount = 0;
+  int get paymentCount => _paymentCount;
+  void markPaymentDone() => _paymentCount++;
 }

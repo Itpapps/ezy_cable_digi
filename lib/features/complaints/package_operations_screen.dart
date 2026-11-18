@@ -388,15 +388,17 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
     if (!mounted) return;
     Navigator.pop(context); // dismiss loading
 
-    // Production parity: status 0 → "Success!", status 1 → "No Details Found!" —
-    // both navigate home (restart MainActivity). Transport error → "Failed", stay.
+    // Status 0 → "Success!", status 1 → "No Details Found!". After OK the user
+    // stays here and the boxes reload, so the new box status shows (like the
+    // other operations on this screen). Android restarts MainActivity and lands
+    // on the Dashboard — not followed (user decision). Transport error → "Failed", stay.
     if (r.statusCode == 0 || r.statusCode == 1) {
       await _reactResultDialog(
         r.statusCode == 0 ? 'Success!' : 'No Details Found!',
         r.statusMessage,
       );
       if (!mounted) return;
-      Navigator.popUntil(context, (route) => route.isFirst); // home (Dashboard)
+      _loadBoxes();
     } else {
       await _reactResultDialog(
           'Failed', r.statusMessage.isEmpty ? 'Please try again.' : r.statusMessage);

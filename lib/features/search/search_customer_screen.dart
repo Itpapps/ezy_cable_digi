@@ -62,6 +62,8 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
     // Clear previous search results exactly as requested when opening the screen
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) context.read<SearchProvider>().clear();
+      // Offline mode → Android's fixed offline search options.
+      if (mounted) await context.read<SearchProvider>().loadSearchMode();
       // D-B6 / Android :506-510: load the Dealer list for a common employee
       // (online search only — see _isCommonEmployee).
       // Android :506 shows the Dealer dropdown when common_employee != 0.
@@ -1056,12 +1058,17 @@ class SearchCustomerCard extends StatelessWidget {
         : (enriched.crfNumber.isEmpty && c.crfNumber.isNotEmpty
               ? enriched.copyWith(crfNumber: c.crfNumber)
               : enriched);
-    Navigator.push(
+    final provider = context.read<SearchProvider>(); // app-wide provider
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CustomerDetailsScreen(customer: customer),
       ),
     );
+    // Android: coming back from Customer Operations rebuilds the search screen
+    // with the result list hidden, so the user searches again and sees current
+    // amounts — never the old list. The typed text and option stay.
+    provider.clear();
   }
 }
 

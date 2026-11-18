@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/services/error_handler_service.dart';
+import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
@@ -37,6 +40,10 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
   int _syncedCount = 0;
   // True while [_exitOffline] is running — ignores repeated back presses.
   bool _exiting = false;
+  // Listens for the network coming back while this screen is open.
+  StreamSubscription<List<ConnectivityResult>>? _netSub;
+  // The stream can fire several events in a row (wifi + mobile) — handle one.
+  bool _handlingReconnect = false;
 
   @override
   void initState() {
@@ -45,10 +52,12 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
     _openCount++;
     OfflineModeService.instance.setOfflineMode(true);
     _refresh();
+    _netSub = Connectivity().onConnectivityChanged.listen(_onNetworkChanged);
   }
 
   @override
   void dispose() {
+    _netSub?.cancel();
     // Clear the offline flag when the LAST open Offline Dashboard closes
     // (back button, system back, logout or any other route removal).
     if (_openCount > 0) _openCount--;
@@ -66,6 +75,54 @@ class _OfflineDashboardScreenState extends State<OfflineDashboardScreen> {
         _paidCount = paid;
         _syncedCount = synced;
       });
+    }
+  }
+
+  /// Network came back while in offline mode.
+  ///  • Session from an ONLINE login (canSync): join the background auto-sync
+  ///    started by ConnectivityService — syncAllPending is single-flight, so
+  ///    nothing is sent twice — then refresh the Paid/Synced counts.
+  ///  • Offline-login session (no machine number): sync is impossible. If
+  ///    payments are pending, tell the user to log in online.
+  Future<void> _onNetworkChanged(List<ConnectivityResult> results) async {
+    if (results.contains(ConnectivityResult.none)) return;
+    if (_handlingReconnect || _exiting || !mounted) return;
+    _handlingReconnect = true;
+    try {
+      if (OfflineDataService.instance.canSync) {
+        await OfflineDataService.instance.syncAllPending();
+        await _refresh();
+        return;
+      }
+      final pending = await _db.getOfflinePaidCount();
+      if (pending == 0 || !mounted) return;
+      // Only prompt when this dashboard is on screen — never over a payment.
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      final login = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Internet is back'),
+          content: Text('$pending offline payments are not synced. '
+              'Please login in online mode to sync them'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: const Text('Later'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: const Text('Login'),
+            ),
+          ],
+        ),
+      );
+      // Existing exit path: with no session it opens LoginScreen.
+      if (login == true && mounted) await _exitOffline();
+    } catch (error, stackTrace) {
+      ErrorHandlerService.recordError(error, stackTrace,
+          reason: 'OfflineDashboard reconnect');
+    } finally {
+      _handlingReconnect = false;
     }
   }
 

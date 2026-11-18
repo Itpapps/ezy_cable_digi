@@ -809,10 +809,12 @@ Future<List<Customer>> getFilteredCustomersPaginated({
   }
 
   // ── SEARCH offline customers by name (LIKE) ──
+  // Android DB_Helper.getAllspecificContactsByName :360 (`name like 'x%'`):
+  // names that START with the typed text, not names that merely contain it.
   Future<List<OfflineCustomer>> searchOfflineByName(String query) async {
     final db = await database;
     final maps = await db.query(_tblOfflineCustomers,
-        where: "name LIKE ?", whereArgs: ['%$query%'], orderBy: 'name ASC');
+        where: "name LIKE ?", whereArgs: ['$query%'], orderBy: 'name ASC');
     return maps.map(OfflineCustomer.fromMap).toList();
   }
 

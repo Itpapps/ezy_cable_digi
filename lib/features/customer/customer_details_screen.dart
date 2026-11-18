@@ -32,6 +32,7 @@ import '../packages/data/customer_box.dart';
 import '../packages/data/package_operations_repository.dart';
 import '../collections/pay_later_dialog.dart';
 import '../search/data/search_repository.dart';
+import '../dashboard/dashboard_refresh_signal.dart';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
@@ -900,6 +901,26 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
     );
   }
 
+  /// Make Payments → on return, if a payment was made, reload this customer so
+  /// Total Due / Amount Payable / Last Paid Date show the new values (they were
+  /// the search-time values). Same detail call Search makes when opening a
+  /// customer (searchType 100). No payment (plain Back) → no reload.
+  Future<void> _openPayment() async {
+    final before = DashboardRefreshSignal.instance.paymentCount;
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => PaymentOptionsScreen(customer: _customer)));
+    if (!mounted || DashboardRefreshSignal.instance.paymentCount == before) return;
+    final fresh =
+        await SearchRepository.instance.fetchCustomerDetail(_customer.lcoCustomerId);
+    if (!mounted || fresh == null) return; // never throws; null → keep current
+    setState(() {
+      // The detail response omits `crf` — keep the current CRF (as Search does).
+      _customer = fresh.crfNumber.isEmpty && _customer.crfNumber.isNotEmpty
+          ? fresh.copyWith(crfNumber: _customer.crfNumber)
+          : fresh;
+    });
+  }
+
   void _handleOp(String label) {
     switch (label) {
       case 'Make Payments':
@@ -915,7 +936,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             cancelLabel: 'Close',
           );
         } else {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentOptionsScreen(customer: _customer)));
+          _openPayment();
         }
         break;
       case 'Update Location':

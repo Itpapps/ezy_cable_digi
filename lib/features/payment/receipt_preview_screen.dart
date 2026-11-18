@@ -545,8 +545,8 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
       centerTitle: true,
       automaticallyImplyLeading: false,
       // Visible back button (same pill style used across the app). Navigator.pop
-      // only closes this screen (online = pushReplacement already removed the
-      // payment screen; offline = push). Print/Share/Prev-Next unchanged.
+      // only closes this screen (online = back to the Payment screen, which
+      // reloads the due; offline = push). Print/Share/Prev-Next unchanged.
       leading: IconButton(
         tooltip: 'Back',
         icon: Container(

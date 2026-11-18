@@ -48,10 +48,32 @@ class SearchProvider extends ChangeNotifier {
     MapEntry('17', 'Account Number'),
   ];
 
+  // Android Offline_Search_Fragment :103-107: offline search always offers
+  // these 4 options, the same for every dealer/user, in Android's order (labels
+  // are the ones [_searchOffline] handles). The dealer's online options
+  // (customerAppSearch) do not apply offline.
+  static const List<String> _offlineSearchOptions = [
+    'Lco Customer Id',
+    'Name',
+    'Primary Mobile Number',
+    'CRF Number',
+  ];
+  bool _offlineMode = false;
+
+  /// Called when the search screen opens: picks the offline or online options.
+  Future<void> loadSearchMode() async {
+    final offline = await OfflineModeService.instance.isOfflineMode;
+    if (offline == _offlineMode) return;
+    _offlineMode = offline;
+    notifyListeners();
+  }
+
   /// Dropdown options — Android parity: built from the dealer's allowed search
   /// types (validateLogin `customerAppSearch`, e.g. "1,2,5,6,16"), in Android's
   /// order. Falls back to all options if the flag is empty (never an empty list).
+  /// Offline mode → Android's fixed offline options ([_offlineSearchOptions]).
   List<String> get criteriaItems {
+    if (_offlineMode) return _offlineSearchOptions;
     final allowed = SessionService.instance.customerAppSearch
         .split(',')
         .map((e) => e.trim())

@@ -28,6 +28,11 @@ class OfflineDataService {
   String get _syncUrl => '$_baseUrl/GetCollectionData';
   String get _machineId => SessionService.instance.machineNumber;
 
+  /// True only when this session came from an ONLINE login (the server gave a
+  /// machine number). An offline-login session has none, so the server would
+  /// reject every payment (NAK) — callers must not try to sync then.
+  bool get canSync => _machineId.trim().isNotEmpty;
+
   // ═══════════════════════════════════════════════════════════════════════════
   // DOWNLOAD (Phase C) — Two-step: count then fetch
   // ═══════════════════════════════════════════════════════════════════════════
@@ -344,7 +349,7 @@ class OfflineDataService {
     // No machine ID (offline-login session, or before any online login): do
     // not contact the server. Pending payments stay at flag=1 untouched and are
     // reported as not synced (synced: 0), so no caller shows a success message.
-    if (_machineId.trim().isEmpty) {
+    if (!canSync) {
       final skipped = await _db.getOfflinePaidCount();
       return (synced: 0, failed: skipped);
     }

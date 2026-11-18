@@ -114,6 +114,19 @@ class PaymentController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Back on the Payment screen after a successful payment. Android clears the
+  /// discount (:2346) and its GetPendingAmount refills the amount and clears
+  /// remarks/mobile (:1500-1508). The amount boxes are cleared first so only
+  /// the fresh due from [loadPendingAmount] is shown — never the paid amount.
+  void resetAfterPayment() {
+    amountCtrl.clear();
+    broadbandAmountCtrl.clear();
+    discountCtrl.clear();
+    remarksCtrl.clear();
+    mobileCtrl.clear();
+    notifyListeners();
+  }
+
   /// Payment GPS — Android parity (GPSTracker.getLastKnownLocation + 0.0
   /// fallback, CustomerMgmt_MakePayment_Fragment :339-348). Captured ONCE when
   /// the payment screen opens, fire-and-forget, OFF the pay path. Uses
@@ -545,6 +558,12 @@ class PaymentController extends ChangeNotifier {
         status:         'completed',
         smsSent:        _sendSms,
         synced:         true,
+        // The receipt screen's Bank Name / Cheque/DD / Branch / Instr. Date rows
+        // (bank mode) show what was entered and sent — they were left blank.
+        chequeNo:       isBank ? chequeNoCtrl.text.trim() : '',
+        bankName:       isBank ? bankNameCtrl.text.trim() : '',
+        branch:         isBank ? branchCtrl.text.trim()   : '',
+        instrumentDate: isBank ? _chequeDate              : '',
       );
 
       // Fire notification (non-blocking)

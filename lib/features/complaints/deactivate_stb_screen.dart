@@ -5,6 +5,7 @@ import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // DeactivateStbScreen — STB deactivation (mirrors Android Deactivatestb_Frag_New).
 // Boxes via gcb; reasons via gdr (SOAP). Branches on the VERIFIED magic
@@ -89,7 +90,9 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
           await _loadFailedDialog('No Details Found!', boxesRes.statusMessage);
       if (!mounted) return;
       if (ok == true) {
-        Navigator.pop(context);
+        // The load is not modal: the user may have opened another screen
+        // from the header meanwhile — close THIS screen, not that one.
+        MainNav.closeScreen(context);
         return;
       }
     } else if (boxesRes.statusCode == 3) {
@@ -148,7 +151,10 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(),
@@ -188,7 +194,9 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
         ),
       );
     }
-    return Padding(
+    // Scrolls instead of overflowing on small phones / large text (MainFrame bars).
+    return SingleChildScrollView(
+      child: Padding(
       padding: const EdgeInsets.all(16),
       child: Container(
         width: double.infinity,
@@ -261,6 +269,7 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

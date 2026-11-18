@@ -14,6 +14,7 @@ import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
 import '../payment/printer_launcher.dart';
 import 'data/invoice_history_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Invoice History — real `InvoiceService` SOAP (Android `InvoiceHistory`).
 /// Sends the system customer id (`altCustomerId`, = Android `custId`/`altCustId`).
@@ -175,7 +176,10 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(context),

@@ -16,6 +16,7 @@ import '../../core/widgets/premium_dialog.dart';
 import '../customer/data/act_deact_repository.dart';
 import '../customer/data/onetime_charges_repository.dart';
 import '../payment/printer_launcher.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACT-DEACT REPORT — real `packageActDeactReport` (Android Act_Deact_Report).
@@ -53,7 +54,10 @@ class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final customer = widget.customer;
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
@@ -415,7 +419,10 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   String get _fmtDate => _ymd(_createdDate);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _appBar(context,
@@ -709,7 +716,10 @@ class _OneTimeChargeDetailsScreenState
       );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final c = widget.customer;
     final s = widget.slip;
     return Scaffold(
@@ -970,7 +980,10 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final cust = widget.customer;
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),

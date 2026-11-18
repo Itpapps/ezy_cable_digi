@@ -3,6 +3,7 @@ import '../../core/data/customer.dart';
 import '../dashboard/data/complaints_repository.dart';
 import 'complaint_details_screen.dart';
 import 'data/customer_complaint.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPLAINT HISTORY (Customer Details → Complaint History)
@@ -89,7 +90,10 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(context),
@@ -147,7 +151,8 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
       );
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(

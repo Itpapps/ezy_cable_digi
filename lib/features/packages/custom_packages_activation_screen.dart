@@ -6,6 +6,7 @@ import '../../core/widgets/premium_dialog.dart';
 import 'bill_details_screen.dart';
 import 'data/custom_package.dart';
 import 'data/custom_packages_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Custom Packages — Activation cart (Android `CustomPackages_Activation`).
 /// Lists the dealer's custom packages (`gddp` act_type=1); each row can be
@@ -106,7 +107,10 @@ class _CustomPackagesActivationScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

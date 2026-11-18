@@ -14,6 +14,7 @@ import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
 import '../payment/printer_launcher.dart';
 import 'data/payment_history_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Payment History — real `getPaymentHistorylist` (Android `getpayhist()`).
 /// Sends the system customer id (`altCustomerId`, = Android `altCustId`).
@@ -115,7 +116,10 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(context),
@@ -562,7 +566,10 @@ class _PaymentHistoryDetailScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final r = widget.record;
     final rows = <MapEntry<String, String>>[
       MapEntry('LCO Customer ID', r.customNumber.isEmpty ? 'NA' : r.customNumber),

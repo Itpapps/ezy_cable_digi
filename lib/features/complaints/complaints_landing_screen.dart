@@ -3,6 +3,7 @@ import 'package:iconsax/iconsax.dart';
 import '../../core/data/customer.dart';
 import 'create_complaint_screen.dart';
 import 'complaints_history_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPLAINTS landing (Customer Details → Create Complaints) — mirrors Android's
@@ -16,7 +17,10 @@ class ComplaintsLandingScreen extends StatelessWidget {
   const ComplaintsLandingScreen({super.key, required this.customer});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: AppBar(

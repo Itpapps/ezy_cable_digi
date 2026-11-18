@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:iconsax/iconsax.dart';
@@ -13,6 +15,7 @@ import '../customer/customer_map_screen.dart';
 import '../payment/payment_options_screen.dart';
 import 'customer_list_provider.dart';
 import 'paid_customers_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomerListScreen — reads from CustomerListProvider (ChangeNotifier).
@@ -66,7 +69,10 @@ class _CustomerListScreenState extends State<CustomerListScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,
@@ -108,11 +114,29 @@ class _CustomerListScreenState extends State<CustomerListScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          Column(
-            children: [
-              _buildFilters(t),
-              Expanded(child: _buildCustomerList(t)),
-            ],
+          // Short tab body (small phone with the MainFrame bars, or keyboard
+          // open): the filter card scrolls inside (the list keeps 50 px)
+          // instead of pushing the list off-screen. Taller bodies: unchanged.
+          LayoutBuilder(
+            builder: (context, box) {
+              final short = box.maxHeight < 520;
+              return Column(
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: short
+                          ? math.max(0.0, box.maxHeight - 50)
+                          : double.infinity,
+                    ),
+                    child: SingleChildScrollView(
+                      clipBehavior: short ? Clip.hardEdge : Clip.none,
+                      child: _buildFilters(t),
+                    ),
+                  ),
+                  Expanded(child: _buildCustomerList(t)),
+                ],
+              );
+            },
           ),
           // Real Paid list (Android CustomerPay_Tab_Fragment "Paid List" tab) —
           // reuses PaidCustomersScreen (gpcd, month picker) in embedded mode.

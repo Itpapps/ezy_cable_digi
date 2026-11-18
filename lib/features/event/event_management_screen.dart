@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'data/calendar_event.dart';
 import 'data/calendar_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// View-model for the calendar UI (parsed dates). Backed by [CalendarEvent]
 /// from the real `calender_data` / `calender_event` APIs (Android parity).
@@ -446,7 +447,10 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
   // ── build ────────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(

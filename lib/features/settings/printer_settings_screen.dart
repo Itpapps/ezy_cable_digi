@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/services/settings_store.dart';
 import '../../core/theme/theme_constants.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({super.key});
@@ -89,7 +90,10 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

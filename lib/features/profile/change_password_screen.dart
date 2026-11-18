@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/theme_constants.dart';
 import 'data/change_password_repository.dart';
+import '../../core/widgets/premium_dialog.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Change Password — Android parity (UserProfile_ChangePsw_Fragment):
 /// Old / New / Confirm, client validation (empty + mismatch), SOAP
@@ -61,9 +63,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     FocusScope.of(context).unfocus();
     setState(() => _loading = true);
+    // Android UserProfile_ChangePsw_Fragment :263: a non-cancellable
+    // "Updating...,   Please wait..." while the change runs. It also keeps the
+    // header / bottom bar / drawer from opening another screen meanwhile —
+    // the success pop below must close THIS screen.
+    showPremiumLoading(context,
+        message: 'Updating...,   Please wait...', canPop: false);
     final r = await ChangePasswordRepository.instance
         .change(oldPassword: oldP, newPassword: newP);
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _loading = false);
 
     if (r.success) {
@@ -91,7 +100,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

@@ -8,6 +8,7 @@ import 'active_packages_screen.dart';
 import 'remove_services_screen.dart';
 import 'schedule_services_screen.dart';
 import 'services_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PACKAGE OPERATIONS — Dynamic Hub (Phase 2)
@@ -85,7 +86,10 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(),

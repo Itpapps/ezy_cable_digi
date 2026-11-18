@@ -4,6 +4,7 @@ import '../../core/data/customer.dart';
 import '../../core/theme/theme_constants.dart';
 import 'custom_packages_activation_screen.dart';
 import 'custom_packages_deactivation_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Custom Packages hub — Android parity (`DigiPackage_Home`): two actions,
 /// Activate and Deactivate, each opening a multi-select package cart.
@@ -16,7 +17,10 @@ class CustomPackagesHomeScreen extends StatelessWidget {
   const CustomPackagesHomeScreen({super.key, required this.customer});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

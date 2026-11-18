@@ -6,6 +6,7 @@ import '../../core/services/real_bluetooth_service.dart';
 import '../../core/theme/theme_constants.dart';
 import '../payment/printer_launcher.dart';
 import 'data/mini_day_report_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class MiniDayReportScreen extends StatefulWidget {
   const MiniDayReportScreen({super.key});
@@ -103,7 +104,10 @@ class _MiniDayReportScreenState extends State<MiniDayReportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

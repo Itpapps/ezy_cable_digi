@@ -4,6 +4,7 @@ import '../../core/data/customer.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../dashboard/data/complaints_repository.dart';
 import 'data/complaint_option.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NEW COMPLAINT (Customer Details → Create Complaints)  — SIMPLE mode.
@@ -287,7 +288,10 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: _buildAppBar(),

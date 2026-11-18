@@ -4,6 +4,7 @@ import '../../core/widgets/premium_dialog.dart';
 import 'data/employee_collection.dart';
 import 'data/employee_track_repository.dart';
 import 'employee_track_map_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Employee Track (collection report) — Android parity (EmployeeTrackFragment,
 /// SOAP `empCollection`). Date-range filter → per-employee collections. This is a
@@ -157,7 +158,10 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,
@@ -300,7 +304,8 @@ class _EmployeeTrackScreenState extends State<EmployeeTrackScreen> {
       return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

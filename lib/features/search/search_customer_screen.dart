@@ -17,6 +17,7 @@ import '../customer/customer_map_screen.dart';
 import '../offline/offline_payment_flow.dart';
 import 'search_dealers.dart';
 import 'search_provider.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class SearchCustomerScreen extends StatefulWidget {
   const SearchCustomerScreen({super.key});
@@ -123,7 +124,10 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,
@@ -662,7 +666,10 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
   );
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  Widget _empty(String msg, IconData icon, AppThemeConst t) => Padding(
+  // Scrolls instead of overflowing when the list area is short (small phone,
+  // keyboard open, MainFrame bars) — looks the same when it fits.
+  Widget _empty(String msg, IconData icon, AppThemeConst t) =>
+      SingleChildScrollView(child: Padding(
     padding: const EdgeInsets.only(top: 40),
     child: Column(
       children: [
@@ -678,7 +685,7 @@ class _SearchCustomerScreenState extends State<SearchCustomerScreen>
         ),
       ],
     ),
-  );
+  ));
 
   // Initial state — shown ONLY before the first search (State 1: !hasSearched).
   // Kept deliberately separate from _empty() so "haven't searched yet" stays

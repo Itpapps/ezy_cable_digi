@@ -5,6 +5,7 @@ import '../../core/data/customer.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/custom_package.dart';
 import 'data/custom_packages_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Deactivate confirm — Android parity (`DigiPackages_deactivation`). Shows the
 /// selected packages, then submits `insertDigiDealerPackages` (act_type=2). On
@@ -74,7 +75,10 @@ class _DeactivateConfirmScreenState extends State<DeactivateConfirmScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

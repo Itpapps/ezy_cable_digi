@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'add_expenses_screen.dart';
 import 'data/expense_models.dart';
 import 'data/expenses_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Expenses list — Android parity (`ExpensesList`): date-range filtered
 /// `expense_data`. FAB opens Add Expenses (`expense_data_create`) and refreshes on
@@ -79,7 +80,10 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('List Expenses')),
       floatingActionButton: FloatingActionButton(
@@ -125,7 +129,8 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

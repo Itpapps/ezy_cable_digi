@@ -8,6 +8,7 @@ import '../../core/services/offline_data_service.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/services/offline_sync_service.dart';
 import '../../core/widgets/premium_dialog.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Sync / Clear Data — Android parity (SyncData_Fragment).
 ///
@@ -130,7 +131,10 @@ class _SyncClearScreenState extends State<SyncClearScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

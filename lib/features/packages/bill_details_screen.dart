@@ -5,6 +5,7 @@ import '../../core/data/customer.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/custom_package.dart';
 import 'data/custom_packages_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Bill Details (checkout) — Android parity (`BillDetails_Act`). Shows the
 /// selected custom packages + total, then submits `insertDigiDealerPackages`
@@ -83,7 +84,10 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

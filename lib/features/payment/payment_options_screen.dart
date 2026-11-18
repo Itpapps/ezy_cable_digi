@@ -19,6 +19,7 @@ import 'payment_controller.dart';
 import 'receipt_preview_screen.dart';
 import '../search/data/search_repository.dart';
 import '../customer/customer_details_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PaymentOptionsScreen — backed by PaymentController (ChangeNotifier)
@@ -103,6 +104,10 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
   /// status 2 → "{msg}: Contact Support". PAY is not blocked afterwards (Android).
   Future<void> _loadPending() async {
     if (!mounted) return;
+    // This screen is being closed (a bottom-bar / logo / drawer "Dashboard"
+    // tap pops it together with the receipt on top): an awaited push returns
+    // during the close animation — never open a loader it can't close.
+    if (!(ModalRoute.of(context)?.isActive ?? true)) return;
     showPremiumLoading(context,
         message: 'Getting Pending Amount,   Please wait...', canPop: false);
     await _ctrl.loadPendingAmount(); // never throws
@@ -604,7 +609,10 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
 
   // ── Build ─────────────────────────────────────────────────────────────────────
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

@@ -4,6 +4,7 @@ import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // Reusable Services Screen (Add Services / Schedule Services).
 // Add Services — loads the per-box catalogue live via getCustomerPackages (gcp,
@@ -104,7 +105,10 @@ class _ServicesScreenState extends State<ServicesScreen>
       p.price.isEmpty ? '' : (p.price.contains('₹') ? p.price : '₹${p.price}');
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(snackBarLift: 68, child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
@@ -211,7 +215,8 @@ class _ServicesScreenState extends State<ServicesScreen>
           child: CircularProgressIndicator(color: Color(0xFF0D47A1)));
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

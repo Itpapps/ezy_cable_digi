@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/theme_constants.dart';
 import 'change_password_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class UserProfileScreen extends StatelessWidget {
   const UserProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     final s = SessionService.instance;
     final empName = s.employeeName.trim().isNotEmpty ? s.employeeName.trim() : '-';

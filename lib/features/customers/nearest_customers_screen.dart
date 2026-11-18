@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../dashboard/data/nearest_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Drawer "Nearest Customer" screen — matches Android `LocateNextCustomer.java`.
 /// Uses the same `NearestNextCustomer` REST API as the dashboard, with
@@ -149,7 +150,10 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(enabled: !_mapView, child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,
@@ -271,7 +275,8 @@ class _NearestCustomersScreenState extends State<NearestCustomersScreen> {
 
   Widget _buildListView() {
     if (_hasError) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

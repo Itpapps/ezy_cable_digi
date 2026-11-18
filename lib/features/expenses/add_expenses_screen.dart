@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'data/expense_models.dart';
 import 'data/expenses_repository.dart';
+import '../../core/widgets/premium_dialog.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Android hardcodes tax-type as ₹ (absolute, id="2") / % (percentage, id="1").
 /// The API `tax_types` field is ignored in Android (AddExpensesFragment:663-671
@@ -111,7 +113,10 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -358,6 +363,12 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
       return;
     }
     setState(() => _submitting = true);
+    // Android AddExpensesFragment :539 (ApiCallRestClient.callPostApi2): a
+    // non-cancellable "Fetching Details, Please wait" while saving. It also
+    // keeps the header / bottom bar / drawer from opening another screen
+    // meanwhile — the success pop below must close THIS screen.
+    showPremiumLoading(context,
+        message: 'Fetching Details, Please wait', canPop: false);
     final r = await ExpensesRepository.instance.createExpense(
       title: expenseController.text.trim(),
       categoryId: _category!.id,
@@ -372,6 +383,7 @@ class _AddExpensesScreenState extends State<AddExpensesScreen> {
       isEdited: widget.item != null ? '1' : '0',
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _submitting = false);
     await _resultDialog(r.success, r.message);
     if (r.success && mounted) {

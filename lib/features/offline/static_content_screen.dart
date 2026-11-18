@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/constants/app_colors.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class StaticContentScreen extends StatelessWidget {
   final String title;
@@ -16,7 +17,10 @@ class StaticContentScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final textWidget = SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: SizedBox(
@@ -134,7 +138,10 @@ class _PrivacyPolicyWebViewState extends State<PrivacyPolicyWebView> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Privacy Policy'),

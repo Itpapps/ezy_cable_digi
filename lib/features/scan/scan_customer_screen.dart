@@ -9,6 +9,8 @@ import '../../core/widgets/premium_dialog.dart';
 import '../search/data/search_repository.dart';
 import '../search/search_customer_screen.dart' show SearchCustomerCard;
 import '../search/search_dealers.dart';
+import '../../main.dart' show pageRouteObserver;
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCAN CUSTOMER SCREEN — real MobileScanner with camera permission
@@ -21,7 +23,8 @@ class ScanCustomerScreen extends StatefulWidget {
   State<ScanCustomerScreen> createState() => _ScanCustomerScreenState();
 }
 
-class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
+class _ScanCustomerScreenState extends State<ScanCustomerScreen>
+    with RouteAware {
   String _selectedType = 'Serial Number';
   static const List<String> _types = ['Serial Number', 'VC Number'];
 
@@ -79,8 +82,38 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
     }
   }
 
+  // The MainFrame header / drawer can open another screen (even another Scan
+  // screen) on top of this one while the camera runs. Android replaces
+  // ScannerFrag, which releases the camera — so stop it while covered and
+  // start it again on return (only if it was running).
+  bool _pausedByCover = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) pageRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPushNext() {
+    final ctrl = _scanCtrl;
+    if (ctrl != null && ctrl.value.isRunning) {
+      _pausedByCover = true;
+      ctrl.stop();
+    }
+  }
+
+  @override
+  void didPopNext() {
+    if (!_pausedByCover) return;
+    _pausedByCover = false;
+    _scanCtrl?.start();
+  }
+
   @override
   void dispose() {
+    pageRouteObserver.unsubscribe(this);
     _scanCtrl?.dispose();
     super.dispose();
   }
@@ -183,7 +216,10 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
@@ -416,8 +452,10 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
   Widget _buildPermissionDenied() {
     return Container(
       color: Colors.black54,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      child: CenterOrScroll(
+        child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.no_photography_rounded, color: Colors.white60, size: 52),
           const SizedBox(height: 16),
@@ -439,6 +477,7 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

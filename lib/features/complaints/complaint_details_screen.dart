@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../dashboard/data/complaints_repository.dart';
+import '../../core/widgets/premium_dialog.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPLAINT DETAILS SCREEN
@@ -103,6 +105,19 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
     }
     if (_updating) return;
     setState(() => _updating = true);
+    // Android ComplaintHistory_Others_Fragment :452: a non-cancellable
+    // "Updating Complaint,   Please wait..." while the update runs. It also
+    // keeps the header / bottom bar / drawer from opening another screen
+    // meanwhile — the success OK pops THIS screen.
+    showPremiumLoading(context,
+        message: 'Updating Complaint,   Please wait...', canPop: false);
+    var loaderOpen = true;
+    void closeLoader() {
+      if (!loaderOpen || !mounted) return;
+      loaderOpen = false;
+      Navigator.of(context).pop();
+    }
+
     try {
       final result = await ComplaintsRepository.instance.closeComplaint(
         altCustomerId: widget.altCustomerId,
@@ -112,6 +127,7 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
         comment: _commentCtrl.text.trim(),
       );
       if (!mounted) return;
+      closeLoader();
       if (result.isSuccess) {
         // statusCode 0 → success
         _showSuccessDialog();
@@ -136,11 +152,14 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
       }
     } on TimeoutException {
       if (!mounted) return;
+      closeLoader();
       _showErrorDialog('Request timed out. Please try again.');
     } catch (_) {
       if (!mounted) return;
+      closeLoader();
       _showErrorDialog('Could not connect to server. Please try again.');
     } finally {
+      closeLoader();
       if (mounted) setState(() => _updating = false);
     }
   }
@@ -257,7 +276,10 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: _buildAppBar(context),

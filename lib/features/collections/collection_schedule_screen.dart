@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import 'data/pay_later.dart';
 import 'data/pay_later_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Collection Schedule (Pay Later report) — server-side, Android parity with
 /// `PayLaterReport` (`scheduled_collection_data`). The single list response also
@@ -118,7 +121,10 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       // ↓ Shrinks the body when the keyboard appears so nothing overflows.
@@ -137,12 +143,18 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
           ),
         ),
       ),
-      body: Column(
+      body: LayoutBuilder(
+        builder: (context, box) => Column(
         children: [
           // ↓ SingleChildScrollView lets the filter panel scroll up when the
           //   keyboard opens, preventing the "bottom overflowed" error on any
-          //   screen size.
-          SingleChildScrollView(
+          //   screen size. Its height is capped so the count bar and at least
+          //   ~70 px of results stay visible (small phones with the MainFrame
+          //   bars, or the keyboard open); a tall body is unchanged.
+          ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: math.max(0.0, box.maxHeight - 100)),
+            child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
             child: Container(
               color: Colors.white,
@@ -232,6 +244,7 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
               ),
             ),
           ),
+          ),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -245,6 +258,7 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
           Expanded(child: _resultArea()),
         ],
       ),
+      ),
     );
   }
 
@@ -253,7 +267,8 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

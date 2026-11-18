@@ -5,6 +5,7 @@ import '../../core/data/customer.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/customer_box.dart';
 import 'data/ott_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// OTT — Android parity (`OTTFragment` + `OTTAdapter`). Lists the customer's OTT
 /// boxes; tapping one opens a change-credentials dialog (UserName / Password)
@@ -173,7 +174,10 @@ class _OttScreenState extends State<OttScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

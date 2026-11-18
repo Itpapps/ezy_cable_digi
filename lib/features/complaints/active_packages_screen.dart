@@ -3,6 +3,7 @@ import '../../core/data/customer.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // ActivePackagesScreen — live active/deactive packages via
 // getcustomerpackageslist (gcpl). Status filter maps Active→"1", Deactive→"0"
@@ -70,7 +71,10 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(

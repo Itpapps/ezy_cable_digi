@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Manages offline-mode state in SharedPreferences.
@@ -18,12 +21,28 @@ class OfflineModeService {
   // last successful ONLINE login. Drives the 2-day offline-entry gate.
   static const _keyLastOnlineLogin = 'current_dates_login';
 
+  /// The offline flag for widgets that must decide while building (MainFrame
+  /// hides Android MainActivity's header/bottom bar in offline mode — Android
+  /// Offline_Activity has neither). Follows every [setOfflineMode] call (the
+  /// app always passes through LoginScreen, which sets it, at start-up).
+  /// Updated in a microtask because setOfflineMode is called from
+  /// initState/dispose, where listeners must not rebuild synchronously.
+  final ValueNotifier<bool> offlineUi = ValueNotifier<bool>(false);
+  bool _latest = false;
+
+  void _publish(bool value) {
+    _latest = value;
+    // Always applies the LATEST value (true then false in one frame ends false).
+    scheduleMicrotask(() => offlineUi.value = _latest);
+  }
+
   Future<bool> get isOfflineMode async {
     final p = await SharedPreferences.getInstance();
     return p.getBool(_keyOffline) ?? false;
   }
 
   Future<void> setOfflineMode(bool value) async {
+    _publish(value);
     final p = await SharedPreferences.getInstance();
     await p.setBool(_keyOffline, value);
   }

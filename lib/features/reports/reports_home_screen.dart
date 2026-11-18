@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/theme_constants.dart';
 import 'mini_day_report_screen.dart';
 import 'monthly_report_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Reports Home — Android parity (ReportsHome_Fragment / activity_reports.xml).
 ///
@@ -19,7 +20,10 @@ class ReportsHomeScreen extends StatelessWidget {
   const ReportsHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     // Theme-aware, matching Android's ?attr/background + ?attr/textclr and the
     // rest of the app: page/app-bar follow the theme; the card stays white in
     // both themes (with theme-aware text on it), exactly like every other card.

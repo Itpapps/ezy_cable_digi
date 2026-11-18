@@ -23,6 +23,7 @@ import 'data/make_payment_repository.dart' show ReceiptTax;
 import '../search/data/search_repository.dart';
 import '../customer/customer_details_screen.dart';
 import '../../core/widgets/premium_dialog.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class ReceiptPreviewScreen extends StatefulWidget {
   final Customer customer;
@@ -450,7 +451,10 @@ class _ReceiptPreviewScreenState extends State<ReceiptPreviewScreen>
   // ── UI ─────────────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(enabled: !widget.fromOfflineCollection, snackBarLift: 68, child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     final p     = widget.payment;
     final c     = widget.customer;

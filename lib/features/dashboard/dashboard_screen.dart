@@ -1,12 +1,8 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:ezy_cable_digi/bluetooth/bluetooth_devices_screen.dart';
-import 'package:ezy_cable_digi/features/event/event_management_screen.dart';
 import 'package:ezy_cable_digi/features/offline/offline_dashboard_screen.dart';
 import 'package:ezy_cable_digi/features/offline/download_records_screen.dart';
 import 'package:ezy_cable_digi/features/reports/mini_day_report_screen.dart';
 import 'package:ezy_cable_digi/features/reports/monthly_report_screen.dart';
-import 'package:ezy_cable_digi/features/scan/scan_customer_screen.dart';
-import 'package:ezy_cable_digi/features/search/search_customer_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
@@ -33,13 +29,14 @@ import '../../main.dart';
 import '../auth/login_screen.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/main_frame.dart';
+import '../../widgets/main_header.dart';
 import '../customers/customer_list_screen.dart';
 import '../../features/settings/printer_settings_screen.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_refresh_signal.dart';
 import 'data/nearest_repository.dart';
 import '../collections/data/pay_later.dart';
-import '../../core/config/app_config.dart';
 
 enum _FeedType { complaints, unpaid, nearest, payLater }
 
@@ -112,6 +109,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
       });
     }
   }
+
+  /// The live Dashboard — the root route of an online session. MainFrame
+  /// screens (pushed routes, so findAncestorStateOfType cannot see it) use it
+  /// for their bottom bar, logo and drawer "Dashboard". Set in initState and
+  /// cleared only by the same instance (an old and a new Dashboard can be
+  /// mounted together for one transition).
+  static DashboardScreenState? current;
+
+  /// The selected bottom-bar tab (MainFrame highlights the same one).
+  int get selectedTab => _selectedTab;
 
   int _selectedTab = 0;
   bool _statsCollapsed = false;
@@ -246,6 +253,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    current = this;
     LocationSyncService.instance.onScreenOpened(TrackingScreen.dashboard);
     _dash.addListener(_onDash);
     // D-B1: Android never calls DashboardDetails for SERVICE users.
@@ -322,6 +330,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
 
   @override
   void dispose() {
+    if (identical(current, this)) current = null;
     routeObserver.unsubscribe(this);
     pageRouteObserver.unsubscribe(_pageWatcher);
     LocationSyncService.instance.stopDashboardTracking();
@@ -402,23 +411,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         drawer: const AppDrawer(),
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(62),
-          child: _PremiumAppBar(),
+          // Android parity (MainActivity toolbar_logo): the logo returns to
+          // the Dashboard tab. Same header as every MainFrame screen.
+          child: MainHeader(onLogoTap: () => setTab(0)),
         ),
         bottomNavigationBar: BottomNavBar(
           currentIndex: _selectedTab,
           onChanged: (i) {
             // D-B3 / Android MainActivity :186-200: Expenses opens only with
             // the role's `expenses` permission; otherwise "No Access".
-            if (i == 3 && !SessionService.instance.addExpense) {
-              showPremiumConfirm(
-                context: context,
-                title: 'No Access',
-                body: "You don't have access for this operation",
-                confirmLabel: 'Ok',
-                cancelLabel: 'Close',
-              );
-              return;
-            }
+            if (!MainNav.tabAllowed(context, i)) return;
             setState(() => _selectedTab = i);
           },
         ),
@@ -2201,187 +2203,3 @@ class _PayLaterCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Premium AppBar
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Logo asset for the current flavor. Reads [AppConfig.instance] defensively:
-/// a hot reload can transiently reset the `late` static field, and we must not
-/// let the AppBar crash. Falls back to the Magik logo (the primary flavor).
-String _appBarLogoAsset() {
-  try {
-    return AppConfig.instance.flavor == Flavor.magik
-        ? 'assets/mainlogo.png'
-        : 'assets/ezy_digi_pics.png';
-  } catch (_) {
-    return 'assets/mainlogo.png';
-  }
-}
-
-class _PremiumAppBar extends StatelessWidget {
-  const _PremiumAppBar();
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeConst.of(context);
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      // Status-bar icons (time/battery/wifi) must contrast the app bar: DARK on
-      // the light Premium-Light bar, LIGHT on the blue bar — else they vanish
-      // white-on-white (the issue seen vs the reference Uber light UI).
-      // (.dark = dark icons for a light bar; .light = light icons for a dark bar)
-      value: t.isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
-      child: Container(
-        decoration: BoxDecoration(
-          color: t.isLight ? t.appBarBg : null,
-          gradient: t.isLight
-              ? null
-              : const LinearGradient(
-                  colors: [
-                    Color(0xFF0D47A1),
-                    Color(0xFF1565C0),
-                    Color(0xFF1976D2),
-                  ],
-                  stops: [0.0, 0.6, 1.0],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-          boxShadow: [
-            BoxShadow(
-              color: t.isLight
-                  ? Colors.black.withValues(alpha: 0.08)
-                  : const Color(0xFF0D47A1).withValues(alpha: 0.45),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: SizedBox(
-            height: 58,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              child: Row(
-                children: [
-                  // ── Hamburger — white pill, premium exclusive touch ────────
-                  Builder(
-                    builder: (ctx) => GestureDetector(
-                      onTap: () => Scaffold.of(ctx).openDrawer(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: t.appBarFg.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: t.appBarFg.withValues(alpha: 0.30),
-                            width: 1,
-                          ),
-                        ),
-                        child: Icon(
-                          Iconsax.menu_1,
-                          color: t.appBarFg,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // ── Logo centred ───────────────────────────────────────────
-                  const SizedBox(width: 8.0),
-                  const Spacer(),
-                  // Android parity (MainActivity toolbar_logo:384-408): tapping the
-                  // logo returns to the Dashboard home. Flutter's logo lives only on
-                  // the dashboard scaffold, so from a sub-tab this jumps back to the
-                  // Dashboard tab (deep screens use their own back button).
-                  GestureDetector(
-                    onTap: () => context
-                        .findAncestorStateOfType<DashboardScreenState>()
-                        ?.setTab(0),
-                    child: Image.asset(
-                      _appBarLogoAsset(),
-                      height: 42,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  const Spacer(),
-                  // ── Action icons with pill containers ────────────────────
-                  _AppBarIcon(
-                    icon: Iconsax.search_normal,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SearchCustomerScreen(),
-                      ),
-                    ),
-                  ),
-                  if (AppConfig.bluetoothPrintingEnabled) ...[
-                    const SizedBox(width: 4),
-                    _AppBarIcon(
-                      icon: Iconsax.bluetooth,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const BluetoothDevicesScreen(),
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(width: 4),
-                  _AppBarIcon(
-                    icon: Iconsax.calendar,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EventManagementScreen(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  _AppBarIcon(
-                    icon: Iconsax.scan_barcode,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ScanCustomerScreen(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _AppBarIcon — small icon with translucent rounded pill container
-// ─────────────────────────────────────────────────────────────────────────────
-class _AppBarIcon extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _AppBarIcon({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeConst.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(7),
-        decoration: BoxDecoration(
-          color: t.appBarFg.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: t.appBarFg.withValues(alpha: 0.22),
-            width: 0.8,
-          ),
-        ),
-        child: Icon(icon, color: t.appBarFg, size: 20),
-      ),
-    );
-  }
-}

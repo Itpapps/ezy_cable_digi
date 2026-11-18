@@ -11,6 +11,13 @@ class BottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onChanged;
 
+  /// Bar height above the home indicator: the 60-px row + the 1-px top border.
+  static const double height = 61;
+
+  /// Labels follow the system text size only up to this factor, so a very
+  /// large accessibility font cannot overflow the fixed 60-px bar.
+  static const double maxLabelScale = 1.3;
+
   const BottomNavBar({
     super.key,
     required this.currentIndex,
@@ -89,7 +96,14 @@ class BottomNavBar extends StatelessWidget {
                                 ? AppColors.primary
                                 : Colors.grey.shade500,
                           ),
-                          child: Text(items[i].label),
+                          child: Text(
+                            items[i].label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            textScaler: MediaQuery.textScalerOf(context)
+                                .clamp(maxScaleFactor: maxLabelScale),
+                          ),
                         ),
                       ],
                     ),

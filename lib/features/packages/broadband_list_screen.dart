@@ -5,6 +5,7 @@ import '../../core/data/customer.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/broadband_plan.dart';
 import 'data/broadband_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Renew BroadBand — Android parity (`BroadBandList` fragment). Opens from the
 /// Customer Operations "Renew BroadBand" tile: fetches the plan + expiry list
@@ -64,11 +65,18 @@ class _BroadBandListScreenState extends State<BroadBandListScreen> {
     final bbId = (_result?.renewedList.isNotEmpty ?? false)
         ? _result!.renewedList.first.broadbandUserId
         : widget.customer.broadbandUserId;
+    // Android BroadBandList :170 (ApiCallRestClient.callPostApi): a
+    // non-cancellable "Fetching Details, Please wait" while the renewal runs.
+    // It also keeps the header / bottom bar / drawer from opening another
+    // screen meanwhile — the success pop below must close THIS screen.
+    showPremiumLoading(context,
+        message: 'Fetching Details, Please wait', canPop: false);
     final res = await BroadbandRepository.instance.renewBroadband(
       broadbandUserId: bbId.isEmpty ? widget.customer.broadbandUserId : bbId,
       customerId: widget.customer.lcoCustomerId,
     );
     if (!mounted) return;
+    Navigator.of(context).pop(); // close the loader
     setState(() => _busy = false);
     if (res.statusCode == 3) {
       showPremiumSnackBar(context, 'Failed.', isError: true);
@@ -101,7 +109,10 @@ class _BroadBandListScreenState extends State<BroadBandListScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

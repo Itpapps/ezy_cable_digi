@@ -9,6 +9,7 @@ import '../../core/services/session_service.dart';
 import '../employee_track/data/employee_collection.dart';
 import '../employee_track/data/employee_track_repository.dart';
 import '../payment/printer_launcher.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Parse an amount that may carry grouping separators / currency symbols
 /// (e.g. "1,234.50") — strip everything but digits and the decimal point so
@@ -155,7 +156,10 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,
@@ -518,7 +522,10 @@ class _MonthlyReportDetailScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

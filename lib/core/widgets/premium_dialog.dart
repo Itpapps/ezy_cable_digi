@@ -1,6 +1,7 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import '../../widgets/main_frame.dart';
 import '../constants/app_colors.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,7 +339,10 @@ void showPremiumSnackBar(
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(16),
+      // Lifted above the screen's own bottom action bar inside a MainFrame
+      // (0 everywhere else, i.e. the old 16-px margin).
+      margin: EdgeInsets.fromLTRB(
+          16, 16, 16, 16 + MainFrame.snackBarLiftOf(context)),
       elevation: 4,
       duration: const Duration(seconds: 3),
     ),

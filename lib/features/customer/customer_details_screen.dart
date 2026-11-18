@@ -33,6 +33,7 @@ import '../packages/data/package_operations_repository.dart';
 import '../collections/pay_later_dialog.dart';
 import '../search/data/search_repository.dart';
 import '../dashboard/dashboard_refresh_signal.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class CustomerDetailsScreen extends StatefulWidget {
   final Customer customer;
@@ -115,7 +116,10 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
       backgroundColor: t.scaffoldBg,

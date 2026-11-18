@@ -6,6 +6,7 @@ import '../../core/widgets/premium_dialog.dart';
 import 'data/custom_package.dart';
 import 'data/custom_packages_repository.dart';
 import 'deactivate_confirm_screen.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 /// Custom Packages — Deactivation list (Android `CustomPackages_Deactivation`).
 /// Lists the customer's custom packages (`gddp` act_type=2); each row can be
@@ -151,7 +152,10 @@ class _CustomPackagesDeactivationScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(

@@ -5,6 +5,7 @@ import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
 import '../packages/data/package_operations_repository.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 // RemoveServicesScreen — per-box package DEACTIVATION (mirrors Android
 // Frag_Deactpack). Loads the deactivatable catalogue via gcp act_type=2 and the
@@ -162,7 +163,10 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(snackBarLift: 68, child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
@@ -308,7 +312,8 @@ class _RemoveServicesScreenState extends State<RemoveServicesScreen>
           child: CircularProgressIndicator(color: Color(0xFF0D47A1)));
     }
     if (_error) {
-      return Center(
+      // Scrolls instead of overflowing on small phones (MainFrame bars).
+      return CenterOrScroll(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(

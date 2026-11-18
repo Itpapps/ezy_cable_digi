@@ -27,6 +27,7 @@ import '../features/offline/static_content_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/debug/debug_console_screen.dart';
 import '../core/database/database_helper.dart';
+import 'main_frame.dart';
 
 /// D5: only the FIRST tap per drawer opening is acted on (Android's
 /// navigation drawer ignores taps while it closes). Returns false for any
@@ -911,9 +912,15 @@ class _DrawerItem extends StatelessWidget {
       // (an ancestor → would resolve null). Mirrors the About Us item's setTab(4).
       if (labelKey == 'dashboard') {
         final dash = context.findAncestorStateOfType<DashboardScreenState>();
+        if (dash == null) {
+          // Drawer of a MainFrame screen (a route above the Dashboard): go back
+          // to the Dashboard home, as Android's nav_dashboard does.
+          _closeDrawerThen(context, (navCtx) => MainNav.goToTab(navCtx, 0));
+          return;
+        }
         if (!_claimDrawerTap(context)) return; // D5
         _closeDrawer(context);
-        dash?.setTab(0);
+        dash.setTab(0);
         return;
       }
       _closeDrawerThen(context, (navCtx) {

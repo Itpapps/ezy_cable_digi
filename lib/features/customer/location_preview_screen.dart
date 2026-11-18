@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:ezy_cable_digi/widgets/main_frame.dart';
 
 class LocationPreviewScreen extends StatelessWidget {
   final String customerName;
@@ -19,7 +20,10 @@ class LocationPreviewScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      MainFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('LOCATION PREVIEW')),
       body: Column(

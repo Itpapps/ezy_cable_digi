@@ -164,6 +164,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
+      // Compact like Android's 35dp prev_next_layout; 40 is the lowest height
+      // that still holds the 40x40 ◄ ► buttons (see _prevNextButton).
+      toolbarHeight: 40,
       leading: _prevNextButton(t, isPrev: true),
       title: Text(
         'CUSTOMER DETAILS',
@@ -179,17 +182,22 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
   }
 
   /// ◄ = previous customer (next_cust_search flag 2) · ► = next (flag 1).
+  /// Slim for the 40dp bar: with the default IconButton padding the pill
+  /// would be squeezed to 34x24 (no error, it just looks broken).
   Widget _prevNextButton(AppThemeConst t, {required bool isPrev}) {
     return IconButton(
       tooltip: isPrev ? 'Previous customer' : 'Next customer',
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       icon: Container(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: t.backBtnBg,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
-            size: 22, color: t.backBtnIcon),
+            size: 20, color: t.backBtnIcon),
       ),
       onPressed: () => _prevNextCustomer(isPrev ? 2 : 1),
     );
@@ -481,7 +489,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             ],
           ),
           const SizedBox(height: 6),
-          Builder(builder: (_) {
+          LayoutBuilder(builder: (_, constraints) {
             final boxSpans = _boxSpans((b) => b.boxNumber);
             final vcSpans = _boxSpans((b) => b.vcNumber);
             // Generous line budget: the cells below are wide enough that each
@@ -490,55 +498,29 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
             // than being silently ellipsised. Still bounded.
             final boxCount = _selectedBox != null ? 1 : _boxes.length;
             final lines = _boxes.isEmpty ? 2 : (boxCount * 2).clamp(2, 8);
-            // Android keeps Box | VC | CRF on one row, but on a phone-width
-            // screen three columns give each cell ~98pt while a 10-digit box
-            // number needs 120pt and the CRF needs 132pt — so a third of the row
-            // cannot show them without truncating. Box/VC therefore share a
-            // 2-column row (~141pt of text each, one line per box, matching
-            // Android's stacked red/green look) and CRF takes the full-width row
-            // beneath. Field order (Box -> VC -> CRF) and every value are kept.
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _locCell(
-                        _customer.boxNumber.trim().isEmpty
-                            ? 'NA'
-                            : _customer.boxNumber,
-                        'Box Number',
-                        t: t,
-                        // Flat fallback stays green until the per-box list arrives.
-                        valueColor: Colors.green.shade600,
-                        valueSpans: boxSpans,
-                        maxLines: lines,
-                        copyable: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _locCell(
-                        _customer.vcNumber.trim().isEmpty
-                            ? 'NA'
-                            : _customer.vcNumber,
-                        'VC Number',
-                        t: t,
-                        valueColor: Colors.green.shade600,
-                        valueSpans: vcSpans,
-                        maxLines: lines,
-                        copyable: true,
-                      ),
-                    ),
-                  ],
-                ),
-                // Android gates CRF on use_caf == 1 (CustomerOperations_Fragment
-                // :274-278). On its own row there is no neighbouring column whose
-                // width depends on it, so it is omitted entirely when hidden.
-                if (SessionService.instance.useCaf == 1) ...[
-                  const SizedBox(height: 6),
-                  _locCell(
+            final boxCell = _locCell(
+              _customer.boxNumber.trim().isEmpty ? 'NA' : _customer.boxNumber,
+              'Box Number',
+              t: t,
+              // Flat fallback stays green until the per-box list arrives.
+              valueColor: Colors.green.shade600,
+              valueSpans: boxSpans,
+              maxLines: lines,
+              copyable: true,
+            );
+            final vcCell = _locCell(
+              _customer.vcNumber.trim().isEmpty ? 'NA' : _customer.vcNumber,
+              'VC Number',
+              t: t,
+              valueColor: Colors.green.shade600,
+              valueSpans: vcSpans,
+              maxLines: lines,
+              copyable: true,
+            );
+            // Android gates CRF on use_caf == 1 (CustomerOperations_Fragment
+            // :277-282). Hidden → no CRF cell; Box/VC keep their two halves.
+            final crfCell = SessionService.instance.useCaf == 1
+                ? _locCell(
                     _customer.crfNumber.trim().isEmpty
                         ? 'NA'
                         : _customer.crfNumber,
@@ -546,7 +528,36 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen>
                     t: t,
                     maxLines: lines,
                     copyable: true,
-                  ),
+                  )
+                : null;
+            // Android keeps Box | VC | CRF on one row (activity_customer
+            // operations.xml:666-770). Here every cell also has a copy icon and
+            // padding, so a third of a phone-width card leaves only ~61-79pt for
+            // the number (360-412pt screens) while an 11-character value needs
+            // ~80pt (Inter 12, measured) — it would break mid-number. So the
+            // three share one row only when the card is >= 468 wide (≈ a 520dp
+            // screen, e.g. tablets): each third then has at least the room one
+            // half has on a 360dp phone. Narrower: Box/VC share a row and CRF
+            // takes the full-width row beneath. Order and values are unchanged.
+            final oneRow = crfCell != null && constraints.maxWidth >= 468;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: boxCell),
+                    const SizedBox(width: 8),
+                    Expanded(child: vcCell),
+                    if (crfCell != null && oneRow) ...[
+                      const SizedBox(width: 8),
+                      Expanded(child: crfCell),
+                    ],
+                  ],
+                ),
+                if (crfCell != null && !oneRow) ...[
+                  const SizedBox(height: 6),
+                  crfCell,
                 ],
               ],
             );

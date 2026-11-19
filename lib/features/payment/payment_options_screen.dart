@@ -669,6 +669,9 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
+      // Compact like Android's 35dp prev_next_layout; 40 is the lowest height
+      // that still holds the 40x40 ◄ ► buttons (see _prevNextButton).
+      toolbarHeight: 40,
       leading: _prevNextButton(t, isPrev: true),
       title: Text(
         'PAYMENT DETAILS',
@@ -684,17 +687,22 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
   }
 
   /// ◄ = previous customer (next_cust_search flag 2) · ► = next (flag 1).
+  /// Slim for the 40dp bar: with the default IconButton padding the pill
+  /// would be squeezed to 34x24 (no error, it just looks broken).
   Widget _prevNextButton(AppThemeConst t, {required bool isPrev}) {
     return IconButton(
       tooltip: isPrev ? 'Previous customer' : 'Next customer',
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       icon: Container(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: t.backBtnBg,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
-            size: 22, color: t.backBtnIcon),
+            size: 20, color: t.backBtnIcon),
       ),
       onPressed: () => _prevNextCustomer(isPrev ? 2 : 1),
     );

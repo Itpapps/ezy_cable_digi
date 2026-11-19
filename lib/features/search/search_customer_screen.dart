@@ -883,9 +883,13 @@ class SearchCustomerCard extends StatelessWidget {
                   Iconsax.timer_1,
                   'Pending Amount',
                   _pendingText(customer.amountPayable),
-                  valueColor: hasPending
-                      ? const Color(0xFFD32F2F)
-                      : const Color(0xFF1AA95A),
+                  // Android SearchCustomer_Rec_Adapter :115-118: an advance
+                  // (negative) amount is blue, never red.
+                  valueColor: pendingValue < 0
+                      ? const Color(0xFF2E3192)
+                      : hasPending
+                          ? const Color(0xFFD32F2F)
+                          : const Color(0xFF1AA95A),
                 ),
                 const SizedBox(height: 8),
                 _row(

@@ -624,7 +624,6 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           builder: (context, _) {
             return Column(
               children: [
-                _buildPrevNextStrip(t),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                   child: _CustomerInfoCard(
@@ -661,80 +660,18 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
     );
   }
 
-  // ── Prev/Next customer strip (below the AppBar) ─────────────────────────
-  // Presentation only: the Prev/Next controls live here instead of the AppBar,
-  // so the AppBar shows a standard back button. Taps call the SAME
-  // _prevNextCustomer(flag) — no logic/routing change. Expanded halves +
-  // Flexible/ellipsis keep it overflow-safe.
-  Widget _buildPrevNextStrip(AppThemeConst t) {
-    return Material(
-      color: t.appBarBg,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-        child: Row(
-          children: [
-            Expanded(child: _prevNextChip(t, isPrev: true)),
-            const SizedBox(width: 8),
-            Expanded(child: _prevNextChip(t, isPrev: false)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _prevNextChip(AppThemeConst t, {required bool isPrev}) {
-    final row = <Widget>[
-      Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
-          size: 20, color: t.backBtnIcon),
-      const SizedBox(width: 4),
-      Flexible(
-        child: Text(
-          isPrev ? 'Previous Customer' : 'Next Customer',
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-              color: t.backBtnIcon, fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-      ),
-    ];
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => _prevNextCustomer(isPrev ? 2 : 1),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: t.backBtnBg,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: isPrev ? row : row.reversed.toList(),
-        ),
-      ),
-    );
-  }
-
+  // Android custmgmt_makepayment.xml prev_next_layout: one bar
+  // ◄ Payment Details ► and NO back arrow — the phone's Back (Android) or the
+  // edge swipe (iPhone) still closes the screen.
   PreferredSizeWidget _buildAppBar(AppThemeConst t) {
     return AppBar(
       backgroundColor: t.appBarBg,
       foregroundColor: t.appBarFg,
       elevation: 0,
       centerTitle: true,
-      // Standard back button. Prev/Next customer controls moved to the strip
-      // below the AppBar (_buildPrevNextStrip); _prevNextCustomer unchanged.
-      leading: IconButton(
-        tooltip: 'Back',
-        icon: Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: t.backBtnBg,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
+      leading: _prevNextButton(t, isPrev: true),
       title: Text(
-        'PAYMENT',
+        'PAYMENT DETAILS',
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w800,
@@ -742,7 +679,24 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           color: t.appBarFg,
         ),
       ),
-      // Next-customer control moved to the Prev/Next strip below the AppBar.
+      actions: [_prevNextButton(t, isPrev: false)],
+    );
+  }
+
+  /// ◄ = previous customer (next_cust_search flag 2) · ► = next (flag 1).
+  Widget _prevNextButton(AppThemeConst t, {required bool isPrev}) {
+    return IconButton(
+      tooltip: isPrev ? 'Previous customer' : 'Next customer',
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: t.backBtnBg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
+            size: 22, color: t.backBtnIcon),
+      ),
+      onPressed: () => _prevNextCustomer(isPrev ? 2 : 1),
     );
   }
 
@@ -910,6 +864,8 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
           // for LCO-deposit dealers (useLcoDeposit==1) — pinned to full pending.
           enabled: !_ctrl.isBroadbandOnly && !_ctrl.amountLocked,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          // Android :441: max 7 characters including the dot, 2 decimals.
+          inputFormatters: amountInputFormatters,
           highlightColor: _ctrl.paymentMethod == 'bank' ? const Color(0xFFF59E0B) : null,
         ),
 
@@ -921,6 +877,8 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
             hint: 'Amount to Collect (Broadband) (₹)',
             t: t,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            // Android :442: max 7 characters including the dot, 2 decimals.
+            inputFormatters: amountInputFormatters,
           ),
           const SizedBox(height: 10),
           _CheckToggle(

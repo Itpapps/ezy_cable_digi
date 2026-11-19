@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/data/customer.dart';
+import 'payment_controller.dart';
 
 class PaymentConfirmationDialog extends StatefulWidget {
   final Customer customer;
@@ -135,10 +136,12 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
   }
 
   /// Mirrors Android `CustomerMgmt_MakePayment_Fragment.showDialog` :2823-2834.
+  /// Amounts are shown as Android prints them (1169.99, 11699.0) — never
+  /// rounded.
   String _confirmationMessage() {
     final stb = widget.amount;
     final bb = widget.broadbandAmount;
-    String money(double v) => '₹${v.toStringAsFixed(1)}';
+    String money(double v) => '₹${androidAmountText(v)}';
     if (bb > 0) {
       // BroadBand-only (customer_type == '1') vs combined (STB & BroadBand).
       if (widget.customer.customerType.trim() == '1') {

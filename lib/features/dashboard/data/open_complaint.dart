@@ -62,4 +62,14 @@ class OpenComplaint {
       longitude: s('longitude'),
     );
   }
+
+  /// Android OpenComplaints_RecyclerView_Adapter :97-112 (map icon): Google
+  /// Maps directions to the customer — null when the complaint has no
+  /// location (Android "Location details not found.").
+  Uri? get mapUri {
+    final lat = double.tryParse(latitude);
+    final lon = double.tryParse(longitude);
+    if (lat == null || lon == null || lat == 0 || lon == 0) return null;
+    return Uri.parse('http://maps.google.com/maps?daddr=$latitude,$longitude');
+  }
 }

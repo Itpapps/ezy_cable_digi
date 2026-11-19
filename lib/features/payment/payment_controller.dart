@@ -1,5 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../collections/data/pay_later_repository.dart';
@@ -10,6 +11,47 @@ import '../../core/services/error_handler_service.dart';
 import '../../core/services/session_service.dart';
 import 'data/pending_amount_repository.dart';
 import 'data/make_payment_repository.dart';
+
+// ── Android amount boxes (CustomerMgmt_MakePayment_Fragment :441-442) ───────
+// The STB and broadband amount boxes take digits and one ".", at most 2
+// decimals and at most 7 characters including the dot (LengthFilter(7) +
+// DecimalDigitsInputFilter(2) + android:digits="1234567890.").
+
+/// Android's `"" + amount` text (Java Double.toString) of an amount kept to
+/// 2 decimals: 11699.0 → "11699.0", 1169.99 → "1169.99", 1170.0 → "1170.0".
+String androidAmountText(double v) =>
+    double.parse(v.toStringAsFixed(2)).toString();
+
+/// The text Android puts in an amount box: [androidAmountText] cut to the
+/// box's 7 characters — Android's LengthFilter(7) also applies to setText,
+/// so a due of 11699.99 is filled in as "11699.9".
+String amountBoxText(double v) {
+  final s = androidAmountText(v);
+  return s.length > 7 ? s.substring(0, 7) : s;
+}
+
+/// Input rule of the STB and broadband amount boxes (see above). Like
+/// Android's filters it never blocks a pure deletion — e.g. clearing a
+/// negative due that the discount box filled in.
+final List<TextInputFormatter> amountInputFormatters = [
+  LengthLimitingTextInputFormatter(7),
+  TextInputFormatter.withFunction((oldValue, newValue) =>
+      RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text) ||
+              _isDeletion(oldValue.text, newValue.text)
+          ? newValue
+          : oldValue),
+];
+
+/// True when [after] is [before] with one run of characters removed.
+bool _isDeletion(String before, String after) {
+  if (after.length >= before.length) return false;
+  var i = 0;
+  while (i < after.length && before.codeUnitAt(i) == after.codeUnitAt(i)) {
+    i++;
+  }
+  return before.substring(i + before.length - after.length) ==
+      after.substring(i);
+}
 
 /// R1: the server answered makePayments with a non-zero statusCode (payment
 /// NOT made). Carries Android's statusCode/statusMessage so the screen can
@@ -204,15 +246,16 @@ class PaymentController extends ChangeNotifier {
         // Android parity (CustomerMgmt_MakePayment_Fragment :1500-1507): prefill the
         // STB amount box with the pending only when it is positive; a zero/negative
         // pending (customer credit/advance) prefills "0", exactly like Android's
-        // `if (pendingAmount > 0) et_amount.setText(...) else et_amount.setText("0")`.
-        amountCtrl.text = cablePending > 0 ? cablePending.toStringAsFixed(2) : '0';
+        // `if (pendingAmount > 0) et_amount.setText(...) else et_amount.setText("0")`,
+        // in Android's number text, cut to the box's 7 characters.
+        amountCtrl.text = cablePending > 0 ? amountBoxText(cablePending) : '0';
         // A-B7 / Android :1510: nothing pending → the SMS box is unticked
         // (a positive pending keeps the dealer default, like Android).
         if (cablePending <= 0) _sendSms = false;
         pendingLoaded = true; // A-B8
         // Android prefills the broadband field only when there is a broadband due.
         if (broadcasterPending > 0) {
-          broadbandAmountCtrl.text = broadcasterPending.toStringAsFixed(2);
+          broadbandAmountCtrl.text = amountBoxText(broadcasterPending);
         }
         _applyScheme(result.scheme); // A-B3 (Android viewUpdating)
       } else {
@@ -338,12 +381,12 @@ class PaymentController extends ChangeNotifier {
     if (!schemeVisible) return;
     schemeApplied = on;
     if (on) {
-      amountCtrl.text = schemeTotal.toStringAsFixed(2);
+      amountCtrl.text = amountBoxText(schemeTotal);
       discountPenaltyFlag = schemeIsDiscount
           ? (schemeMode == 'A' ? 'DA00' : 'DM00')
           : (schemeMode == 'A' ? '00PA' : '00PM');
     } else {
-      amountCtrl.text = cablePending > 0 ? cablePending.toStringAsFixed(2) : '0';
+      amountCtrl.text = cablePending > 0 ? amountBoxText(cablePending) : '0';
       discountPenaltyFlag = '0000';
     }
     notifyListeners();
@@ -362,7 +405,7 @@ class PaymentController extends ChangeNotifier {
         (raw.isEmpty || raw == '.') ? 0.0 : (double.tryParse(raw) ?? 0.0);
     if (due < discount) {
       discountError = 'Discount should not exceed amount';
-      amountCtrl.text = due.toStringAsFixed(2); // Android :622 — full due
+      amountCtrl.text = amountBoxText(due); // Android :622 — full due
     } else {
       final maxPct = SessionService.instance.maxDiscountPercentAllowed;
       final maxAllowed = due * maxPct / 100.0;
@@ -372,7 +415,7 @@ class PaymentController extends ChangeNotifier {
       } else {
         discountError = null;
       }
-      amountCtrl.text = (due - discount).toStringAsFixed(2); // Android :630/:634
+      amountCtrl.text = amountBoxText(due - discount); // Android :630/:634
     }
     notifyListeners();
   }

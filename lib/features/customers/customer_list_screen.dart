@@ -402,6 +402,12 @@ class _CustomerTile extends StatelessWidget {
     final hasLoc = customer.latitude != null && customer.longitude != null;
     final hasPending = customer.pendingAmount.isNotEmpty &&
         customer.pendingAmount != '₹0' && customer.pendingAmount != '0';
+    // Android's Unpaid list (row_unpaidcustomers.xml) shows every amount in
+    // one normal colour — an advance (negative) amount is never red.
+    final isAdvance = (double.tryParse(
+                customer.pendingAmount.replaceAll('₹', '').trim()) ??
+            0) <
+        0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -480,7 +486,9 @@ class _CustomerTile extends StatelessWidget {
                 // Info rows
                 _row(Iconsax.timer_1, 'Pending Amount',
                     customer.pendingAmount.isEmpty ? '₹0' : customer.pendingAmount,
-                    valueColor: hasPending ? const Color(0xFFD32F2F) : const Color(0xFF1AA95A)),
+                    valueColor: isAdvance
+                        ? null
+                        : hasPending ? const Color(0xFFD32F2F) : const Color(0xFF1AA95A)),
                 const SizedBox(height: 8),
                 _row(Iconsax.calendar_tick, 'Last Paid Date',
                     customer.lastPaidDate.isEmpty ? '—' : customer.lastPaidDate),

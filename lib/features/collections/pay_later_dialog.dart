@@ -192,7 +192,7 @@ Future<void> showPayLaterScheduleDialog(
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600),
                   decoration: InputDecoration(
-                    hintText: 'Remarks (optional)',
+                    hintText: 'Remarks *',
                     hintStyle:
                         TextStyle(fontSize: 12, color: Colors.grey.shade400),
                     filled: true,

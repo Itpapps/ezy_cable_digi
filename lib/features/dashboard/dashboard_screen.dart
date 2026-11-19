@@ -63,6 +63,7 @@ class _TicketItem {
   altCustomerId; // alt_cust_id from OpenComplaint (complaints feed)
   final String
   realComplaintId; // complaint_id from OpenComplaint (complaints feed)
+  final Uri? mapUri; // OpenComplaint.mapUri — null: no customer location
 
   const _TicketItem({
     required this.ticketId,
@@ -73,6 +74,7 @@ class _TicketItem {
     this.statusLabel,
     this.altCustomerId = '',
     this.realComplaintId = '',
+    this.mapUri,
   });
 }
 
@@ -1095,6 +1097,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
           statusLabel: c.status.isEmpty ? null : c.status,
           altCustomerId: c.altCustId,
           realComplaintId: c.complaintId,
+          mapUri: c.mapUri,
         );
         return _TicketCard(
           item: item,
@@ -1614,6 +1617,17 @@ class _TicketCard extends StatelessWidget {
     return const Color(0xFF1565C0); // default → blue
   }
 
+  /// Android OpenComplaints_RecyclerView_Adapter :78-117 (map icon): Google
+  /// Maps directions to the customer, or "Location details not found.".
+  void _openMap(BuildContext context) {
+    final uri = item.mapUri;
+    if (uri == null) {
+      showPremiumSnackBar(context, 'Location details not found.');
+      return;
+    }
+    launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAssigned = item.status == _TicketStatus.assigned;
@@ -1670,9 +1684,7 @@ class _TicketCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () {
-                    /* TODO: open map navigation */
-                  },
+                  onTap: () => _openMap(context),
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(

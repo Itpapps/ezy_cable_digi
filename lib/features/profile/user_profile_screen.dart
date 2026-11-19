@@ -25,13 +25,26 @@ class UserProfileScreen extends StatelessWidget {
         ? empName[0].toUpperCase()
         : (business != '-' ? business[0].toUpperCase() : '?');
 
-    return Scaffold(
+    // Back (app-bar arrow, Android system back) always returns to the
+    // Dashboard tab, whichever screen the drawer opened the profile from.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        MainNav.goToTab(context, 0);
+      },
+      child: Scaffold(
       backgroundColor: t.scaffoldBg,
       appBar: AppBar(
         title: const Text('User Profile'),
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,
+        leading: IconButton(
+          icon: const BackButtonIcon(),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          onPressed: () => MainNav.goToTab(context, 0),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
@@ -200,6 +213,7 @@ class UserProfileScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

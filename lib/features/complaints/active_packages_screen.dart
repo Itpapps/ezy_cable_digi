@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/data/customer.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package.dart';
@@ -78,7 +79,6 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
         elevation: 0,
         centerTitle: true,
         leading: GestureDetector(
@@ -86,18 +86,18 @@ class _ActivePackagesScreenState extends State<ActivePackagesScreen> {
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: AppThemeConst.of(context).backBtnBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.arrow_back_ios_new,
-                size: 16, color: Colors.white),
+            child: Icon(Icons.arrow_back_ios_new,
+                size: 16, color: AppThemeConst.of(context).backBtnIcon),
           ),
         ),
-        title: const Text('ACTIVE PACKAGES',
+        title: Text('ACTIVE PACKAGES',
             style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: AppThemeConst.of(context).appBarFg,
                 letterSpacing: 1)),
       ),
       body: SingleChildScrollView(

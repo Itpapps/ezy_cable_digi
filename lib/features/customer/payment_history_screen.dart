@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../core/theme/theme_constants.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -588,7 +589,6 @@ class _PaymentHistoryDetailScreenState
     return Scaffold(
       backgroundColor: const Color(0xFF0D47A1),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
         elevation: 0,
         centerTitle: true,
         leading: GestureDetector(
@@ -596,18 +596,18 @@ class _PaymentHistoryDetailScreenState
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: AppThemeConst.of(context).backBtnBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.arrow_back_ios_new,
-                size: 16, color: Colors.white),
+            child: Icon(Icons.arrow_back_ios_new,
+                size: 16, color: AppThemeConst.of(context).backBtnIcon),
           ),
         ),
-        title: const Text('PAYMENT DETAILS',
+        title: Text('PAYMENT DETAILS',
             style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: AppThemeConst.of(context).appBarFg,
                 letterSpacing: 1)),
       ),
       body: SingleChildScrollView(

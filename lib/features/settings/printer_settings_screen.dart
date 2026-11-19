@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -93,6 +94,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  static bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
+
   Widget _buildPage(BuildContext context) {
     final t = AppThemeConst.of(context);
     return Scaffold(
@@ -124,6 +127,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         child: Column(
           children: [
             // ── Settings card ──────────────────────────────────────────────
+            // Printer header/footer block is Android-only; hidden on iOS.
+            // Saved values are untouched (Submit re-saves what was loaded).
+            if (!_isIOS) ...[
             Container(
               padding: const EdgeInsets.all(AppSizes.paddingL),
               decoration: BoxDecoration(
@@ -174,6 +180,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             ),
 
             const SizedBox(height: AppSizes.paddingM),
+            ],
 
             // ── Amount filter card ─────────────────────────────────────────
             Container(
@@ -235,6 +242,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
+                // Clear only empties the printer header/footer fields, which
+                // are hidden on iOS — so the button is hidden there too.
+                if (!_isIOS) ...[
                 const SizedBox(width: AppSizes.paddingS),
                 Expanded(
                   child: ElevatedButton(
@@ -257,6 +267,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
+                ],
               ],
             ),
           ],

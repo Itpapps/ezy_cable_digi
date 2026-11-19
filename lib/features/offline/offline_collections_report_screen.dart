@@ -152,8 +152,6 @@ class _OfflineCollectionsReportScreenState
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('COLLECTIONS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

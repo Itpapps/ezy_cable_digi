@@ -182,8 +182,6 @@ class _OttScreenState extends State<OttScreen> {
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('OTT'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

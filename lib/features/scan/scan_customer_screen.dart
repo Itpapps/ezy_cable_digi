@@ -223,27 +223,25 @@ class _ScanCustomerScreenState extends State<ScanCustomerScreen>
     return Scaffold(
       backgroundColor: AppColors.primary,
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
         elevation: 0,
         centerTitle: true,
-        foregroundColor: Colors.white,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: AppThemeConst.of(context).backBtnBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+            child: Icon(Icons.arrow_back_ios_new, size: 16, color: AppThemeConst.of(context).backBtnIcon),
           ),
         ),
-        title: const Text(
+        title: Text(
           'SEARCH CUSTOMER WITH SCAN',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppThemeConst.of(context).appBarFg,
             letterSpacing: 0.8,
           ),
         ),

@@ -107,11 +107,9 @@ class _PayLaterReportScreenState extends State<PayLaterReportScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FF),
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text('PAY LATER',
+        title: Text('PAY LATER',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1)),
       ),
       body: Column(

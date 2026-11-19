@@ -1050,11 +1050,18 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
     if (list.isEmpty) {
       return _feedMessage(Iconsax.tick_circle, 'No unpaid customers');
     }
+    // The customers shown on the dashboard (max 10) — Payment Details ◄ / ►
+    // moves through exactly these.
+    final shownList = list.take(10).toList();
     return _pagedListView(
       total: list.length,
       cap: 10, // Android UnpaidNewAdapter caps the dashboard preview at 10.
-      itemBuilder: (_, i) =>
-          _UnpaidCard(customer: list[i], isLast: i == list.length - 1),
+      itemBuilder: (_, i) => _UnpaidCard(
+        customer: list[i],
+        isLast: i == list.length - 1,
+        unpaidList: shownList,
+        index: i,
+      ),
     );
   }
 
@@ -1822,7 +1829,14 @@ class _TicketCard extends StatelessWidget {
 class _UnpaidCard extends StatelessWidget {
   final Customer customer;
   final bool isLast;
-  const _UnpaidCard({required this.customer, required this.isLast});
+  final List<Customer> unpaidList;
+  final int index;
+  const _UnpaidCard({
+    required this.customer,
+    required this.isLast,
+    required this.unpaidList,
+    required this.index,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1869,7 +1883,11 @@ class _UnpaidCard extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => PaymentOptionsScreen(customer: customer),
+                builder: (_) => PaymentOptionsScreen(
+                  customer: customer,
+                  unpaidList: unpaidList,
+                  unpaidIndex: index,
+                ),
               ),
             );
           },

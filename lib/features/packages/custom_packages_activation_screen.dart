@@ -115,8 +115,6 @@ class _CustomPackagesActivationScreenState
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('CUSTOM PACKAGES'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))

@@ -83,8 +83,6 @@ class _DeactivateConfirmScreenState extends State<DeactivateConfirmScreen> {
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('DEACTIVATE PACKAGES'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

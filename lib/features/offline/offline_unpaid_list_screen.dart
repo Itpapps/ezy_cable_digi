@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/theme_constants.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -177,12 +178,10 @@ class _OfflineUnpaidListScreenState extends State<OfflineUnpaidListScreen> {
         backgroundColor: AppColors.primary,
         appBar: AppBar(
           title: const Text('CUSTOMER LIST'),
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
           bottom: TabBar(
             indicatorColor: Colors.redAccent,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
+            labelColor: AppThemeConst.of(context).appBarFg,
+            unselectedLabelColor: AppThemeConst.of(context).appBarFg.withValues(alpha: 0.7),
             tabs: const [
               Tab(text: 'Un-Paid Customer-List'),
               Tab(text: 'Paid Customer-List(Day Report)'),

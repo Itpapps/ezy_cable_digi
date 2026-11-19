@@ -44,16 +44,36 @@ class StaticContentScreen extends StatelessWidget {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               color: AppColors.primary.withValues(alpha: 0.08),
-              alignment: Alignment.center,
-              child: Text(
-                title.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Back → Dashboard tab (this is the Dashboard's About Us tab).
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const BackButtonIcon(),
+                      color: AppColors.primary,
+                      tooltip:
+                          MaterialLocalizations.of(context).backButtonTooltip,
+                      onPressed: () => MainNav.goToTab(context, 0),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 48, vertical: 12),
+                    child: Text(
+                      title.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(child: textWidget),
@@ -63,11 +83,7 @@ class StaticContentScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: Text(title)),
       body: textWidget,
     );
   }
@@ -144,13 +160,12 @@ class _PrivacyPolicyWebViewState extends State<PrivacyPolicyWebView> {
   Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // Colours come from the active theme (blue in Theme 1, white in Theme 2).
         title: const Text('Privacy Policy'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
         actions: [
           if (_hasError)
             IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
+              icon: const Icon(Icons.refresh),
               onPressed: _reload,
             ),
         ],

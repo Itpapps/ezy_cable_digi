@@ -26,7 +26,18 @@ import 'package:ezy_cable_digi/widgets/main_frame.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 class PaymentOptionsScreen extends StatefulWidget {
   final Customer customer;
-  const PaymentOptionsScreen({super.key, required this.customer});
+
+  /// Set when opened from the Dashboard Unpaid list: ◄ / ► then move to the
+  /// previous / next customer of THIS list instead of the server prenext call.
+  final List<Customer>? unpaidList;
+  final int unpaidIndex;
+
+  const PaymentOptionsScreen({
+    super.key,
+    required this.customer,
+    this.unpaidList,
+    this.unpaidIndex = 0,
+  });
 
   @override
   State<PaymentOptionsScreen> createState() => _PaymentOptionsScreenState();
@@ -696,7 +707,35 @@ class _PaymentOptionsScreenState extends State<PaymentOptionsScreen>
         child: Icon(isPrev ? Icons.chevron_left : Icons.chevron_right,
             size: 22, color: t.backBtnIcon),
       ),
-      onPressed: () => _prevNextCustomer(isPrev ? 2 : 1),
+      onPressed: () => widget.unpaidList != null
+          ? _moveInUnpaidList(isPrev ? -1 : 1)
+          : _prevNextCustomer(isPrev ? 2 : 1),
+    );
+  }
+
+  // ── Prev/Next within the Dashboard Unpaid list ──────────────────────────
+  // Opens Payment Details of the adjacent unpaid customer in place of this
+  // screen, so Back still returns to the Dashboard.
+  void _moveInUnpaidList(int step) {
+    final list = widget.unpaidList!;
+    final next = widget.unpaidIndex + step;
+    if (next < 0 || next >= list.length) {
+      showPremiumSnackBar(
+        context,
+        step < 0
+            ? 'This is the first customer in the unpaid list'
+            : 'This is the last customer in the unpaid list',
+      );
+      return;
+    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => PaymentOptionsScreen(
+          customer: list[next],
+          unpaidList: list,
+          unpaidIndex: next,
+        ),
+      ),
     );
   }
 

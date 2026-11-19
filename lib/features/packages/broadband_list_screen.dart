@@ -117,8 +117,6 @@ class _BroadBandListScreenState extends State<BroadBandListScreen> {
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('RENEW BROADBAND'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))

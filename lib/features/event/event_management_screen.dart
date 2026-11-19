@@ -453,11 +453,9 @@ class _EventManagementScreenState extends State<EventManagementScreen> {
   Widget _buildPage(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      // App bar colours come from the active theme (blue in Theme 1, white in
+      // Theme 2), same as List Expenses.
       appBar: AppBar(
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
         title: Text(
           'Event Management',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18),

@@ -92,8 +92,6 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
       backgroundColor: AppColors.primary,
       appBar: AppBar(
         title: const Text('BILL DETAILS'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

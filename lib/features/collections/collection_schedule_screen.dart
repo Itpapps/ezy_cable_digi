@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/constants/app_colors.dart';
 import 'data/pay_later.dart';
 import 'data/pay_later_repository.dart';
@@ -130,15 +131,14 @@ class _CollectionScheduleScreenState extends State<CollectionScheduleScreen> {
       // ↓ Shrinks the body when the keyboard appears so nothing overflows.
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
         elevation: 0,
         centerTitle: true,
-        title: const Text(
+        title: Text(
           'COLLECTION SCHEDULE',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
-            color: Colors.white,
+            color: AppThemeConst.of(context).appBarFg,
             letterSpacing: 1,
           ),
         ),

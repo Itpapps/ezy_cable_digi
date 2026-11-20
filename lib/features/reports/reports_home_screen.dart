@@ -31,7 +31,9 @@ class ReportsHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Reports'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('Reports',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
       ),

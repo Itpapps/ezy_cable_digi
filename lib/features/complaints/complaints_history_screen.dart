@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import '../dashboard/data/complaints_repository.dart';
 import 'complaint_details_screen.dart';
 import 'data/customer_complaint.dart';
@@ -93,21 +94,25 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, Total strip, spinner, empty/error
+  // text). Theme 1 keeps exactly the previous blue/white; the white cards are
+  // unchanged in both themes.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _buildAppBar(context),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(context, t),
       body: Column(
         children: [
           // Total count bar
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: const Color(0xFF0D47A1),
+            color: t.appBarBg,
             child: Text(
               'Total Count - ${_items.length}',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: t.appBarFg, fontSize: 13),
             ),
           ),
 
@@ -118,6 +123,15 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
+              // Theme 2 only: lift the white card off the light page.
+              boxShadow: t.isLight
+                  ? [
+                      BoxShadow(
+                          color: t.cardShadowColor,
+                          blurRadius: 14,
+                          offset: const Offset(0, 6)),
+                    ]
+                  : null,
             ),
             child: Column(
               children: [
@@ -138,16 +152,18 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
             ),
           ),
 
-          Expanded(child: _buildBody()),
+          Expanded(child: _buildBody(t)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
+    // Text drawn straight on the page: Theme 1 white70 (as before).
+    final pageText = t.isLight ? t.subtitleText : Colors.white70;
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
+      return Center(
+        child: CircularProgressIndicator(color: t.loadingColor),
       );
     }
     if (_error) {
@@ -158,15 +174,15 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
           child: Text(
             _message.isEmpty ? 'Could not load complaint history' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+            style: TextStyle(color: pageText, fontSize: 15),
           ),
         ),
       );
     }
     if (_items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text('No complaints found',
-            style: TextStyle(color: Colors.white70, fontSize: 15)),
+            style: TextStyle(color: pageText, fontSize: 15)),
       );
     }
     return RefreshIndicator(
@@ -182,28 +198,32 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, AppThemeConst t) {
     return AppBar(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: t.isLight
+                ? t.backBtnBg
+                : Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new,
-              size: 16, color: Colors.white),
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text('COMPLAINT HISTORY',
+      title: Text('COMPLAINT HISTORY',
           style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: t.appBarFg,
               letterSpacing: 1)),
     );
   }

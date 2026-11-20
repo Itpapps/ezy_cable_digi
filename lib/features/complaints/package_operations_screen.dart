@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/data/customer.dart';
 import '../../core/services/session_service.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../packages/data/customer_box.dart';
 import '../packages/data/package_operations_repository.dart';
@@ -89,27 +90,31 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, spinner, empty/error state). Theme 1
+  // keeps exactly the previous blue/white; the white cards are unchanged.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _buildAppBar(),
-      body: _buildBody(),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(t),
+      body: _buildBody(t),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_error) {
       return _stateMessage(
+        t,
         Icons.error_outline_rounded,
         _message.isEmpty ? 'Could not load boxes' : _message,
         retry: true,
       );
     }
     if (_boxes.isEmpty || _selectedBox == null) {
-      return _stateMessage(Icons.tv_off_rounded, 'No Boxes For this Customer');
+      return _stateMessage(t, Icons.tv_off_rounded, 'No Boxes For this Customer');
     }
     return RefreshIndicator(
       onRefresh: _loadBoxes,
@@ -127,18 +132,22 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
     );
   }
 
-  Widget _stateMessage(IconData icon, String text, {bool retry = false}) {
+  // Drawn straight on the page: Theme 1 keeps the white icon/text and the
+  // white Retry button; Theme 2 uses dark text and a filled accent button.
+  Widget _stateMessage(AppThemeConst t, IconData icon, String text,
+      {bool retry = false}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white70, size: 44),
+            Icon(icon,
+                color: t.isLight ? t.subtitleText : Colors.white70, size: 44),
             const SizedBox(height: 12),
             Text(text,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 15)),
+                style: TextStyle(color: t.headingText, fontSize: 15)),
             if (retry) ...[
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -146,8 +155,9 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF0D47A1),
+                  backgroundColor: t.isLight ? t.accent : Colors.white,
+                  foregroundColor:
+                      t.isLight ? Colors.white : const Color(0xFF0D47A1),
                 ),
               ),
             ],
@@ -491,28 +501,32 @@ class _PackageOperationsScreenState extends State<PackageOperationsScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
+  PreferredSizeWidget _buildAppBar(AppThemeConst t) {
     return AppBar(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: t.isLight
+                ? t.backBtnBg
+                : Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new,
-              size: 16, color: Colors.white),
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text('PACKAGE OPERATIONS',
+      title: Text('PACKAGE OPERATIONS',
           style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: t.appBarFg,
               letterSpacing: 1)),
     );
   }

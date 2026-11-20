@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/custom_package.dart';
 import 'data/custom_packages_repository.dart';
@@ -89,9 +90,12 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
 
   Widget _buildPage(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      // Theme-aware page (Theme 1: the same blue as before).
+      backgroundColor: AppThemeConst.of(context).scaffoldBg,
       appBar: AppBar(
-        title: const Text('BILL DETAILS'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('BILL DETAILS',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

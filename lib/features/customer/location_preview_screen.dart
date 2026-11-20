@@ -25,7 +25,10 @@ class LocationPreviewScreen extends StatelessWidget {
 
   Widget _buildPage(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('LOCATION PREVIEW')),
+      appBar: AppBar(
+          toolbarHeight: 40, // compact, same as Customer / Payment Details
+          title: const Text('LOCATION PREVIEW',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1))),
       body: Column(
         children: [
           Expanded(

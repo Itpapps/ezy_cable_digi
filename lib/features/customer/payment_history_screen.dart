@@ -120,21 +120,25 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, Total strip, spinner, empty text).
+  // Theme 1 keeps exactly the previous blue/white. The purple customer card
+  // and the white payment cards are unchanged in both themes.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _buildAppBar(context),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(context, t),
       body: Column(
         children: [
           // Total count bar
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: const Color(0xFF0D47A1),
+            color: t.appBarBg,
             child: Text(
               'Total Payments - ${_payments.length}',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: t.appBarFg, fontSize: 13),
             ),
           ),
 
@@ -177,15 +181,15 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             ),
           ),
 
-          Expanded(child: _buildBody()),
+          Expanded(child: _buildBody(t)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_payments.isEmpty) {
       return Center(
@@ -194,8 +198,10 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
           child: Text(
             _message.isEmpty ? 'No payments found' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white70, fontSize: 16, height: 1.4),
+            style: TextStyle(
+                color: t.isLight ? t.subtitleText : Colors.white70,
+                fontSize: 16,
+                height: 1.4),
           ),
         ),
       );
@@ -224,28 +230,33 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, AppThemeConst t) {
+    // Pill behind the back / print icons: Theme 1 keeps the previous 18% white.
+    final pillBg =
+        t.isLight ? t.backBtnBg : Colors.white.withValues(alpha: 0.18);
     return AppBar(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: pillBg,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new,
-              size: 16, color: Colors.white),
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text('PAYMENT HISTORY',
+      title: Text('PAYMENT HISTORY',
           style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: t.appBarFg,
               letterSpacing: 1)),
       actions: [
         // Single top Print button (Android viewpayhistory_printbtn) — prints the
@@ -254,10 +265,15 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
         IconButton(
           onPressed: _payments.isEmpty ? null : _printHistory,
           tooltip: 'Print payment history',
+          // Slim for the 40dp bar (same as Customer Details' ◄ ► buttons):
+          // default IconButton padding would squeeze the pill.
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           icon: Container(
-            padding: const EdgeInsets.all(7),
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: pillBg,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.print, color: Colors.red, size: 20),
@@ -587,7 +603,9 @@ class _PaymentHistoryDetailScreenState
       MapEntry('Payment Type', r.paymentTypeLabel),
     ];
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      // Theme-aware page (Theme 1: the same blue as before). The title bar
+      // already follows the theme.
+      backgroundColor: AppThemeConst.of(context).scaffoldBg,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,

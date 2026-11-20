@@ -466,10 +466,12 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
       backgroundColor: const Color(0xFF0D47A1),
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),

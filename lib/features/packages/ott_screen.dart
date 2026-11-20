@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/customer_box.dart';
 import 'data/ott_repository.dart';
@@ -178,10 +179,14 @@ class _OttScreenState extends State<OttScreen> {
       MainFrame(child: _buildPage(context));
 
   Widget _buildPage(BuildContext context) {
+    // Theme-aware page: Theme 1 keeps the same blue page + white text.
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('OTT'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('OTT',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -189,16 +194,19 @@ class _OttScreenState extends State<OttScreen> {
           Padding(
             padding: const EdgeInsets.all(14),
             child: Text(widget.customer.name,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: t.headingText,
                     fontWeight: FontWeight.w800,
                     fontSize: 16,),),
           ),
           Expanded(
             child: widget.ottBoxes.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text('No OTT boxes.',
-                        style: TextStyle(color: Colors.white70)))
+                        style: TextStyle(
+                            color: t.isLight
+                                ? t.subtitleText
+                                : Colors.white70)))
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     itemCount: widget.ottBoxes.length,

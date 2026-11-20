@@ -25,19 +25,22 @@ class CustomPackagesHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Custom Packages'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('Custom Packages',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Gradient header (customer context) ──────────────────────────
+            // ── Gradient header (customer context) — compact: the title bar
+            // above already says "Custom Packages".
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: t.headerGradient,
@@ -56,16 +59,16 @@ class CustomPackagesHomeScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.widgets_outlined,
-                        color: Colors.white, size: 22),
+                        color: Colors.white, size: 18),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,9 +76,9 @@ class CustomPackagesHomeScreen extends StatelessWidget {
                         const Text('Custom Packages',
                             style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 2),
                         Text(
                           customer.name.trim().isEmpty
                               ? 'Manage packages'
@@ -93,7 +96,7 @@ class CustomPackagesHomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             _actionCard(
               context,
               t,

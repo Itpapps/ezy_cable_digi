@@ -36,7 +36,9 @@ class UserProfileScreen extends StatelessWidget {
       child: Scaffold(
       backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('User Profile'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('User Profile',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,

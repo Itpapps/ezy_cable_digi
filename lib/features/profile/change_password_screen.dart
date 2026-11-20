@@ -108,19 +108,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return Scaffold(
       backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Change Password'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('Change Password',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
         backgroundColor: t.appBarBg,
         foregroundColor: t.appBarFg,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Gradient header ──────────────────────────────────────────────
+            // ── Gradient header — compact: the title bar above already says
+            // "Change Password".
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: t.headerGradient,
@@ -139,16 +142,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.lock_outline_rounded,
-                        color: Colors.white, size: 24),
+                        color: Colors.white, size: 18),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,9 +159,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         Text('Update Password',
                             style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 17,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w900)),
-                        SizedBox(height: 3),
+                        SizedBox(height: 2),
                         Text('Keep your account secure.',
                             style: TextStyle(
                                 color: Colors.white70,
@@ -170,7 +173,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             // ── Fields card ──────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),

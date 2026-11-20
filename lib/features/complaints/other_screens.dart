@@ -12,6 +12,7 @@ import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../customer/data/act_deact_repository.dart';
 import '../customer/data/onetime_charges_repository.dart';
@@ -57,17 +58,25 @@ class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, spinner, empty text). Theme 1 keeps
+  // exactly the previous blue/white; the white cards are unchanged.
   Widget _buildPage(BuildContext context) {
     final customer = widget.customer;
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.scaffoldBg,
       appBar: _appBar(context, 'ACT-DEACT REPORT'),
       body: Column(
         children: [
           Container(
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              // Theme 2 only: lift the white card off the light page.
+              boxShadow: _lightCardShadow(t),
+            ),
             child: Column(
               children: [
                 _cRow('Customer Name', customer.name),
@@ -79,15 +88,15 @@ class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(child: _buildBody()),
+          Expanded(child: _buildBody(t)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_items.isEmpty) {
       return Center(
@@ -96,7 +105,8 @@ class _ActDeactReportScreenState extends State<ActDeactReportScreen> {
           child: Text(
             _message.isEmpty ? 'No act/deact records found' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70),
+            style: TextStyle(
+                color: t.isLight ? t.subtitleText : Colors.white70),
           ),
         ),
       );
@@ -145,7 +155,8 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   bool _saving = false;
   bool _instrument = false; // Android "Instrument Details" checkbox
   DateTime _createdDate = DateTime.now();
-  DateTime _instrumentDate = DateTime.now();
+  // null = no instrument date yet (EDIT of a charge without a cheque date).
+  DateTime? _instrumentDate = DateTime.now();
   final _amountCtrl = TextEditingController();
   final _remarksCtrl = TextEditingController();
   final _chequeCtrl = TextEditingController();
@@ -168,7 +179,12 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       // cheque_dd_no = 0 for cash charges, which pre-ticked unpaid charges.
       _instrument = e.paidUnpaid == '1' || e.paidUnpaid.toLowerCase() == 'paid';
       _createdDate = _parseDate(e.date, _createdDate);
-      _instrumentDate = _parseDate(e.chequeDate, _instrumentDate);
+      // Android Editonetime_Frag :168-172: no stored cheque date ("NA" /
+      // "0000-00-00") → the instrument date starts EMPTY.
+      final cd = e.chequeDate.trim();
+      _instrumentDate = (cd.isEmpty || cd == 'NA' || cd == '0000-00-00')
+          ? null
+          : _parseDate(cd, DateTime.now());
     }
     _loadChargeTypes();
   }
@@ -245,8 +261,15 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   String _ymd(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Instrument date as sent/printed: '' while no date is set.
+  String get _instrumentYmd {
+    final d = _instrumentDate;
+    return d == null ? '' : _ymd(d);
+  }
+
   Future<void> _pickDate({required bool instrument}) async {
-    final base = instrument ? _instrumentDate : _createdDate;
+    final base =
+        instrument ? (_instrumentDate ?? DateTime.now()) : _createdDate;
     final picked = await showDatePicker(
       context: context,
       initialDate: base,
@@ -277,17 +300,24 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       _snack('Charge type not loaded');
       return;
     }
-    if (_amountCtrl.text.trim().isEmpty ||
-        (double.tryParse(_amountCtrl.text.trim()) ?? 0) <= 0) {
+    // Android OneTimeCharges_Frag / Editonetime_Frag: empty amount →
+    // "Amount should not be empty". A 0 / non-number amount stays blocked.
+    final amount = _amountCtrl.text.trim();
+    if (amount.isEmpty) {
+      _snack('Amount should not be empty');
+      return;
+    }
+    if ((double.tryParse(amount) ?? 0) <= 0) {
       _snack('Please enter a valid amount');
       return;
     }
     // NEW charge: Android validates ONLY the amount — cheque/bank/branch are
     // optional (OneTimeCharges_Frag :197-230).
-    // C-B5 / Android Editonetime_Frag :264-289: in EDIT mode, with Paid
-    // ticked (and an instrument date, always set here), cheque/DD no., bank
-    // and branch are required — checked in this order, Android's messages.
-    if (widget.editItem != null && _instrument) {
+    // C-B5 / Android Editonetime_Frag :264-300: in EDIT mode, with Paid
+    // ticked AND an instrument date set, cheque/DD no., bank and branch are
+    // required — checked in this order, Android's messages. Paid ticked with
+    // no instrument date saves after the amount check only.
+    if (widget.editItem != null && _instrument && _instrumentDate != null) {
       if (_chequeCtrl.text.trim().isEmpty) {
         _snack('Enter valid cheque/dd number');
         return;
@@ -314,7 +344,7 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
       chqDd: _instrument ? _chequeCtrl.text.trim() : '',
       bank: _instrument ? _bankCtrl.text.trim() : '',
       branch: _instrument ? _branchCtrl.text.trim() : '',
-      chqDdDate: _instrument ? _ymd(_instrumentDate) : '',
+      chqDdDate: _instrument ? _instrumentYmd : '',
       remarks: _remarksCtrl.text.trim(),
       createdDate: _ymd(_createdDate),
       checkPaidUnpaid: _instrument ? 1 : 2, // Android: 1 cheque · 2 cash
@@ -356,7 +386,7 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
             bank: _instrument ? _bankCtrl.text.trim() : '',
             branch: _instrument ? _branchCtrl.text.trim() : '',
             chequeDd: _instrument ? _chequeCtrl.text.trim() : '',
-            chequeDate: _instrument ? _ymd(_instrumentDate) : '',
+            chequeDate: _instrument ? _instrumentYmd : '',
             remarks: _remarksCtrl.text.trim(),
             paid: _instrument, // Android checked 1 → Paid · 2 → Unpaid
           );
@@ -422,9 +452,12 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware page + title bar. Theme 1 keeps exactly the previous blue;
+  // the white form card and everything in it are unchanged.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.scaffoldBg,
       appBar: _appBar(context,
           widget.editItem == null ? 'ONE TIME CHARGES' : 'EDIT ONE TIME CHARGES'),
       body: SingleChildScrollView(
@@ -432,7 +465,12 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            // Theme 2 only: lift the white card off the light page.
+            boxShadow: _lightCardShadow(t),
+          ),
           child: Column(
             children: [
               // Customer Name
@@ -486,9 +524,16 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(_ymd(_instrumentDate),
-                                style: const TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0D47A1))),
+                            child: Text(
+                                _instrumentDate == null
+                                    ? 'Select date'
+                                    : _instrumentYmd,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: _instrumentDate == null
+                                        ? Colors.grey.shade500
+                                        : const Color(0xFF0D47A1))),
                           ),
                           const Icon(Icons.calendar_month, color: Colors.red, size: 22),
                         ],
@@ -719,11 +764,14 @@ class _OneTimeChargeDetailsScreenState
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware page + title bar (same as the One Time Charges form it opens
+  // from). Theme 1 keeps exactly the previous blue/white.
   Widget _buildPage(BuildContext context) {
     final c = widget.customer;
     final s = widget.slip;
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.scaffoldBg,
       appBar: _appBar(context, 'DISPLAY ONE TIME CHARGES'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
@@ -733,7 +781,11 @@ class _OneTimeChargeDetailsScreenState
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                // Theme 2 only: lift the white card off the light page.
+                boxShadow: _lightCardShadow(t),
+              ),
               child: Column(
                 children: [
                   _cRow('Customer Name', c.name),
@@ -760,9 +812,12 @@ class _OneTimeChargeDetailsScreenState
                   icon: const Icon(Icons.print),
                   label: const Text('Print',
                       style: TextStyle(fontWeight: FontWeight.w800)),
+                  // On the page itself: Theme 1 keeps the white button;
+                  // Theme 2 uses a filled accent button (white would vanish).
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0D47A1),
+                    backgroundColor: t.isLight ? t.accent : Colors.white,
+                    foregroundColor:
+                        t.isLight ? Colors.white : const Color(0xFF0D47A1),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
@@ -983,27 +1038,36 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, Total strip, spinner, empty text).
+  // Theme 1 keeps exactly the previous blue/white; the white cards are
+  // unchanged.
   Widget _buildPage(BuildContext context) {
     final cust = widget.customer;
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.scaffoldBg,
       appBar: _appBar(context, 'ONE TIME CHARGES HISTORY'),
       body: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: const Color(0xFF0D47A1),
+            color: t.appBarBg,
             child: Text(
               'Total Count - ${_items.length}',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: t.appBarFg, fontSize: 13),
             ),
           ),
           Container(
             margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              // Theme 2 only: lift the white card off the light page.
+              boxShadow: _lightCardShadow(t),
+            ),
             child: Column(
               children: [
                 _cRow('Customer Name', cust.name),
@@ -1014,15 +1078,15 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
               ],
             ),
           ),
-          Expanded(child: _buildBody()),
+          Expanded(child: _buildBody(t)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_items.isEmpty) {
       return Center(
@@ -1031,7 +1095,9 @@ class _OneTimeHistoryScreenState extends State<OneTimeHistoryScreen> {
           child: Text(
             _message.isEmpty ? 'No one time charges found' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+            style: TextStyle(
+                color: t.isLight ? t.subtitleText : Colors.white70,
+                fontSize: 15),
           ),
         ),
       );
@@ -1226,27 +1292,49 @@ InputDecoration _otcField() {
   );
 }
 
+/// Shared title bar of this file's screens (Act-Deact Report, One Time
+/// Charges, Display One Time Charges, One Time Charges History) — follows
+/// Theme 1 / Theme 2. Theme 1 keeps exactly the previous blue/white.
 PreferredSizeWidget _appBar(BuildContext context, String title) {
+  final t = AppThemeConst.of(context);
+  final light = t.isLight;
   return AppBar(
-    backgroundColor: const Color(0xFF0D47A1),
+    backgroundColor: light ? t.appBarBg : const Color(0xFF0D47A1),
     elevation: 0,
     centerTitle: true,
+    toolbarHeight: 40, // compact, same as Customer / Payment Details
     leading: GestureDetector(
       onTap: () => Navigator.pop(context),
+      behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
       child: Container(
-        margin: const EdgeInsets.all(8),
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: light ? t.backBtnBg : Colors.white.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+        child: Icon(Icons.arrow_back_ios_new,
+            size: 16, color: light ? t.backBtnIcon : Colors.white),
       ),
     ),
     title: Text(title,
-        style: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
+        style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: light ? t.appBarFg : Colors.white,
+            letterSpacing: 1)),
   );
 }
+
+/// Theme 2 only: a soft shadow so a white card stands out on the light page.
+/// null in Theme 1 (no change there).
+List<BoxShadow>? _lightCardShadow(AppThemeConst t) => t.isLight
+    ? [
+        BoxShadow(
+            color: t.cardShadowColor,
+            blurRadius: 14,
+            offset: const Offset(0, 6)),
+      ]
+    : null;
 
 Widget _cRow(String label, String value, {bool isLast = false}) {
   return Column(
@@ -1306,6 +1394,8 @@ class _SimpleCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        // Theme 2 only: lift the white card off the light page.
+        boxShadow: _lightCardShadow(AppThemeConst.of(context)),
       ),
       child: Column(
         children: List.generate(entries.length, (i) {

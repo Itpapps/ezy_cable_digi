@@ -83,7 +83,11 @@ class StaticContentScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+          toolbarHeight: 40, // compact, same as Customer / Payment Details
+          title: Text(title,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1))),
       body: textWidget,
     );
   }
@@ -160,8 +164,10 @@ class _PrivacyPolicyWebViewState extends State<PrivacyPolicyWebView> {
   Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
         // Colours come from the active theme (blue in Theme 1, white in Theme 2).
-        title: const Text('Privacy Policy'),
+        title: const Text('Privacy Policy',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
         actions: [
           if (_hasError)
             IconButton(

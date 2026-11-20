@@ -22,15 +22,19 @@ class ComplaintsLandingScreen extends StatelessWidget {
       MainFrame(child: _buildPage(context));
 
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
+      // Theme-aware page (Theme 1: the same blue as before).
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
+          behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
           child: Container(
-            margin: const EdgeInsets.all(8),
+            margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: AppThemeConst.of(context).backBtnBg,
               borderRadius: BorderRadius.circular(10),
@@ -55,6 +59,15 @@ class ComplaintsLandingScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
+              // Theme 2 only: lift the white card off the light page.
+              boxShadow: t.isLight
+                  ? [
+                      BoxShadow(
+                          color: t.cardShadowColor,
+                          blurRadius: 14,
+                          offset: const Offset(0, 6)),
+                    ]
+                  : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

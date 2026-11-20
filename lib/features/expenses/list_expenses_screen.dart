@@ -85,7 +85,10 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
 
   Widget _buildPage(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('List Expenses')),
+      appBar: AppBar(
+          toolbarHeight: 40, // compact, same as Customer / Payment Details
+          title: const Text('List Expenses',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1))),
       floatingActionButton: FloatingActionButton(
         onPressed: _openAdd,
         backgroundColor: const Color(0xFF0D47A1),

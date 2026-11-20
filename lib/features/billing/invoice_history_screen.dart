@@ -12,6 +12,7 @@ import '../../core/utils/share_origin.dart';
 import '../../core/services/real_bluetooth_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/settings_store.dart';
+import '../../core/theme/theme_constants.dart';
 import '../payment/printer_launcher.dart';
 import 'data/invoice_history_repository.dart';
 import 'package:ezy_cable_digi/widgets/main_frame.dart';
@@ -179,31 +180,35 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, Total strip, spinner, empty text).
+  // Theme 1 keeps exactly the previous blue/white; the white invoice cards
+  // are unchanged in both themes.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _buildAppBar(context),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(context, t),
       body: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: const Color(0xFF0D47A1),
+            color: t.appBarBg,
             child: Text(
               'Total Invoices : ${_invoices.length}',
               textAlign: TextAlign.right,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: t.appBarFg, fontSize: 13),
             ),
           ),
-          Expanded(child: _buildBody()),
+          Expanded(child: _buildBody(t)),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppThemeConst t) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return Center(child: CircularProgressIndicator(color: t.loadingColor));
     }
     if (_invoices.isEmpty) {
       return Center(
@@ -212,7 +217,9 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
           child: Text(
             _message.isEmpty ? 'No invoices found' : _message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 15),
+            style: TextStyle(
+                color: t.isLight ? t.subtitleText : Colors.white70,
+                fontSize: 15),
           ),
         ),
       );
@@ -232,24 +239,29 @@ class _InvoiceHistoryScreenState extends State<InvoiceHistoryScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, AppThemeConst t) {
     return AppBar(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: t.isLight
+                ? t.backBtnBg
+                : Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text('INVOICE HISTORY',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1)),
+      title: Text('INVOICE HISTORY',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: t.appBarFg, letterSpacing: 1)),
     );
   }
 }

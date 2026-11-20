@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'data/broadband_plan.dart';
 import 'data/broadband_repository.dart';
@@ -113,30 +114,39 @@ class _BroadBandListScreenState extends State<BroadBandListScreen> {
       MainFrame(child: _buildPage(context));
 
   Widget _buildPage(BuildContext context) {
+    // Theme-aware page: Theme 1 keeps the same blue page + white spinner.
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.scaffoldBg,
       appBar: AppBar(
-        title: const Text('RENEW BROADBAND'),
+        toolbarHeight: 40, // compact, same as Customer / Payment Details
+        title: const Text('RENEW BROADBAND',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? Center(child: CircularProgressIndicator(color: t.loadingColor))
           : _error != null
-              ? _errorView()
+              ? _errorView(t)
               : _content(),
     );
   }
 
-  Widget _errorView() => Center(
+  // Drawn straight on the page, so its colours follow the theme (Theme 1:
+  // white text + white70 outline, as before).
+  Widget _errorView(AppThemeConst t) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: Colors.white)),
+            Text(_error!, style: TextStyle(color: t.headingText)),
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: _load,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white70),
+                foregroundColor: t.headingText,
+                side: BorderSide(
+                    color: t.isLight
+                        ? t.headingText.withValues(alpha: 0.45)
+                        : Colors.white70),
               ),
               child: const Text('Retry'),
             ),

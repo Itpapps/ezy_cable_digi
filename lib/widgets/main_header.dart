@@ -103,7 +103,9 @@ class MainHeader extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // ── Logo centred ───────────────────────────────────────────
+                  // ── Logo left of centre: a quarter of the way into the gap
+                  // between the menu and the icons (Spacer 1 : 3 below),
+                  // instead of the middle. Menu and icons stay where they were.
                   const SizedBox(width: 8.0),
                   const Spacer(),
                   // Android parity (MainActivity toolbar_logo:384-408): tapping the
@@ -116,7 +118,7 @@ class MainHeader extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                   ),
-                  const Spacer(),
+                  const Spacer(flex: 3),
                   // ── Action icons with pill containers ────────────────────
                   _AppBarIcon(
                     icon: Iconsax.search_normal,

@@ -314,6 +314,11 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
         value: _selectedBox,
         isDense: true,
         isExpanded: true,
+        // Popup list look only (same as Search Customer): rounded corners,
+        // softer shadow, long lists scroll instead of filling the screen.
+        menuMaxHeight: 300,
+        borderRadius: BorderRadius.circular(12),
+        elevation: 3,
         hint: selectLabel, // shown while no box is chosen
         icon: const Icon(Icons.keyboard_arrow_down),
         items: [
@@ -339,6 +344,10 @@ class _DeactivateStbScreenState extends State<DeactivateStbScreen> {
         value: _reasonId,
         isDense: true,
         isExpanded: true,
+        // Popup list look only (same as Search Customer).
+        menuMaxHeight: 300,
+        borderRadius: BorderRadius.circular(12),
+        elevation: 3,
         icon: const Icon(Icons.keyboard_arrow_down),
         items: _reasons
             .map((r) => DropdownMenuItem(

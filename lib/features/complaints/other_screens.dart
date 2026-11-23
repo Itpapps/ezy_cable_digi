@@ -489,6 +489,10 @@ class _OneTimeChargesScreenState extends State<OneTimeChargesScreen> {
                         initialValue: _chargeType,
                         isExpanded: true,
                         decoration: _otcField(),
+                        // Popup list look only (same as Search Customer).
+                        menuMaxHeight: 300,
+                        borderRadius: BorderRadius.circular(12),
+                        elevation: 3,
                         icon: const Icon(Icons.keyboard_arrow_down),
                         items: _chargeTypes
                             .map((e) => DropdownMenuItem(value: e, child: Text(e.name)))

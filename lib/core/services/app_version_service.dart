@@ -19,6 +19,11 @@ class AppVersionService {
   AppVersionService._();
   static final AppVersionService instance = AppVersionService._();
 
+  /// Version code sent to the server from iOS. Keep it equal to the Android
+  /// build number (the `+42` in pubspec.yaml `version: 5.2.0+42`) and update
+  /// it on every release.
+  static const String serverVersionCode = '42';
+
   Future<AppVersionResult>? _result;
 
   /// Runs once per app launch; later calls reuse the same result.
@@ -38,7 +43,10 @@ class AppVersionService {
 
       final info = await PackageInfo.fromPlatform();
       final installed = info.version; // e.g. 5.2.0
-      final build = info.buildNumber; // e.g. 43
+      // iOS build numbers can't be reused on App Store Connect, so the store
+      // build (44, 45, ...) drifts from Android. The server compares the
+      // Android code, so iOS sends that instead.
+      final build = isIOS ? serverVersionCode : info.buildNumber;
       if (installed.isEmpty || build.isEmpty) return AppVersionResult.ok;
 
       // 1) Server: is this build current?

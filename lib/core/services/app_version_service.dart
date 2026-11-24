@@ -2,6 +2,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../config/app_config.dart';
 import '../network/server_url_resolver.dart';
 import '../network/soap_client.dart';
 
@@ -48,6 +49,10 @@ class AppVersionService {
       // Android code, so iOS sends that instead.
       final build = isIOS ? serverVersionCode : info.buildNumber;
       if (installed.isEmpty || build.isEmpty) return AppVersionResult.ok;
+      // Ezy: native Ezy asks the BMS (appVersionCheckcloud), not the data server.
+      if (AppConfig.instance.flavor == Flavor.ezy) {
+        return await _checkEzyBms(installed, build);
+      }
 
       // 1) Server: is this build current?
       final ns = ServerUrlResolver.instance.namespace;
@@ -79,6 +84,35 @@ class AppVersionService {
       debugPrint('AppVersionService: $e');
       return AppVersionResult.ok;
     }
+  }
+
+  /// Ezy only — native AppVersionCheck_Activity.appVersionCheckcloud (:404-450).
+  Future<AppVersionResult> _checkEzyBms(String installed, String build) async {
+    const bms = AppConfig.namespaceBms;
+    final xml = await SoapClient.instance.call(
+      url: '$bms/validateAuthentication',
+      namespace: bms,
+      soapAction: '$bms/validateAuthentication',
+      methodName: 'appVersionCheck',
+      wrapper: 'versionCheck',
+      wrapperType: 'appVersionCheckRequest',
+      fields: {
+        'appVersionName': _serverVersionName(installed),
+        'appVersionCode': build,
+        'appTypeId': '3', // native: CableDigi
+      },
+      timeout: const Duration(seconds: 10),
+    );
+    if (SoapClient.readField(xml, 'statusCode') != '1') {
+      return AppVersionResult.ok;
+    }
+    final message = SoapClient.readField(xml, 'statusMessage') ?? '';
+    return AppVersionResult(
+      true,
+      message.isNotEmpty
+          ? message
+          : 'Please update your application to the latest version.',
+    );
   }
 
   /// Flutter pads the iOS version to 3 parts (5.2 becomes 5.2.0) but the

@@ -36,9 +36,11 @@
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">
 
+        <!-- Same Google Maps key as the native Android app (google_maps_api.xml).
+             Android only; iOS keeps its own key in Info.plist. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyA9qW9ZZQMUotFvsqTf6C01wiNK-VDjliU" />
+            android:value="AIzaSyCkvXpmpDsaBjFqBXubXvg09u1GFeWMAB4" />
 
         <activity
             android:name=".MainActivity"

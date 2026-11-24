@@ -102,6 +102,12 @@ class _LoginScreenState extends State<LoginScreen> {
   /// the app snappy (no artificial 3-second wait) while still ensuring
   /// the URL is ready before the user taps SIGN IN.
   Future<void> _resolveServerUrl() async {
+    // Ezy: EzyStartGate already did the BMS check at start-up, and native Ezy's
+    // LoginActivity never calls the BMS. Only load the saved logo.
+    if (AppConfig.instance.flavor == Flavor.ezy) {
+      await ServerUrlResolver.instance.loadCached();
+      return;
+    }
     try {
       final resolved = await ServerUrlResolver.instance.resolve();
       if (!resolved) {

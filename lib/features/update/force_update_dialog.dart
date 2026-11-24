@@ -249,8 +249,14 @@ Future<void> _openStore() async {
   try {
     final Uri url;
     if (defaultTargetPlatform == TargetPlatform.android) {
+      // Each flavor opens its own live Play listing, like native
+      // (AppVersionCheck_Activity:556-559 uses its own package name).
+      // Magik keeps the exact same link as before.
+      final playId = AppConfig.instance.flavor == Flavor.ezy
+          ? 'com.itp.ezycabledigi.androidapp' // "Ezycabledigi" on Play
+          : 'itp.com.magikdigi'; // "MagikSoft - Digi" on Play
       url = Uri.parse(
-          'https://play.google.com/store/apps/details?id=itp.com.magikdigi');
+          'https://play.google.com/store/apps/details?id=$playId');
     } else {
       url = Uri.parse(AppConfig.appStoreUrl);
     }

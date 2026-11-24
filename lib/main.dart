@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/ezy_start_gate.dart';
 import 'features/auth/login_screen.dart';
 import 'core/services/notification_service.dart';
 
@@ -67,7 +68,11 @@ class EzyCableDigiApp extends StatelessWidget {
             themeMode: ThemeMode.light,
             theme: themeData,
             navigatorObservers: [routeObserver, pageRouteObserver],
-            home: const LoginScreen(),
+            // Ezy starts like native Ezy (BMS device check first); KCCL opens
+            // the login screen exactly as before.
+            home: AppConfig.instance.flavor == Flavor.ezy
+                ? const EzyStartGate()
+                : const LoginScreen(),
           );
         },
       ),

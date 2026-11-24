@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_constants.dart';
 import '../dashboard/data/complaints_repository.dart';
 import '../../core/widgets/premium_dialog.dart';
 import 'package:ezy_cable_digi/widgets/main_frame.dart';
@@ -279,10 +280,13 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar). Theme 1 keeps exactly the previous
+  // blue/white; the white card is unchanged in both themes.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primary,
-      appBar: _buildAppBar(context),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(context, t),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Container(
@@ -479,30 +483,33 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
     );
   }
 
-  AppBar _buildAppBar(BuildContext context) {
+  AppBar _buildAppBar(BuildContext context, AppThemeConst t) {
     return AppBar(
-      backgroundColor: AppColors.primary,
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
-      foregroundColor: Colors.white,
+      toolbarHeight: 40, // compact, same as Customer / Payment Details
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
+        behavior: HitTestBehavior.opaque, // whole leading slot stays tappable
         child: Container(
-          margin: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: t.isLight
+                ? t.backBtnBg
+                : Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(
-              Icons.arrow_back_ios_new, size: 16, color: Colors.white),
+          child: Icon(
+              Icons.arrow_back_ios_new, size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text(
+      title: Text(
         'COMPLAINT DETAILS',
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w800,
-          color: Colors.white,
+          color: t.appBarFg,
           letterSpacing: 1.0,
         ),
       ),

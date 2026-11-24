@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../core/data/customer.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/widgets/premium_dialog.dart';
 import '../dashboard/data/complaints_repository.dart';
 import 'data/complaint_option.dart';
@@ -291,12 +292,15 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
   Widget build(BuildContext context) =>
       MainFrame(child: _buildPage(context));
 
+  // Theme-aware frame (page, title bar, spinner). Theme 1 keeps exactly the
+  // previous blue/white; the white card is unchanged in both themes.
   Widget _buildPage(BuildContext context) {
+    final t = AppThemeConst.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0D47A1),
-      appBar: _buildAppBar(),
+      backgroundColor: t.scaffoldBg,
+      appBar: _buildAppBar(context, t),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? Center(child: CircularProgressIndicator(color: t.loadingColor))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(12),
               child: Container(
@@ -461,9 +465,9 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
+  PreferredSizeWidget _buildAppBar(BuildContext context, AppThemeConst t) {
     return AppBar(
-      backgroundColor: const Color(0xFF0D47A1),
+      backgroundColor: t.appBarBg,
       elevation: 0,
       centerTitle: true,
       toolbarHeight: 40, // compact, same as Customer / Payment Details
@@ -473,18 +477,20 @@ class _CreateComplaintScreenState extends State<CreateComplaintScreen> {
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: t.isLight
+                ? t.backBtnBg
+                : Colors.white.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.arrow_back_ios_new,
-              size: 16, color: Colors.white),
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: t.backBtnIcon),
         ),
       ),
-      title: const Text('NEW COMPLAINT',
+      title: Text('NEW COMPLAINT',
           style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: t.appBarFg,
               letterSpacing: 1)),
     );
   }

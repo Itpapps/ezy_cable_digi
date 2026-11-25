@@ -140,8 +140,8 @@ class _EzyStartGateState extends State<EzyStartGate> {
           children: [
             Image.asset(
               'assets/ezy_digi_pics.png',
-              // Medium size: ~42% of the width, never tiny or huge.
-              width: (w * 0.42).clamp(150.0, 230.0),
+              // Compact: ~26% of the width, never tiny or huge.
+              width: (w * 0.26).clamp(100.0, 150.0),
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 32),

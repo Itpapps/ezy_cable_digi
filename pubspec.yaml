@@ -110,6 +110,8 @@ flutter:
     - assets/Profile Icon.json
     - assets/ezy_digi_pics.png
     - assets/mainlogo.png
+    # Login screen only: sharp 384px Magik logo (from assets/magikios.png).
+    - assets/mainlogo_hd.jpg
     - assets/Growth Chart.json
 
   # An image asset can refer to one or more resolution-specific "variants", see

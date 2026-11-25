@@ -7,21 +7,18 @@ import 'package:ezy_cable_digi/features/dashboard/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'package:lottie/lottie.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../customers/customer_list_provider.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_sizes.dart';
 import '../../core/services/location_sync_service.dart';
 import '../../core/services/offline_mode_service.dart';
 import '../../core/network/server_url_resolver.dart';
 import '../offline/offline_dashboard_screen.dart';
-import '../../widgets/primary_button.dart';
 import '../../core/config/app_config.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/theme/theme_constants.dart';
 import '../../core/services/app_version_service.dart';
 import '../update/force_update_dialog.dart';
 
@@ -309,221 +306,326 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ── UI only ───────────────────────────────────────────────────────────────
+  // Same fields, texts, flags and callbacks as before; only the look changed.
+  // Soft (neumorphic) surfaces with light + dark shadows. Follows the user's
+  // theme (Theme 1 blue / Theme 2 premium light) for both flavors.
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final topInset = MediaQuery.paddingOf(context).top;
-    // iPad-only: iPhone keeps its original (unchanged) layout below.
-    final isTablet = size.shortestSide >= 600;
+    final p = _LoginPalette(AppThemeConst.of(context).isLight);
+    final isMagik = AppConfig.instance.flavor == Flavor.magik;
 
-    final loginCard = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520),
-      child: Container(
-        margin: const EdgeInsets.only(top: 38),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppSizes.radiusXL),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 30,
-              spreadRadius: 1,
-              offset: const Offset(0, 16),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: p.statusBar,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background sits outside the Scaffold, so it does not squeeze or
+          // jump when the keyboard opens.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: p.background,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-          ],
-        ),
-        child: GlassmorphicContainer(
-          width: double.infinity,
-          height: 440,
-          borderRadius: AppSizes.radiusXL,
-          blur: 18,
-          alignment: Alignment.center,
-          border: 1.6,
-          linearGradient: LinearGradient(
-            colors: [
-              Colors.white.withValues(alpha: 0.68),
-              Colors.white.withValues(alpha: 0.22),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
           ),
-          borderGradient: LinearGradient(
-            colors: [
-              Colors.white.withValues(alpha: 0.95),
-              Colors.white.withValues(alpha: 0.35),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+          Positioned(
+            top: -110,
+            right: -80,
+            child: _Bubble(size: 260, color: p.bubble),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSizes.paddingL,
-              56,
-              AppSizes.paddingL,
-              AppSizes.paddingL,
-            ),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.only(bottom: bottomInset),
+          Positioned(
+            bottom: -130,
+            left: -90,
+            child: _Bubble(size: 300, color: p.bubble),
+          ),
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            body: SafeArea(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _GlassTextField(
-                    controller: _userController,
-                    hint: 'Username',
-                    enabled: !_isOffline,
-                    lottieAsset: 'assets/Profile Icon.json',
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 24,
+                          ),
+                          child: ConstrainedBox(
+                            // Centred when it fits, scrolls when it doesn't
+                            // (small phones, big fonts, keyboard open).
+                            constraints: BoxConstraints(
+                              minHeight: math.max(0, constraints.maxHeight - 48),
+                            ),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 520),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildCard(p, isMagik),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  const SizedBox(height: AppSizes.paddingM),
-                  _GlassTextField(
-                    controller: _passwordController,
-                    hint: 'Password',
-                    obscureText: true,
-                    enabled: !_isOffline,
-                    lottieAsset: 'assets/Login.json',
-                    showPasswordToggle: true,
-                  ),
-                  const SizedBox(height: AppSizes.paddingS),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _rememberMe,
-                        onChanged: (value) {
-                          setState(() {
-                            _rememberMe = value ?? false;
-                          });
-                        },
-                        activeColor: AppColors.accent,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 12),
+                    child: Text(
+                      'itpworld.com, All Rights Reserved',
+                      style: TextStyle(
+                        color: p.footer,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const Text(
-                        'Remember Me',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSizes.paddingM),
-                  PrimaryButton(
-                    label: 'SIGN IN',
-                    isLoading: _isLoading,
-                    onPressed: _handleLogin,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
+  }
 
-    final logoRing = _GlowLogoRing(
-      asset: AppConfig.instance.flavor == Flavor.magik
-          ? 'assets/mainlogo.png'
-          : 'assets/ezy_digi_pics.png',
-    );
-
-    return Theme(
-      data: AppTheme.theme1,
-      child: Scaffold(
-        backgroundColor: AppTheme.theme1.scaffoldBackgroundColor,
-        resizeToAvoidBottomInset: false,
-        body: Stack(
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.secondary],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                height: size.height * 0.55,
-                decoration: const BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSizes.paddingM,
-                ),
-                child: Column(
-                  children: [
-                    // "Welcome to <appName>" removed per request. Keep the same
-                    // vertical space so the blur login card does NOT move up.
-                    const SizedBox(height: 108),
-                    Expanded(
-                      child: isTablet
-                          // iPad only: align the card block's own vertical
-                          // center with the vertical center of the white
-                          // background panel below (Align+height 0.55 further
-                          // up), matching the phone reference instead of just
-                          // centering in the leftover blue space above it.
-                          ? LayoutBuilder(
-                              builder: (context, constraints) {
-                                final expandedTop = topInset + 108;
-                                final panelTop = size.height * 0.45;
-                                final panelCenter =
-                                    panelTop + (size.height * 0.55) * -0.15;
-                                final localCenter = panelCenter - expandedTop;
-                                final alignY = constraints.maxHeight > 0
-                                    ? ((localCenter / constraints.maxHeight) *
-                                                  2 -
-                                              1)
-                                          .clamp(-1.0, 1.0)
-                                    : 0.0;
-                                return Align(
-                                  alignment: Alignment(0, alignY),
-                                  child: Stack(
-                                    alignment: Alignment.topCenter,
-                                    children: [loginCard, logoRing],
-                                  ),
-                                );
-                              },
-                            )
-                          // iPhone: original, untouched layout.
-                          : Stack(
-                              alignment: Alignment.topCenter,
-                              children: [
-                                Align(
-                                  alignment: Alignment.topCenter,
-                                  child: loginCard,
-                                ),
-                                logoRing,
-                              ],
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'itpworld.com, All Rights Reserved',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                ),
-              ),
-            ),
-          ],
+  Widget _buildCard(_LoginPalette p, bool isMagik) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 30),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: p.cardGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: p.cardEdge, width: 1.2),
+        boxShadow: p.cardShadows,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo inside the card, at the top (like the registration screen).
+          Center(child: _CardLogo(isMagik: isMagik, palette: p)),
+          const SizedBox(height: 22),
+          _LoginField(
+            controller: _userController,
+            hint: 'Username',
+            enabled: !_isOffline,
+            lottieAsset: 'assets/Profile Icon.json',
+            palette: p,
+          ),
+          const SizedBox(height: 20),
+          _LoginField(
+            controller: _passwordController,
+            hint: 'Password',
+            obscureText: true,
+            enabled: !_isOffline,
+            lottieAsset: 'assets/Login.json',
+            showPasswordToggle: true,
+            palette: p,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Checkbox(
+                value: _rememberMe,
+                onChanged: (value) {
+                  setState(() {
+                    _rememberMe = value ?? false;
+                  });
+                },
+                activeColor: p.accent,
+                side: BorderSide(color: p.checkboxBorder, width: 1.5),
+              ),
+              Text(
+                'Remember Me',
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          _SignInButton(
+            label: 'SIGN IN',
+            isLoading: _isLoading,
+            onPressed: _handleLogin,
+            colors: p.button,
+          ),
+        ],
       ),
     );
   }
 }
 
-class _GlassTextField extends StatefulWidget {
+/// Colours and soft shadows for the login screen. [light] = Theme 2
+/// (Premium Light); otherwise Theme 1 (Default Blue).
+class _LoginPalette {
+  const _LoginPalette(this.light);
+
+  final bool light;
+
+  static const Color _navy = Color(0xFF1A3C6E);
+  static const Color _deepBlue = Color(0xFF06245A);
+
+  List<Color> get background => light
+      ? const [Color(0xFFF5F7FF), Color(0xFFE6ECFB)]
+      : const [Color(0xFF0D47A1), Color(0xFF1565C0), Color(0xFF1E88E5)];
+
+  Color get bubble => light
+      ? _navy.withValues(alpha: 0.05)
+      : Colors.white.withValues(alpha: 0.07);
+
+  /// Focus border, checkbox, cursor.
+  Color get accent => light ? _navy : AppColors.primary;
+
+  List<Color> get button => light
+      ? const [_navy, Color(0xFF2563EB)]
+      : const [Color(0xFF0D47A1), Color(0xFF1E88E5)];
+
+  // ── Card ────────────────────────────────────────────────────────────────
+  List<Color> get cardGradient =>
+      const [Color(0xFFFBFCFF), Color(0xFFEDF1FA)];
+  Color get cardEdge => light
+      ? Colors.white
+      : Colors.white.withValues(alpha: 0.75);
+  List<BoxShadow> get cardShadows => light
+      ? [
+          const BoxShadow(
+            color: Colors.white,
+            offset: Offset(-10, -10),
+            blurRadius: 28,
+          ),
+          BoxShadow(
+            color: _navy.withValues(alpha: 0.14),
+            offset: const Offset(12, 14),
+            blurRadius: 32,
+          ),
+        ]
+      : [
+          BoxShadow(
+            color: _deepBlue.withValues(alpha: 0.38),
+            offset: const Offset(0, 20),
+            blurRadius: 40,
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.10),
+            offset: const Offset(0, -2),
+            blurRadius: 14,
+          ),
+        ];
+
+  // ── Soft (raised) elements inside the card ──────────────────────────────
+  Color get softDark => const Color(0xFFB6C2DA).withValues(alpha: 0.55);
+  Color get softLight => Colors.white;
+
+  Color get fieldFill => const Color(0xFFF6F8FE);
+  Color get fieldFillDisabled => const Color(0xFFE9EDF4);
+  Color get checkboxBorder => const Color(0xFF9AA6BF);
+
+  Color get textPrimary => AppColors.textPrimary;
+  Color get textMuted => AppColors.textSecondary;
+  Color get hint => const Color(0xFF8A94A6);
+
+  Color get footer =>
+      light ? AppColors.textSecondary : Colors.white.withValues(alpha: 0.85);
+
+  /// Dark status-bar icons on the light theme, white icons on blue.
+  SystemUiOverlayStyle get statusBar => SystemUiOverlayStyle(
+        statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
+        statusBarBrightness: light ? Brightness.light : Brightness.dark,
+      );
+}
+
+/// Logo at the top of the login card, sized per flavor so each logo is
+/// fully readable.
+class _CardLogo extends StatelessWidget {
+  const _CardLogo({required this.isMagik, required this.palette});
+
+  final bool isMagik;
+  final _LoginPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+
+    if (isMagik) {
+      // Square artwork → small soft raised icon with a white rim.
+      return Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: p.softDark,
+              offset: const Offset(4, 6),
+              blurRadius: 14,
+            ),
+            BoxShadow(
+              color: p.softLight,
+              offset: const Offset(-4, -4),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(17),
+          child: Image.asset(
+            'assets/mainlogo_hd.jpg',
+            width: 68,
+            height: 68,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
+    // Ezy: the wide word-mark sits in the middle of a square, transparent
+    // PNG. Showing only that band keeps "EZY CABLEDIGI" readable.
+    return ClipRect(
+      child: Image.asset(
+        'assets/ezy_digi_pics.png',
+        width: 140,
+        height: 64,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+class _Bubble extends StatelessWidget {
+  const _Bubble({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      ),
+    );
+  }
+}
+
+class _LoginField extends StatefulWidget {
   final TextEditingController controller;
   final String hint;
   final bool obscureText;
@@ -532,23 +634,26 @@ class _GlassTextField extends StatefulWidget {
   // Android parity: the login password TextInputLayout shows a password-toggle
   // eye by default for textPassword fields. Enabled only for the password field.
   final bool showPasswordToggle;
+  final _LoginPalette palette;
 
-  const _GlassTextField({
+  const _LoginField({
     required this.controller,
     required this.hint,
     required this.lottieAsset,
+    required this.palette,
     this.obscureText = false,
     this.enabled = true,
     this.showPasswordToggle = false,
   });
 
   @override
-  State<_GlassTextField> createState() => _GlassTextFieldState();
+  State<_LoginField> createState() => _LoginFieldState();
 }
 
-class _GlassTextFieldState extends State<_GlassTextField>
+class _LoginFieldState extends State<_LoginField>
     with SingleTickerProviderStateMixin {
   late bool _obscure = widget.obscureText;
+  bool _focused = false;
 
   // Drives the field's Lottie icon: it plays ONCE when the field gains focus
   // (the user taps it) instead of looping forever. Purely decorative — it does
@@ -559,13 +664,19 @@ class _GlassTextFieldState extends State<_GlassTextField>
   @override
   void initState() {
     super.initState();
-    _focus.addListener(() {
-      if (_focus.hasFocus) _lottieCtrl.forward(from: 0);
-    });
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (_focus.hasFocus) _lottieCtrl.forward(from: 0);
+    if (mounted && _focused != _focus.hasFocus) {
+      setState(() => _focused = _focus.hasFocus); // focus border only
+    }
   }
 
   @override
   void dispose() {
+    _focus.removeListener(_onFocusChange);
     _focus.dispose();
     _lottieCtrl.dispose();
     super.dispose();
@@ -573,36 +684,82 @@ class _GlassTextFieldState extends State<_GlassTextField>
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = AppColors.primary.withValues(alpha: 0.35);
+    final p = widget.palette;
+    final enabled = widget.enabled;
+    const none = InputBorder.none;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(AppSizes.radiusM),
-        border: Border.all(color: borderColor, width: 1.2),
+        color: enabled ? p.fieldFill : p.fieldFillDisabled,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _focused ? p.accent.withValues(alpha: 0.85) : Colors.white,
+          width: _focused ? 1.6 : 1.4,
+        ),
+        // Soft raised look: dark shadow bottom-right, white light top-left.
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: p.softDark,
+            offset: const Offset(5, 6),
             blurRadius: 14,
-            offset: const Offset(0, 8),
           ),
+          BoxShadow(
+            color: p.softLight,
+            offset: const Offset(-5, -5),
+            blurRadius: 12,
+          ),
+          if (_focused)
+            BoxShadow(
+              color: p.accent.withValues(alpha: 0.12),
+              spreadRadius: 3,
+            ),
         ],
       ),
       child: Row(
         children: [
           const SizedBox(width: 10),
-          RepaintBoundary(
-            child: SizedBox(
-              height: 40,
-              width: 40,
-              child: Lottie.asset(
-                widget.lottieAsset,
-                fit: BoxFit.contain,
-                // Driven by our controller → no auto-loop; plays once on focus.
-                controller: _lottieCtrl,
-                onLoaded: (composition) =>
-                    _lottieCtrl.duration = composition.duration,
-                renderCache: RenderCache.raster,
+          // Soft round badge holding the field's Lottie icon.
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Colors.white, Color(0xFFE9EEF8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: p.softDark,
+                  offset: const Offset(2, 3),
+                  blurRadius: 6,
+                ),
+                BoxShadow(
+                  color: p.softLight,
+                  offset: const Offset(-2, -2),
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+            child: RepaintBoundary(
+              child: Opacity(
+                opacity: enabled ? 1 : 0.5,
+                child: SizedBox(
+                  height: 30,
+                  width: 30,
+                  child: Lottie.asset(
+                    widget.lottieAsset,
+                    fit: BoxFit.contain,
+                    // Driven by our controller → no auto-loop; plays once on focus.
+                    controller: _lottieCtrl,
+                    onLoaded: (composition) =>
+                        _lottieCtrl.duration = composition.duration,
+                    renderCache: RenderCache.raster,
+                  ),
+                ),
               ),
             ),
           ),
@@ -612,118 +769,132 @@ class _GlassTextFieldState extends State<_GlassTextField>
               controller: widget.controller,
               focusNode: _focus,
               obscureText: _obscure,
-              enabled: widget.enabled,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              enabled: enabled,
+              cursorColor: p.accent,
+              style: TextStyle(
+                color: enabled ? p.textPrimary : p.textMuted,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
+              // Every border set explicitly, so neither theme's input style
+              // draws a second box inside the field.
               decoration: InputDecoration(
                 hintText: widget.hint,
                 hintStyle: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.85),
-                  fontWeight: FontWeight.w600,
+                  color: p.hint,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w500,
                 ),
-                border: InputBorder.none,
+                border: none,
+                enabledBorder: none,
+                focusedBorder: none,
+                disabledBorder: none,
+                errorBorder: none,
+                focusedErrorBorder: none,
+                filled: false,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
-                  vertical: 14,
+                  vertical: 20,
                   horizontal: 8,
                 ),
               ),
             ),
           ),
-          // Eye toggle — size-constrained to the 40px row height so the
-          // fixed-height glass card never overflows.
           if (widget.showPasswordToggle)
             IconButton(
               icon: Icon(
                 _obscure
                     ? Icons.visibility_off_rounded
                     : Icons.visibility_rounded,
-                size: 20,
-                color: AppColors.primary.withValues(alpha: 0.75),
+                size: 21,
+                color: p.accent.withValues(alpha: 0.75),
               ),
-              splashRadius: 20,
+              splashRadius: 22,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               onPressed: () => setState(() => _obscure = !_obscure),
             ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
         ],
       ),
     );
   }
 }
 
-/// Circular logo with a red-neon ring whose bright spot sweeps one full lap
-/// around the ring on tap (same effect as the Sync/Clear buttons).
-/// Presentation only — tapping just plays the animation, no navigation.
-class _GlowLogoRing extends StatefulWidget {
-  final String asset;
-  const _GlowLogoRing({required this.asset});
+/// SIGN IN pill. Same behaviour as before: taps are ignored and a spinner
+/// shows while [isLoading].
+class _SignInButton extends StatelessWidget {
+  const _SignInButton({
+    required this.label,
+    required this.isLoading,
+    required this.onPressed,
+    required this.colors,
+  });
 
-  @override
-  State<_GlowLogoRing> createState() => _GlowLogoRingState();
-}
-
-class _GlowLogoRingState extends State<_GlowLogoRing>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1000),
-  );
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+  final String label;
+  final bool isLoading;
+  final VoidCallback onPressed;
+  final List<Color> colors;
 
   @override
   Widget build(BuildContext context) {
-    const red = Color(0xFFFF3B5C);
-    return GestureDetector(
-      onTap: () => _c.forward(from: 0), // one light sweep around the ring
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, child) {
-          return Container(
-            height: 78,
-            width: 78,
-            padding: const EdgeInsets.all(3), // ring thickness
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _c.isDismissed ? red : null,
-              gradient: _c.isDismissed
-                  ? null
-                  : SweepGradient(
-                      transform: GradientRotation(_c.value * 2 * math.pi),
-                      colors: const [red, red, Colors.white, red, red],
-                      stops: const [0.0, 0.42, 0.5, 0.58, 1.0],
-                    ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
-                  blurRadius: 16,
-                  offset: const Offset(0, 10),
-                ),
-                BoxShadow(
-                  color: red.withValues(alpha: 0.4),
-                  blurRadius: 18,
-                  spreadRadius: 1,
-                ),
-              ],
+    final radius = BorderRadius.circular(30);
+    return SizedBox(
+      width: double.infinity,
+      height: 58,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: colors),
+          borderRadius: radius,
+          boxShadow: [
+            BoxShadow(
+              color: colors.last.withValues(alpha: 0.40),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
             ),
-            child: child,
-          );
-        },
-        child: ClipOval(
-          child: Image.asset(
-            widget.asset,
-            width: 72,
-            height: 72,
-            fit: BoxFit.cover,
+          ],
+        ),
+        // Soft gloss on the top half (decoration only, does not block taps).
+        foregroundDecoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: 0.18),
+              Colors.white.withValues(alpha: 0.0),
+            ],
+            stops: const [0.0, 0.55],
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: isLoading ? null : onPressed,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: isLoading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.3,
+                        ),
+                      ),
+              ),
+            ),
           ),
         ),
       ),

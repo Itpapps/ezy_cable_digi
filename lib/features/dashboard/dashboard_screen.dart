@@ -442,25 +442,44 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           // ── itp label ─────────────────────────────────────────────────
                           Row(
                             children: [
-                              Expanded(
-                                child: Text(
-                                  SessionService
-                                          .instance
-                                          .businessName
-                                          .isNotEmpty
-                                      ? SessionService.instance.businessName
-                                      : 'itp',
+                              // Name first, the collapse toggle right after it
+                              // (Flexible: a long name still ellipsizes).
+                              Flexible(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      // "Hello" lighter, the name bold.
+                                      TextSpan(
+                                        text: 'Hello ',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: t.headingText
+                                              .withValues(alpha: 0.80),
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: SessionService
+                                                .instance
+                                                .businessName
+                                                .isNotEmpty
+                                            ? SessionService
+                                                .instance.businessName
+                                            : 'itp',
+                                      ),
+                                    ],
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: t.headingText,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
                               ),
-                              if (_showMoneyCards) // D-B1: no cards → no toggle
+                              if (_showMoneyCards) ...[ // D-B1: no cards → no toggle
+                              const SizedBox(width: 8),
                               IconButton(
                                 onPressed: () => setState(
                                   () => _statsCollapsed = !_statsCollapsed,
@@ -470,12 +489,23 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                       ? Icons.keyboard_arrow_down
                                       : Icons.keyboard_arrow_up,
                                   color: t.headingText,
+                                  size: 20,
                                 ),
                                 tooltip: _statsCollapsed
                                     ? 'Show summary'
                                     : 'Hide summary',
                                 visualDensity: VisualDensity.compact,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: t.isLight
+                                      ? const Color(0xFF1A3C6E)
+                                          .withValues(alpha: 0.08)
+                                      : Colors.white.withValues(alpha: 0.16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
                               ),
+                              ],
                             ],
                           ),
                           // Collapsible gradient stat cards (Row 1 + Row 2).
@@ -559,152 +589,63 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                       ],
                                     ),
                                   )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 9),
-
-                                      // ── Row 1: 3 Gradient Summary Cards ───────────────────────────
-                                      // Due Amount  → deep blue-to-sky
-                                      // Month Billing → rose-to-pink
-                                      // Onetime Ch…  → amber-to-orange
-                                      // D-B1: hidden for EMPLOYEE (Android ll1).
-                                      if (_showRow1Cards) ...[
-                                      IntrinsicHeight(
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: _GradientSummaryCard(
-                                                title: 'Due Amount',
-                                                amount: _dash.dueAmountText,
-                                                subtitle: '',
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFFB91C1C),
-                                                    Color(0xFFEF4444),
-                                                    Color(0xFFFB7185),
-                                                  ],
-                                                  stops: [0.0, 0.55, 1.0],
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                icon: Iconsax.receipt_item,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: _GradientSummaryCard(
-                                                title: 'Month Billing',
-                                                amount: _dash.monthBillingText,
-                                                subtitle: 'This month',
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFFEA580C),
-                                                    Color(0xFFF97316),
-                                                    Color(0xFFFBBF24),
-                                                  ],
-                                                  stops: [0.0, 0.5, 1.0],
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                icon: Iconsax.calendar_tick,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: _GradientSummaryCard(
-                                                title: 'Onetime Ch...',
-                                                amount:
-                                                    _dash.onetimeChargesText,
-                                                subtitle: 'Installations',
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFF0277BD),
-                                                    Color(0xFF0288D1),
-                                                    Color(0xFF26C6DA),
-                                                  ],
-                                                  stops: [0.0, 0.45, 1.0],
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                icon: Iconsax.flash_circle,
-                                                useDarkText: false,
-                                              ),
-                                            ),
-                                          ],
+                                : Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    // One hero card: Collections on top, the
+                                    // other amounts as small tiles inside it.
+                                    // Same values, titles and visibility rules
+                                    // as the old separate cards.
+                                    child: _KpiHeroCard(
+                                      title: 'Collections',
+                                      amount: _dash.collectionsText,
+                                      lottieAsset: 'assets/Growth Chart.json',
+                                      // Android parity: Collections card tap opens the
+                                      // Employee Collection report (Report_EmpCollect →
+                                      // MonthlyReportScreen), same target as the Monthly
+                                      // Report quick-action and Reports Home tile.
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const MonthlyReportScreen(),
                                         ),
                                       ),
-
-                                      const SizedBox(height: 10),
+                                      stats: [
+                                        // D-B1: Due / Month Billing / Onetime
+                                        // hidden for EMPLOYEE (Android ll1).
+                                        if (_showRow1Cards) ...[
+                                          _MiniStatData(
+                                            'Due Amount',
+                                            _dash.dueAmountText,
+                                            '',
+                                            const Color(0xFFF87171),
+                                          ),
+                                          _MiniStatData(
+                                            'Month Billing',
+                                            _dash.monthBillingText,
+                                            'This month',
+                                            const Color(0xFFFBBF24),
+                                          ),
+                                          _MiniStatData(
+                                            'Onetime Ch...',
+                                            _dash.onetimeChargesText,
+                                            'Installations',
+                                            const Color(0xFF22D3EE),
+                                          ),
+                                        ],
                                       ],
-
-                                      // ── Row 2: LCO Wallet + Collections ───────────────────────────
-                                      // LCO Wallet  → green-to-cyan  (existing — premium mixing)
-                                      // Collections → purple-to-violet matching the same diagonal style
-                                      IntrinsicHeight(
-                                        child: Row(
-                                          children: [
-                                            // LCO Wallet — Android shows this card only when
-                                            // useLcoDeposit==1 (ll_lcowallet visibility); else hidden
-                                            // and Collections spans full width.
-                                            if (_dash.showLcoWallet) ...[
-                                              Expanded(
-                                                child: _LottieHighlightCard(
-                                                  title: 'LCO Wallet',
-                                                  amount: _dash.lcoWalletText,
-                                                  subtitle: 'Available',
-                                                  gradient:
-                                                      const LinearGradient(
-                                                        colors: [
-                                                          Color(0xFF22C55E),
-                                                          Color(0xFF0EA5E9),
-                                                        ],
-                                                        begin:
-                                                            Alignment.topLeft,
-                                                        end: Alignment
-                                                            .bottomRight,
-                                                      ),
-                                                  lottieAsset:
-                                                      'assets/Wallet Animation.json',
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                            ],
-                                            Expanded(
-                                              child: _LottieHighlightCard(
-                                                title: 'Collections',
-                                                amount: _dash.collectionsText,
-                                                subtitle: 'Today',
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFFEC4899),
-                                                    Color(0xFF8B5CF6),
-                                                    Color(0xFF4F46E5),
-                                                  ],
-                                                  stops: [0.0, 0.5, 1.0],
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                ),
-                                                lottieAsset:
-                                                    'assets/Growth Chart.json',
-                                                // Android parity: Collections card tap opens the
-                                                // Employee Collection report (Report_EmpCollect →
-                                                // MonthlyReportScreen), same target as the Monthly
-                                                // Report quick-action and Reports Home tile.
-                                                onTap: () => Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        const MonthlyReportScreen(),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                      // LCO Wallet — Android shows it only
+                                      // when useLcoDeposit==1 (ll_lcowallet).
+                                      // Full-width glassy green tile.
+                                      wallet: _dash.showLcoWallet
+                                          ? _MiniStatData(
+                                              'LCO Wallet',
+                                              _dash.lcoWalletText,
+                                              'Available',
+                                              const Color(0xFF4ADE80),
+                                            )
+                                          : null,
+                                    ),
                                   ),
                           ),
 
@@ -716,25 +657,26 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                           // ── Row 3: Quick Actions — horizontal scroll ───────────────────
                           Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEEF3FF),
-                              borderRadius: BorderRadius.circular(18),
-                              // Premium Light: a hairline border + slightly
-                              // stronger shadow so the pale card separates from
-                              // the light body. Theme 1 (blue bg) unchanged.
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              // Premium Light: a hairline border so the white
+                              // card separates from the light body.
                               border: t.isLight
                                   ? Border.all(color: t.inputBorderColor)
                                   : null,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.12),
-                                  blurRadius: t.isLight ? 16 : 12,
-                                  spreadRadius: t.isLight ? 1 : 0,
-                                  offset: const Offset(0, 4),
+                                  color: t.isLight
+                                      ? const Color(0xFF1A3C6E)
+                                          .withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.14),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 6),
                                 ),
                               ],
                             ),
                             padding: const EdgeInsets.symmetric(
-                              vertical: 10,
+                              vertical: 12,
                               horizontal: 6,
                             ),
                             child: SingleChildScrollView(
@@ -745,6 +687,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.user_tag,
                                     label: 'Customer List',
+                                    colors: const [
+                                      Color(0xFF60A5FA),
+                                      Color(0xFF1D4ED8),
+                                    ],
                                     onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute(
                                         builder: (_) =>
@@ -755,6 +701,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.document_download,
                                     label: 'Download Data',
+                                    colors: const [
+                                      Color(0xFF4ADE80),
+                                      Color(0xFF15803D),
+                                    ],
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -766,6 +716,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.search_status,
                                     label: 'Offline Search',
+                                    colors: const [
+                                      Color(0xFFFDBA74),
+                                      Color(0xFFEA580C),
+                                    ],
                                     onTap: () async {
                                       if (!await offlineDataMatchesDealer()) {
                                         if (!context.mounted) return;
@@ -803,6 +757,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.calendar_1,
                                     label: 'Miniday Report',
+                                    colors: const [
+                                      Color(0xFFC4B5FD),
+                                      Color(0xFF7C3AED),
+                                    ],
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -816,6 +774,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.chart_2,
                                     label: 'Monthly Report',
+                                    colors: const [
+                                      Color(0xFFF9A8D4),
+                                      Color(0xFFDB2777),
+                                    ],
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -829,6 +791,10 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                                   _QuickActionTile(
                                     icon: Iconsax.setting_2,
                                     label: 'Settings',
+                                    colors: const [
+                                      Color(0xFF5EEAD4),
+                                      Color(0xFF0F766E),
+                                    ],
                                     onTap: () {
                                       Navigator.push(
                                         context,
@@ -904,7 +870,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.10),
@@ -917,8 +883,16 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-            child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            // Segmented tab bar: a soft track, the selected tab is a raised
+            // white pill. Still scrolls sideways on narrow phones.
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F4FA),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               child: Row(
@@ -937,7 +911,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   // D-B1: SERVICE gets Complaints + Nearest only (Android
                   // ll_tabs GONE → ll_tabs1).
                   if (!_isService) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   _FeedChip(
                     label: 'Unpaid',
                     selected: _feed == _FeedType.unpaid,
@@ -953,7 +927,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                     },
                   ),
                   ],
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   _FeedChip(
                     label: 'Nearest',
                     selected: _feed == _FeedType.nearest,
@@ -966,7 +940,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                     },
                   ),
                   if (!_isService) ...[ // D-B1
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   _FeedChip(
                     label: 'PayLater',
                     selected: _feed == _FeedType.payLater,
@@ -981,6 +955,7 @@ class DashboardScreenState extends State<DashboardScreen> with RouteAware {
                   ],
                 ],
               ),
+            ),
             ),
           ),
           // Refresh feedback. The divider slot is reused so the layout height is
@@ -1257,132 +1232,44 @@ class _FeedSkeleton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Gradient Summary Card (Due Amount / Month Billing / Onetime Charges)
-// [useDarkText] → true for light-coloured gradients (amber/yellow)
+// KPI hero card — Collections (big, tappable, Lottie) + the other amounts as
+// small glass tiles inside the same card. Presentation only: titles, values
+// and visibility rules come from the dashboard exactly as before.
 // ─────────────────────────────────────────────────────────────────────────────
-class _GradientSummaryCard extends StatelessWidget {
+class _MiniStatData {
   final String title;
   final String amount;
   final String subtitle;
-  final LinearGradient gradient;
-  final IconData icon;
-  final bool useDarkText;
-  const _GradientSummaryCard({
-    required this.title,
-    required this.amount,
-    required this.subtitle,
-    required this.gradient,
-    required this.icon,
-    this.useDarkText = false,
-  });
-  @override
-  Widget build(BuildContext context) {
-    final Color base = useDarkText
-        ? Colors.black.withValues(alpha: 0.75)
-        : Colors.white;
-    final Color muted = useDarkText
-        ? Colors.black.withValues(alpha: 0.55)
-        : Colors.white.withValues(alpha: 0.80);
-    final Color dim = useDarkText
-        ? Colors.black.withValues(alpha: 0.40)
-        : Colors.white.withValues(alpha: 0.70);
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 9, 6, 9),
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: gradient.colors.first.withValues(alpha: 0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: muted, size: 15),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              color: muted,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              amount,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: base,
-              ),
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 8,
-              fontWeight: FontWeight.w600,
-              color: dim,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  final Color dot;
+  const _MiniStatData(this.title, this.amount, this.subtitle, this.dot);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lottie Highlight Card (LCO Wallet / Collections)
-// ─────────────────────────────────────────────────────────────────────────────
-class _LottieHighlightCard extends StatefulWidget {
+class _KpiHeroCard extends StatefulWidget {
   final String title;
   final String amount;
-  final String subtitle;
-  final LinearGradient gradient;
   final String lottieAsset;
-  // Optional tap action (Android parity: the Collections card navigates to the
-  // Employee Collection report). When null (e.g. LCO Wallet card) the card keeps
-  // its original replay-only behaviour.
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
+  final List<_MiniStatData> stats;
 
-  const _LottieHighlightCard({
+  /// LCO Wallet (null = hidden) — its own full-width glassy green tile.
+  final _MiniStatData? wallet;
+
+  const _KpiHeroCard({
     required this.title,
     required this.amount,
-    required this.subtitle,
-    required this.gradient,
     required this.lottieAsset,
-    this.onTap,
+    required this.onTap,
+    required this.stats,
+    this.wallet,
   });
 
   @override
-  State<_LottieHighlightCard> createState() => _LottieHighlightCardState();
+  State<_KpiHeroCard> createState() => _KpiHeroCardState();
 }
 
-class _LottieHighlightCardState extends State<_LottieHighlightCard>
+class _KpiHeroCardState extends State<_KpiHeroCard>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this);
-  }
+  late final AnimationController _controller = AnimationController(vsync: this);
 
   @override
   void dispose() {
@@ -1395,81 +1282,486 @@ class _LottieHighlightCardState extends State<_LottieHighlightCard>
     _controller.forward();
   }
 
+  /// "₹2683.00" → bold "₹2683" + smaller ".00". Text is unchanged.
+  static TextSpan _amountSpan(String amount) {
+    const big = TextStyle(
+      fontSize: 24,
+      color: Colors.white,
+      fontWeight: FontWeight.w900,
+    );
+    final dot = amount.lastIndexOf('.');
+    if (dot <= 0 || dot == amount.length - 1) {
+      return TextSpan(text: amount, style: big);
+    }
+    return TextSpan(
+      style: big,
+      children: [
+        TextSpan(text: amount.substring(0, dot)),
+        TextSpan(
+          text: amount.substring(dot),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tiles() {
+    final tiles = [for (final s in widget.stats) _MiniStat(data: s)];
+    Widget row(List<Widget> items) => IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: items[i]),
+              ],
+            ],
+          ),
+        );
+    // Up to 3 tiles share one row; 4 (with LCO Wallet) become 2 × 2 so the
+    // amounts stay readable on small phones.
+    if (tiles.length <= 3) return row(tiles);
+    return Column(
+      children: [
+        row(tiles.sublist(0, 2)),
+        const SizedBox(height: 8),
+        row(tiles.sublist(2)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        _replay();
-        widget.onTap?.call();
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        decoration: BoxDecoration(
-          gradient: widget.gradient,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: widget.gradient.colors.first.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
+    const radius = 22.0;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3A8A), Color(0xFF2F4FD0), Color(0xFF5B5FEF)],
+          stops: [0.0, 0.55, 1.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Row(
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A8A).withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius - 1),
+        child: Stack(
           children: [
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
+                  // Collections — only this part is tappable (as before the
+                  // Due / Billing / Onetime / Wallet amounts have no action).
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      _replay();
+                      widget.onTap();
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              // Android parity: truncate large amounts with
+                              // "…" instead of shrinking the text. Same text;
+                              // only the decimals (".00") are drawn smaller.
+                              Text.rich(
+                                _amountSpan(widget.amount),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          width: 46,
+                          height: 46,
+                          child: Lottie.asset(
+                            widget.lottieAsset,
+                            controller: _controller,
+                            fit: BoxFit.contain,
+                            repeat: false,
+                            onLoaded: (composition) {
+                              _controller.duration = composition.duration;
+                              _controller.forward(); // play once on load
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  // Android parity: fixed box, truncate large amounts with "…"
-                  // (ellipsis) instead of shrinking the text so it stays legible.
-                  Text(
-                    widget.amount,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.subtitle,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  if (widget.stats.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _tiles(),
+                  ],
+                  if (widget.wallet != null) ...[
+                    const SizedBox(height: 8),
+                    _WalletTile(data: widget.wallet!),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Lottie.asset(
-                widget.lottieAsset,
-                controller: _controller,
-                fit: BoxFit.contain,
-                repeat: false,
-                onLoaded: (composition) {
-                  _controller.duration = composition.duration;
-                  _controller.forward(); // play once on load
-                },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// LCO Wallet — full-width frosted-glass tile with a green accent: wallet
+/// badge, title + amount, "Available" pill and a soft green wave.
+class _WalletTile extends StatelessWidget {
+  final _MiniStatData data;
+  const _WalletTile({required this.data});
+
+  static const Color _green = Color(0xFF22C55E);
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = 16.0;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.22),
+            Colors.white.withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.38),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _green.withValues(alpha: 0.22),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius - 1),
+        child: Stack(
+          children: [
+            // Soft green wave along the bottom (decoration only).
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 24,
+              child: IgnorePointer(
+                child: CustomPaint(painter: _GlassWavePainter(
+                  Color(0xFF4ADE80),
+                  Color(0xFF34D399),
+                )),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              child: Row(
+                children: [
+                  // Glass badge with the wallet icon.
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF7FFF9), Color(0xFFD1FAE5)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_wallet_outlined,
+                      color: Color(0xFF16A34A),
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 1,
+                    height: 26,
+                    color: Colors.white.withValues(alpha: 0.35),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          data.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            data.amount,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFBBF7D0), // light green
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (data.subtitle.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF14532D).withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF86EFAC).withValues(alpha: 0.6),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: data.dot,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            data.subtitle,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Soft two-layer wave along the bottom of a glass tile (decoration only).
+class _GlassWavePainter extends CustomPainter {
+  final Color back;
+  final Color front;
+  const _GlassWavePainter(this.back, this.front);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final backPath = Path()
+      ..moveTo(0, h * 0.75)
+      ..quadraticBezierTo(w * 0.45, h * 0.05, w * 0.70, h * 0.45)
+      ..quadraticBezierTo(w * 0.85, h * 0.70, w, h * 0.30)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(
+      backPath,
+      Paint()..color = back.withValues(alpha: 0.16),
+    );
+    final frontPath = Path()
+      ..moveTo(0, h * 0.95)
+      ..quadraticBezierTo(w * 0.50, h * 0.35, w * 0.78, h * 0.70)
+      ..quadraticBezierTo(w * 0.90, h * 0.85, w, h * 0.60)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(
+      frontPath,
+      Paint()..color = front.withValues(alpha: 0.22),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GlassWavePainter oldDelegate) =>
+      oldDelegate.back != back || oldDelegate.front != front;
+}
+
+/// Due Amount / Month Billing / Onetime Charges — small frosted-glass tile in
+/// the LCO Wallet style, tinted with its own accent (the tile's dot colour):
+/// glowing dot, light-accent amount, accent glow and a soft accent wave.
+/// Same compact size as before so all three still fit one row.
+class _MiniStat extends StatelessWidget {
+  final _MiniStatData data;
+  const _MiniStat({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = 14.0;
+    final accent = data.dot;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.22),
+            Colors.white.withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.34)),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.20),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius - 1),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 16,
+              child: IgnorePointer(
+                child: CustomPaint(painter: _GlassWavePainter(accent, accent)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      // Glowing accent dot (as the wallet's pill dot).
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.8),
+                              blurRadius: 5,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          data.title,
+                          // 2 lines (as the old cards) so narrow phones don't
+                          // cut it.
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            height: 1.15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      data.amount,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        // Light tint of the accent (wallet: light green).
+                        color: Color.lerp(accent, Colors.white, 0.6),
+                      ),
+                    ),
+                  ),
+                  if (data.subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      data.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -1480,16 +1772,18 @@ class _LottieHighlightCardState extends State<_LottieHighlightCard>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Quick Action Tile
+// Quick Action Tile — coloured gradient icon square + label (same actions).
 // ─────────────────────────────────────────────────────────────────────────────
 class _QuickActionTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final List<Color> colors;
   final VoidCallback onTap;
 
   const _QuickActionTile({
     required this.icon,
     required this.label,
+    required this.colors,
     required this.onTap,
   });
 
@@ -1497,26 +1791,33 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
         // Intrinsic width — no hard fixed width so text fits in one line
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-        decoration: BoxDecoration(
-          // Same premium frosted-light card as reference — white bg, soft shadow
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.primary, size: 22),
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: colors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(13),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.last.withValues(alpha: 0.30),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(icon, color: Colors.white, size: 21),
+            ),
             const SizedBox(height: 6),
             Text(
               label,
@@ -1524,8 +1825,8 @@ class _QuickActionTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
                 height: 1.2,
               ),
@@ -1538,7 +1839,7 @@ class _QuickActionTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Feed Filter Chip
+// Feed Filter Chip — one tab of the segmented bar (selected = raised pill).
 // ─────────────────────────────────────────────────────────────────────────────
 class _FeedChip extends StatelessWidget {
   final String label;
@@ -1557,17 +1858,19 @@ class _FeedChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.55)
-                : Colors.black.withValues(alpha: 0.15),
-          ),
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1581,7 +1884,7 @@ class _FeedChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 color: selected ? AppColors.primary : Colors.black54,
               ),
             ),
@@ -1642,181 +1945,242 @@ class _TicketCard extends StatelessWidget {
         item.statusLabel ?? (isAssigned ? 'ASSIGNED' : 'INPROCESS');
     final statusColor = _statusColor(statusText);
 
+    final initial = item.name.trim().isEmpty
+        ? '?'
+        : item.name.trim()[0].toUpperCase();
+
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F7FF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE6ECF5)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: AppColors.primary.withValues(alpha: 0.07),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header bar with ticket ID + location icon
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  width: 1,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.ticketId,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      color: AppColors.primary,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _openMap(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Iconsax.location,
-                      color: AppColors.primary,
-                      size: 18,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Body
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Name : ${item.name}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: Colors.black87,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar + name + status
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color.lerp(statusColor, Colors.white, 0.25)!,
+                              statusColor,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.30),
-                        ),
-                      ),
-                      child: Text(
-                        'Status : $statusText',
-                        style: TextStyle(
-                          color: statusColor,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  item.description,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'LCO Customer ID : ${item.customerId}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.black45,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Full-width Update Status button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ComplaintDetailsScreen(
-                            complaintId: item.ticketId,
-                            customerName: item.name,
-                            complaint: item.description,
-                            currentStatus:
-                                item.statusLabel ??
-                                (item.status == _TicketStatus.assigned
-                                    ? 'ASSIGNED'
-                                    : 'INPROCESS'),
-                            altCustomerId: item.altCustomerId,
-                            realComplaintId: item.realComplaintId,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
                           ),
                         ),
-                      ).then((ok) {
-                        if (ok == true) onRefresh?.call();
-                      });
-                    },
-                    icon: const Icon(Icons.edit_note_rounded, size: 18),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
                       ),
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                        letterSpacing: 0.3,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Name : ${item.name}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: statusColor.withValues(alpha: 0.30),
+                                ),
+                              ),
+                              child: Text(
+                                'Status : $statusText',
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    label: const Text('Update Status'),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  // Details panel: ticket id, description, LCO customer id
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F8FD),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.ticketId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                            color: AppColors.primary,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          item.description,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'LCO Customer ID : ${item.customerId}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black45,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Update Status (gradient pill) + map button
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1E40AF), Color(0xFF3B5BDB)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E40AF)
+                                    .withValues(alpha: 0.28),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ComplaintDetailsScreen(
+                                    complaintId: item.ticketId,
+                                    customerName: item.name,
+                                    complaint: item.description,
+                                    currentStatus:
+                                        item.statusLabel ??
+                                        (item.status == _TicketStatus.assigned
+                                            ? 'ASSIGNED'
+                                            : 'INPROCESS'),
+                                    altCustomerId: item.altCustomerId,
+                                    realComplaintId: item.realComplaintId,
+                                  ),
+                                ),
+                              ).then((ok) {
+                                if (ok == true) onRefresh?.call();
+                              });
+                            },
+                            icon: const Icon(Icons.edit_note_rounded, size: 18),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            label: const Text('Update Status'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Android map icon: directions to the customer.
+                      Material(
+                        color: AppColors.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => _openMap(context),
+                          child: const SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: Icon(
+                              Iconsax.location,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            // Status colour stripe on the left edge (decoration only).
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: Container(width: 2.5, color: statusColor),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1857,7 +2221,14 @@ class _UnpaidCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+        border: Border.all(color: const Color(0xFFE6ECF5)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -1990,7 +2361,14 @@ class _NearestCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: t.cardBg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+          border: Border.all(color: const Color(0xFFE6ECF5)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -2120,7 +2498,14 @@ class _PayLaterCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.30)),
+        border: Border.all(color: const Color(0xFFE6ECF5)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),

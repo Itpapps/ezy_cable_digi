@@ -42,11 +42,15 @@ class MainFrame extends StatelessWidget {
   /// has one. Snackbars are lifted by this much so they do not cover it.
   final double snackBarLift;
 
+  /// Dark-mode top bar and tab bar for this screen only (demo). Off by default.
+  final bool dark;
+
   const MainFrame({
     super.key,
     required this.child,
     this.enabled = true,
     this.snackBarLift = 0,
+    this.dark = false,
   });
 
   /// Below this window height the bars would leave too little room.
@@ -80,8 +84,9 @@ class MainFrame extends StatelessWidget {
         // told the keyboard covers [extra] of it, so its body ends at the
         // keyboard top and its own bottom bar stays behind the keyboard.
         final keyboard = MediaQuery.viewInsetsOf(context).bottom;
-        final barHeight =
-            show ? BottomNavBar.height + MediaQuery.paddingOf(context).bottom : 0.0;
+        final barHeight = show
+            ? BottomNavBar.height + MediaQuery.paddingOf(context).bottom
+            : 0.0;
         final extra = math.max(0.0, keyboard - barHeight);
         // Small phone + keyboard open: the header steps aside while typing
         // (like Android's adjustPan moving the toolbar out of view), so the
@@ -95,12 +100,14 @@ class MainFrame extends StatelessWidget {
               ? PreferredSize(
                   preferredSize: const Size.fromHeight(62),
                   child: MainHeader(
+                    dark: dark,
                     onLogoTap: () => MainNav.goToTab(context, 0),
                   ),
                 )
               : null,
           bottomNavigationBar: show
               ? BottomNavBar(
+                  dark: dark,
                   currentIndex: DashboardScreenState.current?.selectedTab ?? 0,
                   onChanged: (i) => MainNav.openTab(context, i),
                 )

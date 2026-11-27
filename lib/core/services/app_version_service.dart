@@ -30,7 +30,12 @@ class AppVersionService {
   /// Runs once per app launch; later calls reuse the same result.
   Future<AppVersionResult> check() => _result ??= _check();
 
+  /// TEMPORARY: false skips the server version check, so the force-update
+  /// popup never shows. Set back to true before a release.
+  static const bool forceUpdateEnabled = false;
+
   Future<AppVersionResult> _check() async {
+    if (!forceUpdateEnabled) return AppVersionResult.ok;
     try {
       final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
       final isAndroid = defaultTargetPlatform == TargetPlatform.android;

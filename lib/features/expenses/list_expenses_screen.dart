@@ -3,6 +3,7 @@ import 'add_expenses_screen.dart';
 import 'data/expense_models.dart';
 import 'data/expenses_repository.dart';
 import 'package:ezy_cable_digi/widgets/main_frame.dart';
+import '../../core/widgets/logo_loader.dart';
 
 /// Expenses list — Android parity (`ExpensesList`): date-range filtered
 /// `expense_data`. FAB opens Add Expenses (`expense_data_create`) and refreshes on
@@ -129,7 +130,7 @@ class _ListExpensesScreenState extends State<ListExpensesScreen> {
 
   Widget _body(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: LogoLoader());
     }
     if (_error) {
       // Scrolls instead of overflowing on small phones (MainFrame bars).

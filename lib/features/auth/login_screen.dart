@@ -37,6 +37,9 @@ class _LoginScreenState extends State<LoginScreen> {
   // ticked (creds persist) until the user manually unticks and logs in.
   bool _rememberMe = true;
   bool _isLoading = false;
+  // Inline validation messages shown in red under each field (null = none).
+  String? _userError;
+  String? _passwordError;
   // Android disables the username/password EditTexts when offline
   // (LoginActivity.java:248-251). Mirrored via the field `enabled` flag.
   bool _isOffline = false;
@@ -174,10 +177,14 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter username and password')),
-      );
+      setState(() {
+        _userError = username.isEmpty ? 'Please enter username' : null;
+        _passwordError = password.isEmpty ? 'Please enter password' : null;
+      });
       return;
+    }
+    if (_userError != null || _passwordError != null) {
+      setState(() => _userError = _passwordError = null);
     }
 
     setState(() => _isLoading = true);
@@ -225,9 +232,9 @@ class _LoginScreenState extends State<LoginScreen> {
           );
           return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.message)));
         return;
       }
 
@@ -358,17 +365,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             // Centred when it fits, scrolls when it doesn't
                             // (small phones, big fonts, keyboard open).
                             constraints: BoxConstraints(
-                              minHeight: math.max(0, constraints.maxHeight - 48),
+                              minHeight: math.max(
+                                0,
+                                constraints.maxHeight - 48,
+                              ),
                             ),
                             child: Center(
                               child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 520),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 520,
+                                ),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildCard(p, isMagik),
-                                  ],
+                                  children: [_buildCard(p, isMagik)],
                                 ),
                               ),
                             ),
@@ -416,7 +425,9 @@ class _LoginScreenState extends State<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Logo inside the card, at the top (like the registration screen).
-          Center(child: _CardLogo(isMagik: isMagik, palette: p)),
+          Center(
+            child: _CardLogo(isMagik: isMagik, palette: p),
+          ),
           const SizedBox(height: 22),
           _LoginField(
             controller: _userController,
@@ -424,6 +435,10 @@ class _LoginScreenState extends State<LoginScreen> {
             enabled: !_isOffline,
             lottieAsset: 'assets/Profile Icon.json',
             palette: p,
+            errorText: _userError,
+            onChanged: (_) {
+              if (_userError != null) setState(() => _userError = null);
+            },
           ),
           const SizedBox(height: 20),
           _LoginField(
@@ -434,6 +449,10 @@ class _LoginScreenState extends State<LoginScreen> {
             lottieAsset: 'assets/Login.json',
             showPasswordToggle: true,
             palette: p,
+            errorText: _passwordError,
+            onChanged: (_) {
+              if (_passwordError != null) setState(() => _passwordError = null);
+            },
           ),
           const SizedBox(height: 10),
           Row(
@@ -497,11 +516,9 @@ class _LoginPalette {
       : const [Color(0xFF0D47A1), Color(0xFF1E88E5)];
 
   // ── Card ────────────────────────────────────────────────────────────────
-  List<Color> get cardGradient =>
-      const [Color(0xFFFBFCFF), Color(0xFFEDF1FA)];
-  Color get cardEdge => light
-      ? Colors.white
-      : Colors.white.withValues(alpha: 0.75);
+  List<Color> get cardGradient => const [Color(0xFFFBFCFF), Color(0xFFEDF1FA)];
+  Color get cardEdge =>
+      light ? Colors.white : Colors.white.withValues(alpha: 0.75);
   List<BoxShadow> get cardShadows => light
       ? [
           const BoxShadow(
@@ -545,9 +562,9 @@ class _LoginPalette {
 
   /// Dark status-bar icons on the light theme, white icons on blue.
   SystemUiOverlayStyle get statusBar => SystemUiOverlayStyle(
-        statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
-        statusBarBrightness: light ? Brightness.light : Brightness.dark,
-      );
+    statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
+    statusBarBrightness: light ? Brightness.light : Brightness.dark,
+  );
 }
 
 /// Logo at the top of the login card, sized per flavor so each logo is
@@ -636,6 +653,10 @@ class _LoginField extends StatefulWidget {
   final bool showPasswordToggle;
   final _LoginPalette palette;
 
+  /// Red message shown under the field (and a red border) when not null.
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+
   const _LoginField({
     required this.controller,
     required this.hint,
@@ -644,6 +665,8 @@ class _LoginField extends StatefulWidget {
     this.obscureText = false,
     this.enabled = true,
     this.showPasswordToggle = false,
+    this.errorText,
+    this.onChanged,
   });
 
   @override
@@ -687,15 +710,21 @@ class _LoginFieldState extends State<_LoginField>
     final p = widget.palette;
     final enabled = widget.enabled;
     const none = InputBorder.none;
+    const errorRed = Color(0xFFD32F2F);
+    final error = widget.errorText;
 
-    return AnimatedContainer(
+    final field = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
         color: enabled ? p.fieldFill : p.fieldFillDisabled,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _focused ? p.accent.withValues(alpha: 0.85) : Colors.white,
-          width: _focused ? 1.6 : 1.4,
+          color: error != null
+              ? errorRed
+              : _focused
+              ? p.accent.withValues(alpha: 0.85)
+              : Colors.white,
+          width: error != null || _focused ? 1.6 : 1.4,
         ),
         // Soft raised look: dark shadow bottom-right, white light top-left.
         boxShadow: [
@@ -710,10 +739,7 @@ class _LoginFieldState extends State<_LoginField>
             blurRadius: 12,
           ),
           if (_focused)
-            BoxShadow(
-              color: p.accent.withValues(alpha: 0.12),
-              spreadRadius: 3,
-            ),
+            BoxShadow(color: p.accent.withValues(alpha: 0.12), spreadRadius: 3),
         ],
       ),
       child: Row(
@@ -770,6 +796,7 @@ class _LoginFieldState extends State<_LoginField>
               focusNode: _focus,
               obscureText: _obscure,
               enabled: enabled,
+              onChanged: widget.onChanged,
               cursorColor: p.accent,
               style: TextStyle(
                 color: enabled ? p.textPrimary : p.textMuted,
@@ -817,6 +844,43 @@ class _LoginFieldState extends State<_LoginField>
           const SizedBox(width: 6),
         ],
       ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        field,
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.topLeft,
+          child: error == null
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 8, 0),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        size: 16,
+                        color: errorRed,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          error,
+                          style: const TextStyle(
+                            color: errorRed,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

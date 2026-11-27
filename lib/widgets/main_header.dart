@@ -34,21 +34,38 @@ class MainHeader extends StatelessWidget {
   /// Dashboard switches to its tab 0; a MainFrame screen goes back to it.
   final VoidCallback onLogoTap;
 
-  const MainHeader({super.key, required this.onLogoTap});
+  /// Dark-mode look (deep navy bar, white icons). Off by default; only screens
+  /// that opt in (via [MainFrame.dark]) use it.
+  final bool dark;
+
+  const MainHeader({super.key, required this.onLogoTap, this.dark = false});
 
   @override
   Widget build(BuildContext context) {
     final t = AppThemeConst.of(context);
+    if (dark) return _DarkHeaderScope(child: _build(context, t, true));
+    return _build(context, t, false);
+  }
+
+  Widget _build(BuildContext context, AppThemeConst t, bool dark) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       // Status-bar icons (time/battery/wifi) must contrast the app bar: DARK on
       // the light Premium-Light bar, LIGHT on the blue bar — else they vanish
       // white-on-white (the issue seen vs the reference Uber light UI).
       // (.dark = dark icons for a light bar; .light = light icons for a dark bar)
-      value: t.isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
+      value: t.isLight && !dark
+          ? SystemUiOverlayStyle.dark
+          : SystemUiOverlayStyle.light,
       child: Container(
         decoration: BoxDecoration(
-          color: t.isLight ? t.appBarBg : null,
-          gradient: t.isLight
+          color: t.isLight && !dark ? t.appBarBg : null,
+          gradient: dark
+              ? const LinearGradient(
+                  colors: [Color(0xFF0B1426), Color(0xFF0E1A33)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : t.isLight
               ? null
               : const LinearGradient(
                   colors: [
@@ -62,7 +79,9 @@ class MainHeader extends StatelessWidget {
                 ),
           boxShadow: [
             BoxShadow(
-              color: t.isLight
+              color: dark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : t.isLight
                   ? Colors.black.withValues(alpha: 0.08)
                   : const Color(0xFF0D47A1).withValues(alpha: 0.45),
               blurRadius: 14,
@@ -88,16 +107,16 @@ class MainHeader extends StatelessWidget {
                           vertical: 7,
                         ),
                         decoration: BoxDecoration(
-                          color: t.appBarFg.withValues(alpha: 0.18),
+                          color: _fg(context, t).withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(11),
                           border: Border.all(
-                            color: t.appBarFg.withValues(alpha: 0.30),
+                            color: _fg(context, t).withValues(alpha: 0.30),
                             width: 1,
                           ),
                         ),
                         child: Icon(
                           Iconsax.menu_1,
-                          color: t.appBarFg,
+                          color: _fg(context, t),
                           size: 22,
                         ),
                       ),
@@ -187,15 +206,27 @@ class _AppBarIcon extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(7),
         decoration: BoxDecoration(
-          color: t.appBarFg.withValues(alpha: 0.14),
+          color: _fg(context, t).withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
-            color: t.appBarFg.withValues(alpha: 0.22),
+            color: _fg(context, t).withValues(alpha: 0.22),
             width: 0.8,
           ),
         ),
-        child: Icon(icon, color: t.appBarFg, size: 20),
+        child: Icon(icon, color: _fg(context, t), size: 20),
       ),
     );
   }
 }
+
+/// Marks a dark header so its icons use white whatever the app theme.
+class _DarkHeaderScope extends InheritedWidget {
+  const _DarkHeaderScope({required super.child});
+  @override
+  bool updateShouldNotify(_DarkHeaderScope oldWidget) => false;
+}
+
+Color _fg(BuildContext context, AppThemeConst t) =>
+    context.getInheritedWidgetOfExactType<_DarkHeaderScope>() != null
+    ? Colors.white
+    : t.appBarFg;

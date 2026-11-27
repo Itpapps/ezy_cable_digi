@@ -18,30 +18,57 @@ class BottomNavBar extends StatelessWidget {
   /// large accessibility font cannot overflow the fixed 60-px bar.
   static const double maxLabelScale = 1.3;
 
+  /// Dark-mode look. Off by default; only screens that opt in (via
+  /// [MainFrame.dark]) use it.
+  final bool dark;
+
   const BottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onChanged,
+    this.dark = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavItem(icon: Iconsax.element_3,  activeIcon: Iconsax.element_3,  label: 'Dashboard'),
-      _NavItem(icon: Iconsax.message_question, activeIcon: Iconsax.message_question, label: 'Complaints'),
-      _NavItem(icon: Iconsax.graph,       activeIcon: Iconsax.graph,      label: 'Analytics'),
-      _NavItem(icon: Iconsax.wallet_3,    activeIcon: Iconsax.wallet_3,   label: 'Expenses'),
+      _NavItem(
+        icon: Iconsax.element_3,
+        activeIcon: Iconsax.element_3,
+        label: 'Dashboard',
+      ),
+      _NavItem(
+        icon: Iconsax.message_question,
+        activeIcon: Iconsax.message_question,
+        label: 'Complaints',
+      ),
+      _NavItem(
+        icon: Iconsax.graph,
+        activeIcon: Iconsax.graph,
+        label: 'Analytics',
+      ),
+      _NavItem(
+        icon: Iconsax.wallet_3,
+        activeIcon: Iconsax.wallet_3,
+        label: 'Expenses',
+      ),
     ];
 
+    // Dark: all icons and labels white; the active tab keeps its pill + bold.
+    final activeColor = dark ? Colors.white : AppColors.primary;
+    final idleColor = dark ? Colors.white : Colors.grey.shade500;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: dark ? const Color(0xFF111B30) : Colors.white,
         border: Border(
-          top: BorderSide(color: Colors.grey.shade200, width: 1),
+          top: BorderSide(
+            color: dark ? const Color(0xFF1F2A44) : Colors.grey.shade200,
+            width: 1,
+          ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.08),
             blurRadius: 20,
             offset: const Offset(0, -6),
           ),
@@ -68,19 +95,21 @@ class BottomNavBar extends StatelessWidget {
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 220),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 6),
+                            horizontal: 18,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: active
-                                ? AppColors.primary.withValues(alpha: 0.12)
+                                ? activeColor.withValues(
+                                    alpha: dark ? 0.18 : 0.12,
+                                  )
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Icon(
                             items[i].icon,
                             size: 22,
-                            color: active
-                                ? AppColors.primary
-                                : Colors.grey.shade500,
+                            color: active ? activeColor : idleColor,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -92,17 +121,16 @@ class BottomNavBar extends StatelessWidget {
                             fontWeight: active
                                 ? FontWeight.w800
                                 : FontWeight.w500,
-                            color: active
-                                ? AppColors.primary
-                                : Colors.grey.shade500,
+                            color: active ? activeColor : idleColor,
                           ),
                           child: Text(
                             items[i].label,
                             maxLines: 1,
                             softWrap: false,
                             overflow: TextOverflow.ellipsis,
-                            textScaler: MediaQuery.textScalerOf(context)
-                                .clamp(maxScaleFactor: maxLabelScale),
+                            textScaler: MediaQuery.textScalerOf(
+                              context,
+                            ).clamp(maxScaleFactor: maxLabelScale),
                           ),
                         ),
                       ],
